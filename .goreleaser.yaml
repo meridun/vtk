@@ -1,0 +1,35 @@
+version: 2
+
+project_name: vtk
+
+builds:
+  - id: vtk
+    main: ./cmd/vtk
+    binary: vtk
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    targets:
+      - windows_amd64
+      - linux_amd64
+      - darwin_arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: meridun
+    name: vtk
+
+changelog:
+  use: github

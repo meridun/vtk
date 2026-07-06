@@ -40,7 +40,18 @@ vtk show <id> --grep x  # only matching lines
 vtk gaps                # unfiltered-command families ranked by raw bytes
 ```
 
-Build with `go build ./cmd/vtk`. Note for Windows: the spool directory relies on the default
+## Install
+
+With a Go toolchain (no clone needed):
+
+```
+go install github.com/meridun/vtk/cmd/vtk@latest
+```
+
+Without Go: grab a prebuilt binary (windows/amd64, linux/amd64, darwin/arm64) from the
+[releases page](https://github.com/meridun/vtk/releases).
+
+From source: `go build ./cmd/vtk`. Note for Windows: the spool directory relies on the default
 user-scoped ACLs of `%LocalAppData%` (POSIX 0700 permissions are a no-op on NTFS).
 
 ## Core behavior (design contract)
