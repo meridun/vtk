@@ -6,6 +6,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Build output
+vtk.exe
+/vtk
+
 # Local logs / scratch (vtk's own gap/stats logs never belong in the repo)
 *.log
 scratch/

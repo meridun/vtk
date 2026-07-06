@@ -17,6 +17,9 @@ raw output otherwise.
    timestamp) to a local log, queryable via `vtk gaps`. This turns "which filters should we
    write next" from guesswork into data. rtk's `discover` analyzes Claude Code sessions
    after the fact; vtk instruments at the point of execution.
+4. **Output spool** — filtered commands emit a short retrieval ID (`OK 2e3f`); the full raw
+   output is spooled to disk briefly so an agent can inspect it via `vtk show 2e3f` without
+   rerunning the command. See [Architecture.md](Architecture.md#output-spool).
 
 ## Non-goals
 
@@ -33,4 +36,5 @@ raw output otherwise.
 | Unfiltered commands | Silent passthrough | Passthrough + fallback log |
 | Gap analysis | `rtk discover` (post-hoc session scan) | `vtk gaps` (execution-time log) |
 | Savings stats | `rtk gain` | `vtk gain` (same idea) |
-| Language | Rust | Open — [ADR-0001](decisions/0001-implementation-language.md) |
+| Raw output recovery | rerun the command | `vtk show <id>` from the spool |
+| Language | Rust | Go ([#1](https://github.com/meridun/vtk/issues/1)) |

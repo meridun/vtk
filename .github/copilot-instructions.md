@@ -21,11 +21,11 @@
 - **L3** (`docs/`) — read explicitly when needed.
 
 L3 entry points: [Overview.md](../docs/Overview.md),
-[Architecture.md](../docs/Architecture.md), [ToolCoverage.md](../docs/ToolCoverage.md),
-[decisions/](../docs/decisions/).
+[Architecture.md](../docs/Architecture.md), [ToolCoverage.md](../docs/ToolCoverage.md).
 
-Open decisions live in `docs/decisions/` as ADRs. Check there before assuming an
-implementation choice (language, config format, log format) has been made.
+Docs are current/future-facing only. Decisions are one-liners in the Architecture.md decision
+registry, each linking to the GitHub issue holding the debate. Historical rationale lives in
+issues, never in docs. Check the registry before assuming an implementation choice is open.
 
 ## Tone
 
