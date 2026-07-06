@@ -23,6 +23,10 @@
 L3 entry points: [Overview.md](../docs/Overview.md),
 [Architecture.md](../docs/Architecture.md), [ToolCoverage.md](../docs/ToolCoverage.md).
 
+Agentic SDLC pipeline: [prompts/sdlc/README.md](../prompts/sdlc/README.md) — stage-labeled
+issues worked lane-by-lane (intake → queued → build → verify → audit → ship). `stage:queued`
+admission and PR merges are the human gates.
+
 Docs are current/future-facing only. Decisions are one-liners in the Architecture.md decision
 registry, each linking to the GitHub issue holding the debate. Historical rationale lives in
 issues, never in docs. Check the registry before assuming an implementation choice is open.
