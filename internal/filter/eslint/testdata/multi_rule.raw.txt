@@ -1,0 +1,13 @@
+
+src/app.js
+   1:1   error    'foo' is not defined                  no-undef
+   2:10  error    Missing semicolon                     semi
+   5:1   warning  'bar' is assigned a value but never used  no-unused-vars
+  12:7   error    Missing semicolon                     semi
+
+src/util.js
+   3:5   error    Missing semicolon                     semi
+   8:1   warning  Unexpected console statement          no-console
+  14:3   error    'baz' is not defined                  no-undef
+
+✖ 7 problems (5 errors, 2 warnings)
