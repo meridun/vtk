@@ -21,6 +21,12 @@ raw output otherwise.
    output is spooled to disk briefly so an agent can inspect it via `vtk show 2e3f` without
    rerunning the command. See [Architecture.md](Architecture.md#output-spool).
 
+## Branch model
+
+`{feature} → dev → main`, both hops by PR. `dev` is the default/integration branch; `main` is
+stable/release and moves only by PR from `dev`. Full discipline in
+[.github/copilot-instructions.md](../.github/copilot-instructions.md).
+
 ## Non-goals
 
 - Not a shell, not a command runner with its own semantics. Exit codes, signals, and side

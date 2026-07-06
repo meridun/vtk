@@ -18,7 +18,7 @@ Per the README universal loop — lane `stage:audit`, idle reply `AUDIT: idle`.
 ### 2. WORK
 Idempotency first: a clean audit report for the **current branch HEAD** → skip to ADVANCE.
 
-- **Fetch build's branch** (named in verify's ADVANCE comment) and diff against `main`. Review
+- **Fetch build's branch** (named in verify's ADVANCE comment) and diff against `dev`. Review
   the **diff**, not the whole repo.
   - **No-branch fallback:** reconstruct the diff from the introducing commits verify named.
 - **Review the diff inline, read-only**, against vtk's threat model:

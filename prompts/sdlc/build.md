@@ -2,7 +2,7 @@
 
 Stage: `stage:build` → `stage:verify`
 
-First worker that writes code, first that can BOUNCE. Cuts a branch off `main`, implements the
+First worker that writes code, first that can BOUNCE. Cuts a branch off `dev`, implements the
 minimal change to the acceptance criteria, gets targeted tests green, hands a pushed branch to
 verify. Items reach `stage:build` only via the human throttle, so any design question is already
 decided (registry) — build trusts that and does not re-litigate.
@@ -27,7 +27,7 @@ Decide the sub-case first (idempotency):
     **to the AC and nothing more**.
   - Find the closest existing pattern before writing — for a new filter, copy the structure of
     an existing filter family and its fixture tests.
-  - Cut `<type>/<issue#>-<slug>` off `main` (e.g. `feat/3-filter-registry`).
+  - Cut `<type>/<issue#>-<slug>` off `dev` (e.g. `feat/3-filter-registry`).
   - Implement per repo conventions. For filters: pure function, raw output in → compact out; new
     fixtures captured from real command output (scrub anything sensitive before committing a
     fixture).
