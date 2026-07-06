@@ -12,6 +12,11 @@
 - **Test every filter** — each filter needs fixture-based tests: raw captured output in,
   expected compacted output out, with a measured savings assertion.
 - **No git operations** unless explicitly requested.
+- **Git flow** — `{feature} → dev → main`. All work happens on feature branches
+  (`<type>/<issue#>-<slug>`) cut from `dev` (the default/integration branch) and lands via PR to
+  `dev`. `main` is the stable/release branch: it only moves by PR from `dev`; never branch from,
+  checkout, commit to, or merge to `main` unless explicitly requested. Both hops are PRs — no
+  direct pushes to `dev` or `main` except trivial docs-only commits to `dev`.
 
 ## Documentation Tiers
 

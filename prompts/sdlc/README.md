@@ -43,8 +43,10 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
 
 ## vtk specifics (bind in every lane)
 
-- **Integration branch is `main`.** Feature branches `<type>/<issue#>-<slug>` cut from `main`;
-  PRs target `main`; the human merges.
+- **Git flow is `{feature} → dev → main`.** Feature branches `<type>/<issue#>-<slug>` cut from
+  `dev` (the default/integration branch); PRs target `dev`; the human merges. `main` is the
+  stable/release branch — it moves only by human-initiated PR from `dev`. **No worker ever
+  branches from, checks out, commits to, or targets `main`.**
 - **Go conventions:** `go vet ./...` before any commit; `gofmt` formatting; table-driven
   fixture tests for filters (fixture in → expected compact out, no process spawning in filter
   unit tests).

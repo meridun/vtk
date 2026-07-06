@@ -44,11 +44,11 @@ Keep the local repo fresh WITHOUT ever touching the working tree. **Never stash,
 force-checkout, never discard or overwrite uncommitted files.**
 
 1. `git fetch origin --prune`.
-2. Update local `main` without checking it out: `git fetch origin main:main` (if `main` is
-   checked out, `git pull --ff-only origin main`). Non-fast-forward or dirty-tree collision →
+2. Update local `dev` without checking it out: `git fetch origin dev:dev` (if `dev` is
+   checked out, `git pull --ff-only origin dev`). Non-fast-forward or dirty-tree collision →
    skip and record; never rebase or force anything.
-3. Prune local branches merged to `main`: for every branch in `git branch --merged main` except
-   `main` and the current branch — confirm `git merge-base --is-ancestor <branch> main`, then
+3. Prune local branches merged to `dev`: for every branch in `git branch --merged dev` except
+   `dev`, `main`, and the current branch — confirm `git merge-base --is-ancestor <branch> dev`, then
    `git branch -D <branch>`. Squash-merged branches may be deleted ONLY if all three hold:
    upstream `[gone]`, `gh pr view <branch>` reports `MERGED`, and the local tip SHA equals the
    PR's `headRefOid`. Any check ambiguous → leave it, record it.
@@ -76,6 +76,6 @@ For each lane in order (intake, build, verify, audit, ship):
 
 ### Digest
 
-Finish with: wip gate result; git maintenance (main updated, branches pruned/left, skipped ops,
+Finish with: wip gate result; git maintenance (dev updated, branches pruned/left, skipped ops,
 open-PR state); one line per lane; queue depths after the cycle; parked items and holds by issue
 number; token cost per lane plus cycle total.

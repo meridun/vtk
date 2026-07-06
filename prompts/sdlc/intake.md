@@ -14,8 +14,8 @@ You are the **intake worker** for the vtk SDLC pipeline. Process **exactly one**
 
 ### 0. MERGE SWEEP (every pass — bookkeeping, not a claim)
 Ship's job ends at "PR open"; the human-gated merge fires no worker.
-- List PRs merged to `main` in the last ~24h that close issues
-  (`gh pr list --state merged --base main --json number,mergedAt,closingIssuesReferences`).
+- List PRs merged to `dev` in the last ~24h that close issues
+  (`gh pr list --state merged --base dev --json number,mergedAt,closingIssuesReferences`).
 - For each issue those PRs closed: find open issues whose body/comments say they are blocked by
   it ("blocked by #n", "depends on #n") and comment that the blocker has merged; if such an issue
   carries a `blocked` label, swap it to `ready`. **Readiness only** — admitting anything
@@ -42,7 +42,7 @@ All inline, read-only (no code changes, no branches):
 - **ADVANCE** — coherent, scoped, novel, and no design question open (either none existed, or a
   prior PARK's answer is now in-thread). If you are graduating an answered debate: append the
   one-line decision + issue link to the decision registry in `docs/Architecture.md`, commit to
-  `main` (docs-only, or a fast docs PR if `main` is protected) — decisions are shared reference
+  `dev` (docs-only, or a fast docs PR if `dev` is protected) — decisions are shared reference
   and land now, not with the build branch. Swap `stage:intake` → `stage:queued`, remove
   `sdlc:wip`. Comment a 2–4 line summary: what it is, the decision recorded (if any), links to
   related issues.

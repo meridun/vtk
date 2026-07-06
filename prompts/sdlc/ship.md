@@ -3,7 +3,7 @@
 Stage: `stage:ship` → *(closed on merge)*
 
 Terminal worker. The item arrives audited; ship fans the change out to its documentation sinks
-and opens the PR (`feat → main`, `Closes #`). The **PR merge** — human-gated, like the
+and opens the PR (`feat → dev`, `Closes #`). The **PR merge** — human-gated, like the
 `stage:queued` throttle — is the real terminal event. Ship's job ends at "PR open."
 
 ---
@@ -19,8 +19,8 @@ Per the README universal loop — lane `stage:ship`, idle reply `SHIP: idle`.
 Idempotency first: a PR for this branch already open with the docs fan-out done → skip to
 ADVANCE. Otherwise, on build's branch:
 
-> **No-branch fallback:** if the implementation already merged to `main`, cut a fresh branch off
-> `main` carrying only the missing artifacts (docs + any tests verify flagged as homeless). The
+> **No-branch fallback:** if the implementation already merged to `dev`, cut a fresh branch off
+> `dev` carrying only the missing artifacts (docs + any tests verify flagged as homeless). The
 > PR is docs/tests-only but still `Closes #<issue>`; say so in the PR body and link the
 > introducing commits.
 
@@ -33,7 +33,7 @@ ADVANCE. Otherwise, on build's branch:
     invariant changed. Decisions were already registered at intake — do **not** re-log them or
     add history; current/future-facing prose only.
 - **Commit the docs to the same feat branch** — code and its docs ship together in one PR.
-- **Open the PR** → `main`. Body: what shipped, `Closes #<issue>`, links to the verify + audit
+- **Open the PR** → `dev`. Body: what shipped, `Closes #<issue>`, links to the verify + audit
   report comments. End with the Claude Code attribution per repo policy.
 
 ### 3. EMIT exactly one outcome
