@@ -19,7 +19,12 @@ Per the README universal loop — lane `stage:verify`, idle reply `VERIFY: idle`
 Idempotency first: a green verify report for the **current branch HEAD** (no new commits since)
 → skip to ADVANCE. New commits invalidate a prior report.
 
-- **Check out build's branch** (named in build's ADVANCE comment), pull latest.
+- **Enter the issue's worktree** on build's branch (named in build's ADVANCE comment) —
+  `../vtk-wt/<issue#>`, create from the pushed branch if missing — and pull latest. Apply the
+  README staleness rule: merge `origin/dev` only if its changes overlap the branch's touched
+  paths; a conflicted merge is an immediate **BOUNCE → build** naming the conflicting paths
+  (verify never resolves conflicts). Note that a merge adds commits and thus invalidates any
+  prior green report — that re-validation is intended.
   - **No-branch fallback** (built outside the pipeline, already on `dev`): validate on `dev`;
     identify the introducing commits (`git log -S`/`--grep`) and name them in your report so
     audit can isolate the same diff. Any new test then has no branch home — flag it for ship.
@@ -36,7 +41,9 @@ Idempotency first: a green verify report for the **current branch HEAD** (no new
     fork a second pattern.
   - Windows is the primary verify environment; note any AC whose behavior is OS-dependent as
     unverified-on-unix in the report rather than skipping silently.
-- Commit any new tests to the same feat branch; restore the entry branch before EMIT.
+- **Check the diff against build's plan comment** — the plan is the spec; an unexplained
+  deviation (files touched outside the plan with no ADVANCE-comment rationale) is a BOUNCE.
+- Commit any new tests to the same feat branch (in the worktree) and push.
 
 ### 3. EMIT exactly one outcome
 - **ADVANCE** — suite + race green, every AC exercised through the real binary. Swap
