@@ -5,6 +5,7 @@ package filter
 
 import (
 	eslintf "github.com/meridun/vtk/internal/filter/eslint"
+	ghf "github.com/meridun/vtk/internal/filter/gh"
 	gitf "github.com/meridun/vtk/internal/filter/git"
 )
 
@@ -91,5 +92,10 @@ func Default() *Registry {
 	// point to compact. Exit 2+ is a fatal/config error and stays raw.
 	r.RegisterCodes("eslint", eslintf.Filter, 0, 1)
 	r.RegisterCodes("npx eslint", eslintf.Filter, 0, 1)
+	// gh list families: TSV human output on success (exit 0). `gh --json`
+	// forms hit the same keys but pass through structurally intact (isJSON).
+	r.Register("gh issue", ghf.IssueList)
+	r.Register("gh pr", ghf.PrList)
+	r.Register("gh run", ghf.RunList)
 	return r
 }
