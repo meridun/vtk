@@ -17,7 +17,11 @@ Per the README universal loop — lane `stage:ship`, idle reply `SHIP: idle`.
 
 ### 2. WORK
 Idempotency first: a PR for this branch already open with the docs fan-out done → skip to
-ADVANCE. Otherwise, on build's branch:
+ADVANCE. Otherwise, in the issue's worktree (`../vtk-wt/<issue#>`) on build's branch:
+
+- **Merge `origin/dev` unconditionally** — ship is the exception to the staleness rule's
+  overlap check, because the PR must be mergeable. Docs-only conflicts you may resolve
+  yourself; any code conflict is a **BOUNCE → build** naming the conflicting paths.
 
 > **No-branch fallback:** if the implementation already merged to `dev`, cut a fresh branch off
 > `dev` carrying only the missing artifacts (docs + any tests verify flagged as homeless). The
@@ -42,8 +46,8 @@ ADVANCE. Otherwise, on build's branch:
   merge sweep handles cascade-unblock. Ship does **not** close the issue itself.
 - **BOUNCE → `stage:build`** — a real code problem at the last look (rare). Swap back, remove
   `sdlc:wip`, comment specifics.
-- **PARK** — merge conflicts needing human resolution, or a docs/behavior contradiction a human
-  must reconcile. Add `sdlc:needs-human`, remove `sdlc:wip`.
+- **PARK** — a docs/behavior contradiction a human must reconcile (code merge conflicts BOUNCE
+  to build, not PARK). Add `sdlc:needs-human`, remove `sdlc:wip`.
 
 ### 4. STOP
 One-line result: `SHIP: <#issue> → ADVANCE(PR open)|BOUNCE(build)|PARK — <reason>`.

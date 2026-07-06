@@ -41,9 +41,13 @@ All inline, read-only (no code changes, no branches):
 ### 3. EMIT exactly one outcome
 - **ADVANCE** — coherent, scoped, novel, and no design question open (either none existed, or a
   prior PARK's answer is now in-thread). If you are graduating an answered debate: append the
-  one-line decision + issue link to the decision registry in `docs/Architecture.md`, commit to
-  `dev` (docs-only, or a fast docs PR if `dev` is protected) — decisions are shared reference
-  and land now, not with the build branch. Swap `stage:intake` → `stage:queued`, remove
+  one-line decision + issue link to the decision registry in `docs/Architecture.md` and land it
+  on `dev` now — decisions are shared reference, not build-branch cargo. Never use the main
+  checkout: create a throwaway worktree (`git worktree add ../vtk-wt/intake-<issue#> dev` after
+  `git fetch origin dev:dev` where possible), commit the docs-only change, and push with
+  retry-on-non-fast-forward (fetch, rebase the single docs commit, push again — another intake
+  worker may have raced you). `dev` protected → open a fast docs PR instead. Remove the
+  throwaway worktree when done. Swap `stage:intake` → `stage:queued`, remove
   `sdlc:wip`. Comment a 2–4 line summary: what it is, the decision recorded (if any), links to
   related issues.
 - **PARK** — a design/product question gates the work, or scope is ambiguous, or it's a
