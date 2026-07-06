@@ -31,6 +31,11 @@ Early implementation, written in Go. Shipped so far:
   one line per row (`#<n> <state> <title> (<age>)`; runs show `<conclusion> <title> · <workflow>`),
   labels/branch/runID noise dropped. Measured savings 33–48% on fixtures. Filtered exit `0` only;
   `view` shapes and any `--json` output pass through structurally intact.
+- **files/search filter family** — `ls`, `grep`, `find`: list output column-packed and capped at
+  40 entries with a `(+N more)` tail; `grep` match lines capped at 5 per file with per-file
+  `(+N more)` tails. The full listing is always recoverable via `vtk show <id>`. Measured savings
+  17–75% on fixtures (scales with list size). `ls -l` long format passes through raw; filtered
+  exit `0` only, so grep's no-match exit `1` stays raw with exit-code parity intact.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
