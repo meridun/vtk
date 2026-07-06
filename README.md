@@ -12,11 +12,14 @@ with two headline additions:
 2. **Fallback logging** — when a command has no dedicated filter and passes through unfiltered,
    vtk logs the invocation (command, output size, timestamp) so missed-savings opportunities are
    measurable and drive filter prioritization, instead of passing through silently.
+3. **Output spool** — filtered commands print a short retrieval ID (`OK 2e3f`); the full raw
+   output is briefly kept on disk and retrievable via `vtk show 2e3f` — no rerun needed, which
+   matters for non-idempotent commands like `git commit`.
 
 ## Status
 
-Pre-implementation. The implementation language is an open decision — see
-[docs/decisions/0001-implementation-language.md](docs/decisions/0001-implementation-language.md).
+Pre-implementation, written in Go. Design decisions are recorded one line each in
+[docs/Architecture.md](docs/Architecture.md#decision-registry) with links to the debate issues.
 
 ## Core behavior (design contract)
 
