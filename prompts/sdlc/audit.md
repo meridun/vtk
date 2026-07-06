@@ -18,8 +18,11 @@ Per the README universal loop — lane `stage:audit`, idle reply `AUDIT: idle`.
 ### 2. WORK
 Idempotency first: a clean audit report for the **current branch HEAD** → skip to ADVANCE.
 
-- **Fetch build's branch** (named in verify's ADVANCE comment) and diff against `dev`. Review
-  the **diff**, not the whole repo.
+- **Fetch build's branch** (named in verify's ADVANCE comment) and diff against `origin/dev`
+  (fetch first — the diff must be against current dev, not a stale local copy). Read-only lane:
+  audit never merges; if the branch no longer merges cleanly into dev, **BOUNCE → build**
+  naming the conflicting paths. Review the **diff**, not the whole repo, with build's plan
+  comment as the spec.
   - **No-branch fallback:** reconstruct the diff from the introducing commits verify named.
 - **Review the diff inline, read-only**, against vtk's threat model:
   - **Command construction** — argv passed verbatim to the child (`exec.Command(args[0],
