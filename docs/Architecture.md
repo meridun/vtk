@@ -21,8 +21,11 @@ vtk <cmd> [args...]
   │      match  → run command, capture output, spool raw, apply filter, emit compact result
   │      no match → run command with output passed through untouched, write gap entry
   │
-  ├─ 2. Preserve semantics: exit code, stderr routing, and TTY detection mirror the wrapped
-  │      command. Interactive/TTY-detected invocations bypass filtering entirely.
+  ├─ 2. Preserve semantics: exit code and TTY detection mirror the wrapped command.
+  │      Interactive/TTY-detected invocations bypass filtering entirely. On the filtered
+  │      success path, stdout and stderr are folded into one compact result on stdout;
+  │      per-stream separation is preserved on all raw, passthrough, and degraded paths.
+  │      Nonzero child exits skip filtering — failures always emit raw.
   │
   └─ 3. Sweep: opportunistically delete spool entries past TTL (no daemon)
 ```
@@ -48,7 +51,8 @@ vtk show 2e3f --grep pat  →   just the matching lines
   until a coincidental overwrite.
 - **Redaction** — obvious credential patterns (`Authorization:` headers, `AWS_SECRET*`, PEM
   blocks) are masked before write. The spool dir is user-local with restrictive permissions,
-  never inside a repo.
+  never inside a repo. On Windows, POSIX 0700 is a no-op on NTFS; protection rests on the
+  default user-scoped ACLs of `%LocalAppData%`.
 - The ID is emitted only when content was actually elided; full-passthrough commands print no ID.
 
 ## Components

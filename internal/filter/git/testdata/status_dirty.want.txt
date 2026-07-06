@@ -1,0 +1,5 @@
+## main
+M  beta.txt
+A  staged_new.txt
+ M gamma.txt
+?? untracked.txt
