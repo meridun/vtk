@@ -1,0 +1,10 @@
+21	OPEN	line-ending hygiene: gofmt -l flags entire tree under core.autocrlf; add .gitattributes	bug, stage:intake	2026-07-06T18:18:41Z
+20	OPEN	smoke: PTY-based coverage for the interactive TTY-bypass branch	enhancement, stage:intake	2026-07-06T20:08:00Z
+19	OPEN	intake throughput: one item per pass drains multi-issue queues one cycle at a time	enhancement, stage:intake	2026-07-06T18:18:04Z
+18	OPEN	dispatch lock acquisition is not race-safe (read-then-comment window)	bug, stage:intake	2026-07-06T18:17:47Z
+15	OPEN	sdlc:dispatch-lock	sdlc:hold	2026-07-06T20:04:07Z
+14	OPEN	Implement vtk gain (cumulative savings report)	enhancement, stage:intake	2026-07-06T20:07:40Z
+13	OPEN	Filter: dbmate (collapse applied migrations, keep pending + counts)	enhancement, stage:intake	2026-07-06T16:12:13Z
+12	OPEN	Filter: mocha test output (fold passing specs, keep failures + summary)	enhancement, stage:intake	2026-07-06T16:12:11Z
+11	OPEN	Unknown/unimplemented meta subcommands fall through to exec with misleading error	bug, stage:intake, sdlc:wip	2026-07-06T20:08:39Z
+10	OPEN	Filter: files/search family (ls, grep, find)	enhancement, stage:queued	2026-07-06T19:45:58Z

@@ -1,0 +1,6 @@
+13807	Add name-based resolution to gh project item-edit and item-list	zwick:zwick-projects-name-resolution	DRAFT	2026-07-06T19:49:10Z
+13803	chore(deps): bump github/codeql-action/init from 4.36.2 to 4.36.3	dependabot/github_actions/github/codeql-action/init-4.36.3	OPEN	2026-07-06T14:06:45Z
+13802	chore(deps): bump github/codeql-action/upload-sarif from 4.36.2 to 4.36.3	dependabot/github_actions/github/codeql-action/upload-sarif-4.36.3	OPEN	2026-07-06T14:05:32Z
+13801	chore(deps): bump github/codeql-action/analyze from 4.36.2 to 4.36.3	dependabot/github_actions/github/codeql-action/analyze-4.36.3	OPEN	2026-07-06T14:03:56Z
+13800	chore(deps): bump charm.land/bubbletea/v2 from 2.0.7 to 2.0.8	dependabot/go_modules/charm.land/bubbletea/v2-2.0.8	OPEN	2026-07-06T14:03:09Z
+13798	Add JSON output support to pr create	natsu0529:add-json-jq-pr-create	OPEN	2026-07-06T09:38:35Z

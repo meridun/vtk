@@ -27,6 +27,10 @@ Early implementation, written in Go. Shipped so far:
   exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
   found" is a report, not a failure); exit `2`+ (fatal/config) stays raw. The child's exit code is
   always returned unchanged. The `npm run lint` wrapped form is not yet covered.
+- **gh filter family** — `gh issue list`, `gh pr list`, `gh run list`: table output compacts to
+  one line per row (`#<n> <state> <title> (<age>)`; runs show `<conclusion> <title> · <workflow>`),
+  labels/branch/runID noise dropped. Measured savings 33–48% on fixtures. Filtered exit `0` only;
+  `view` shapes and any `--json` output pass through structurally intact.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
