@@ -9,7 +9,8 @@ vtk figures get measured from fixtures once filters ship.
 | Family | Commands | rtk savings | Status |
 |---|---|---|---|
 | Tests | `playwright test`, generic `test <cmd>` wrapper | 90–94% | planned |
-| Lint/format | `lint` (eslint), `prettier --check` | 70–84% | planned |
+| Lint/format | `eslint`, `npx eslint` | 70–84% | shipped — measured 41–99% on fixtures (small multi-rule 41%, 500-problem report 99%); direct invocations only, exit {0,1} filtered / 2+ raw |
+| Lint/format (rest) | `prettier --check`, `npm run lint` wrapped path | 70–84% | planned — wrapped path is #8 |
 | Git (core) | status, log, diff, show, add, commit, push, pull, branch (+ passthrough for all other subcommands) | 59–80% | shipped — measured 47–89% on typical fixtures (status 84%, log 82%, diff 84%, show 85%, push-with-progress 89%; low end 2–11% on already-terse output, 100% on noise-only) |
 | Git (rest) | fetch, stash, worktree | 59–80% | planned |
 | GitHub | `gh pr view/checks`, `gh run list`, `gh issue list`, `gh api` | 26–87% | planned |

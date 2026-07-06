@@ -22,6 +22,11 @@ Early implementation, written in Go. Shipped so far:
 
 - **git filter family** — `status`, `log`, `diff`, `show`, `add`, `commit`, `push`, `pull`,
   `branch` (other subcommands pass through). Measured savings 47–89% on typical fixtures.
+- **eslint filter** — `eslint`, `npx eslint` (direct invocations): problems rolled up by rule id,
+  top example per rule, `✖ N problems` summary preserved. Measured 41–99% on fixtures. Report-style
+  exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
+  found" is a report, not a failure); exit `2`+ (fatal/config) stays raw. The child's exit code is
+  always returned unchanged. The `npm run lint` wrapped form is not yet covered.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
