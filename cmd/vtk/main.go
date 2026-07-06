@@ -14,6 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/meridun/vtk/internal/filter"
+	npmf "github.com/meridun/vtk/internal/filter/npm"
 	"github.com/meridun/vtk/internal/spool"
 )
 
@@ -55,10 +56,135 @@ func run(args []string) int {
 		}
 		return passthrough(st, args, true, reason)
 	}
+	// `npm run <script>` is a dispatch layer, not a leaf command: npm prepends
+	// a banner and the real work is done by an inner tool (eslint, mocha, ...).
+	// Strip the banner and delegate the body to the inner tool's filter, with
+	// gap attribution to that inner tool — not to npm.
+	if isNpmRun(args) {
+		return runNpm(st, args)
+	}
 	if !ok {
 		return passthrough(st, args, false, spool.ReasonNoFilter)
 	}
 	return runFiltered(st, entry, args)
+}
+
+// isNpmRun reports whether args is an `npm run <script> ...` invocation, the
+// only npm form that carries the dispatch banner this layer handles. Bare
+// `npm run` (no script) and other npm subcommands fall through to normal
+// gap-logged passthrough.
+func isNpmRun(args []string) bool {
+	return len(args) >= 3 && args[0] == "npm" && args[1] == "run"
+}
+
+// runNpm captures the `npm run` output once, strips the npm banner, and routes
+// the body to the inner tool's filter. It preserves every runFiltered
+// invariant: exit-code parity (returns the child's code on every branch), a
+// panicking inner filter degrades to raw, and the spooled bytes are the full
+// raw output (banner included) so `vtk show` recovers everything that was
+// elided (AC #1). Gap and stats attribution use the inner argv, so `vtk gaps`
+// points at the real tool rather than npm (AC #3).
+func runNpm(st *spool.Store, args []string) int {
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdin = os.Stdin
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	code := exitCode(cmd.Run())
+	raw := outBuf.String() + errBuf.String()
+
+	emitRawAttr := func(logArgs []string, reason string) int {
+		os.Stdout.Write(outBuf.Bytes())
+		os.Stderr.Write(errBuf.Bytes())
+		logInvocation(st, logArgs, int64(len(raw)), int64(len(raw)), false, false, reason)
+		return code
+	}
+
+	body, inner, ok := npmf.StripBanner(raw)
+	if !ok {
+		// Not a recognizable npm banner: treat as an ordinary uncovered
+		// command, gap-logged under the npm family.
+		return emitRawAttr(args, spool.ReasonNoFilter)
+	}
+
+	entry, found := filter.Default().Lookup(inner)
+	if !found {
+		// Banner stripped but the inner tool has no filter: emit the
+		// banner-stripped body (already a saving) and log the gap under the
+		// inner tool's family so `vtk gaps` prioritizes the real tool.
+		return emitNpmBody(st, args, inner, raw, body, code)
+	}
+	if !entry.Filters(code) {
+		// Inner filter exists but this exit code is outside its allowlist
+		// (a genuine failure): keep full raw output, attributed to the inner
+		// tool. Failures always emit raw (invariant 1/2).
+		return emitRawAttr(inner, spool.ReasonNonzeroExit)
+	}
+
+	compact, ok := applyFilter(entry.Fn, body)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "vtk: filter for %q panicked; raw passthrough (see vtk gaps)\n", inner[0])
+		return emitRawAttr(inner, spool.ReasonFilterPanic)
+	}
+	// Compare the compacted output against the raw the agent would otherwise
+	// see: if the inner filter did not shrink the body, still prefer the
+	// banner-stripped body when that alone is a saving.
+	if len(compact) >= len(body) {
+		return emitNpmBody(st, args, inner, raw, body, code)
+	}
+	// Spool the full raw (banner + body) so `vtk show` recovers everything.
+	id, err := st.Write(inner, raw, time.Now())
+	if err != nil {
+		return emitRawAttr(inner, spool.ReasonSpoolFail)
+	}
+	if compact != "" {
+		fmt.Print(compact)
+		if !strings.HasSuffix(compact, "\n") {
+			fmt.Println()
+		}
+	}
+	fmt.Printf("OK %s\n", id)
+	logInvocation(st, inner, int64(len(raw)), int64(len(compact)), true, false, "")
+	return code
+}
+
+// emitNpmBody prints the banner-stripped body and records the outcome. When the
+// body is smaller than the raw (the banner was elided) it spools the full raw
+// under an ID for recovery; otherwise it is a plain passthrough. Attribution is
+// always to the inner tool's family. Any spool failure degrades to full raw so
+// no output is ever lost (invariant 2).
+func emitNpmBody(st *spool.Store, args, inner []string, raw, body string, code int) int {
+	// No saving from stripping the banner: emit the raw and gap-log the inner
+	// family so the tool still surfaces in `vtk gaps`.
+	if len(body) >= len(raw) {
+		fmt.Print(raw)
+		if raw != "" && !strings.HasSuffix(raw, "\n") {
+			fmt.Println()
+		}
+		logInvocation(st, inner, int64(len(raw)), int64(len(raw)), false, false, spool.ReasonNoFilter)
+		return code
+	}
+	id, err := st.Write(inner, raw, time.Now())
+	if err != nil {
+		// Can't offer recovery for the elided banner: emit full raw instead.
+		fmt.Print(raw)
+		if raw != "" && !strings.HasSuffix(raw, "\n") {
+			fmt.Println()
+		}
+		logInvocation(st, inner, int64(len(raw)), int64(len(raw)), false, false, spool.ReasonSpoolFail)
+		return code
+	}
+	if body != "" {
+		fmt.Print(body)
+		if !strings.HasSuffix(body, "\n") {
+			fmt.Println()
+		}
+	}
+	fmt.Printf("OK %s\n", id)
+	// Banner stripped but no inner filter ran: this is still a coverage gap for
+	// the inner tool, recorded with the bytes the body saved.
+	logInvocation(st, inner, int64(len(raw)), int64(len(body)), false, false, spool.ReasonNoFilter)
+	return code
 }
 
 // passthrough runs the command with output untouched. Unless the output is a
