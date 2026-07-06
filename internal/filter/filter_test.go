@@ -18,6 +18,10 @@ func TestLookup(t *testing.T) {
 		{"unknown command misses", []string{"kubectl", "get", "pods"}, false},
 		{"flag before subcommand misses (gap-logged)", []string{"git", "-C", "dir", "status"}, false},
 		{"empty argv misses", nil, false},
+		{"bare ls matches", []string{"ls"}, true},
+		{"ls with args matches", []string{"ls", "serverjs"}, true},
+		{"grep with flags matches", []string{"grep", "-rn", "pat", "dir"}, true},
+		{"find with args matches", []string{"find", ".", "-type", "f"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
