@@ -18,22 +18,47 @@ with two headline additions:
 
 ## Status
 
-Pre-implementation, written in Go. Design decisions are recorded one line each in
+Early implementation, written in Go. Shipped so far:
+
+- **git filter family** — `status`, `log`, `diff`, `show`, `add`, `commit`, `push`, `pull`,
+  `branch` (other subcommands pass through). Measured savings 47–89% on typical fixtures.
+- **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
+  redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
+- **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only);
+  `vtk gaps` aggregates by command family, sorted by raw bytes.
+
+`vtk gain` (cumulative savings stats) and further filter families are not yet implemented.
+Design decisions are recorded one line each in
 [docs/Architecture.md](docs/Architecture.md#decision-registry) with links to the debate issues.
+
+## Usage
+
+```
+vtk git status          # compact status; prints "OK <id>" when content was elided
+vtk show <id>           # full captured output (provenance header first)
+vtk show <id> --grep x  # only matching lines
+vtk gaps                # unfiltered-command families ranked by raw bytes
+```
+
+Build with `go build ./cmd/vtk`. Note for Windows: the spool directory relies on the default
+user-scoped ACLs of `%LocalAppData%` (POSIX 0700 permissions are a no-op on NTFS).
 
 ## Core behavior (design contract)
 
 - **Always safe**: `vtk <cmd>` never changes the command's semantics or exit code. If no filter
   matches, output passes through unchanged (and the fallback is logged).
 - **Chain-friendly**: works per-command inside `&&` chains.
-- **Measurable**: `vtk gain` reports cumulative token savings; fallback logs report the gap.
+- **Measurable**: `vtk gain` (planned) reports cumulative token savings; fallback logs
+  (`vtk gaps`) report the gap.
+- **Compact means folded**: on the filtered success path, stdout and stderr are folded into a
+  single compact result on stdout. Per-stream separation is preserved on all raw, passthrough,
+  and degraded paths.
 
 ## Documentation
 
 - [docs/Overview.md](docs/Overview.md) — goals, scope, comparison to rtk
 - [docs/Architecture.md](docs/Architecture.md) — filter pipeline design
 - [docs/ToolCoverage.md](docs/ToolCoverage.md) — filter catalog: parity targets + expansions
-- [docs/decisions/](docs/decisions/) — architecture decision records
 
 ## License
 
