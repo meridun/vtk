@@ -133,6 +133,18 @@ func Redact(s string) string {
 	return s
 }
 
+// Reason values classify why an invocation was not filtered. Only
+// ReasonNoFilter entries are true coverage gaps; the rest are excluded from
+// `vtk gaps` (and let `vtk gain` skip entries whose raw_bytes are
+// uncountable-by-design, e.g. tty-bypass).
+const (
+	ReasonNoFilter    = "no-filter"    // no registry match for argv
+	ReasonTTYBypass   = "tty-bypass"   // covered command, interactive bypass
+	ReasonNonzeroExit = "nonzero-exit" // failures always emit raw
+	ReasonFilterPanic = "filter-panic" // filter code panicked; degraded to raw
+	ReasonSpoolFail   = "spool-fail"   // could not spool; elision would lose output
+)
+
 // Invocation is one metadata entry. It carries the (redacted) command line
 // and byte counts — never output content (invariant 3).
 type Invocation struct {
@@ -142,6 +154,7 @@ type Invocation struct {
 	OutBytes int64     `json:"out_bytes"`
 	Filtered bool      `json:"filtered"`
 	TTY      bool      `json:"tty,omitempty"`
+	Reason   string    `json:"reason,omitempty"` // why unfiltered; empty when filtered
 }
 
 func (s *Store) metaPath() string { return filepath.Join(s.dir, "invocations.jsonl") }
@@ -193,17 +206,43 @@ type GapSummary struct {
 	RawBytes int64
 }
 
-// Gaps aggregates unfiltered (passthrough) invocations by command family
+// Gaps aggregates true coverage gaps (no registry match) by command family
 // (first token), sorted by total raw bytes descending — the top of the list
-// is the next filter to write.
+// is the next filter to write. Covered-but-unfiltered invocations
+// (tty-bypass, nonzero-exit, filter-panic, spool-fail) are excluded; entries
+// written before the reason field existed count as gaps unless they were
+// tty bypasses (whose raw_bytes:0 polluted the report — #6).
 func (s *Store) Gaps() ([]GapSummary, error) {
+	return s.aggregate(func(inv Invocation) bool {
+		if inv.Filtered {
+			return false
+		}
+		if inv.Reason == "" { // legacy entry, pre-reason
+			return !inv.TTY
+		}
+		return inv.Reason == ReasonNoFilter
+	})
+}
+
+// Degraded aggregates filter-panic invocations by command family: filters
+// that exist but are crashing on real output (invariant 2 — a broken filter
+// must stay visible).
+func (s *Store) Degraded() ([]GapSummary, error) {
+	return s.aggregate(func(inv Invocation) bool {
+		return inv.Reason == ReasonFilterPanic
+	})
+}
+
+// aggregate folds matching invocations into per-family summaries, sorted by
+// total raw bytes descending, then family name.
+func (s *Store) aggregate(match func(Invocation) bool) ([]GapSummary, error) {
 	invs, err := s.Invocations()
 	if err != nil {
 		return nil, err
 	}
 	agg := make(map[string]*GapSummary)
 	for _, inv := range invs {
-		if inv.Filtered {
+		if !match(inv) {
 			continue
 		}
 		family, _, _ := strings.Cut(inv.Cmd, " ")
