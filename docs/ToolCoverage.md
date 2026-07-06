@@ -13,7 +13,7 @@ vtk figures get measured from fixtures once filters ship.
 | Lint/format (rest) | `prettier --check`, `npm run lint` wrapped path | 70–84% | planned — wrapped path is #8 |
 | Git (core) | status, log, diff, show, add, commit, push, pull, branch (+ passthrough for all other subcommands) | 59–80% | shipped — measured 47–89% on typical fixtures (status 84%, log 82%, diff 84%, show 85%, push-with-progress 89%; low end 2–11% on already-terse output, 100% on noise-only) |
 | Git (rest) | fetch, stash, worktree | 59–80% | planned |
-| GitHub | `gh pr view/checks`, `gh run list`, `gh issue list`, `gh api` | 26–87% | planned |
+| GitHub | `gh pr view/checks`, `gh run list`, `gh issue list`, `gh api` | 26–87% | shipped (list shapes) — measured 33–48% on fixtures (`gh issue list` 33%, `gh pr list` 46%, `gh run list` 48%); compacts list-table output to `#<n> <state> <title> (<age>)` (runs: `<conclusion> <title> · <workflow>`), exit 0 only. `view`/`--json`/`api` shapes pass through structurally intact |
 | npm/npx | `npm run`, `npx` | 70–90% | planned |
 | Files/search | `ls`, `read`, `grep`, `find` | 60–75% | planned |
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned |
