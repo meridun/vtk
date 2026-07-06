@@ -5,6 +5,7 @@ package filter
 
 import (
 	eslintf "github.com/meridun/vtk/internal/filter/eslint"
+	filesf "github.com/meridun/vtk/internal/filter/files"
 	ghf "github.com/meridun/vtk/internal/filter/gh"
 	gitf "github.com/meridun/vtk/internal/filter/git"
 )
@@ -97,5 +98,10 @@ func Default() *Registry {
 	r.Register("gh issue", ghf.IssueList)
 	r.Register("gh pr", ghf.PrList)
 	r.Register("gh run", ghf.RunList)
+	// files/search family: clean-run-only (grep exit 1 = no matches = no
+	// output worth compacting; find/ls nonzero exits keep raw error output).
+	r.Register("ls", filesf.Ls)
+	r.Register("grep", filesf.Grep)
+	r.Register("find", filesf.Find)
 	return r
 }
