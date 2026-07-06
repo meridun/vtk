@@ -15,7 +15,8 @@ vtk figures get measured from fixtures once filters ship.
 | Git (rest) | fetch, stash, worktree | 59–80% | planned |
 | GitHub | `gh pr view/checks`, `gh run list`, `gh issue list`, `gh api` | 26–87% | shipped (list shapes) — measured 33–48% on fixtures (`gh issue list` 33%, `gh pr list` 46%, `gh run list` 48%); compacts list-table output to `#<n> <state> <title> (<age>)` (runs: `<conclusion> <title> · <workflow>`), exit 0 only. `view`/`--json`/`api` shapes pass through structurally intact |
 | npm/npx | `npm run`, `npx` | 70–90% | planned |
-| Files/search | `ls`, `read`, `grep`, `find` | 60–75% | planned |
+| Files/search | `ls`, `grep`, `find` | 60–75% | shipped — measured 17–75% on fixtures (`ls` 140-entry dir 75%, `grep -l` 75%, `grep -rn` 34%, `find` walk 17% — savings scale with list size; real gap-log target `vtk ls serverjs` 74.6%). Column-packed rows capped at 40 entries with `(+N more)` tail, grep capped at 5 matches/file, full listing behind `OK <id>`; `ls -l` long format passes through raw; exit 0 only (grep's no-match exit 1 stays raw) |
+| Files/search (rest) | `read` | 60–75% | planned |
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned |
 | Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned |
 | Meta | `show`, `discover`-equivalent (`gaps`) | — | shipped |
