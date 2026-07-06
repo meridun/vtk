@@ -62,8 +62,8 @@ vtk show 2e3f --grep pat  →   just the matching lines
 - **Runner** — spawns the wrapped command, streams/captures output, propagates exit code and
   signals. The only component with process-spawning responsibility.
 - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte
-  counts, filtered/passthrough, timestamp). Backs `vtk show`, `vtk gain`, and `vtk gaps` —
-  one store, three queries.
+  counts, filtered/passthrough, unfiltered reason, timestamp). Backs `vtk show`, `vtk gain`,
+  and `vtk gaps` — one store, three queries.
 
 ## Key invariants
 
