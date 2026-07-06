@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/meridun/vtk/internal/filter"
 	"github.com/meridun/vtk/internal/spool"
 )
@@ -36,25 +38,32 @@ func run(args []string) int {
 		// Degrade: no spool means no filtering (elided output would be
 		// unrecoverable) and no gap log. Warn — a silent gap is a bug.
 		fmt.Fprintf(os.Stderr, "vtk: spool unavailable (%v); raw passthrough\n", err)
-		return passthrough(nil, args, isTTY(os.Stdout))
+		return passthrough(nil, args, isTTY(os.Stdout), spool.ReasonSpoolFail)
 	}
 	st.Sweep(spool.DefaultTTL, time.Now())
 
-	// Interactive invocations bypass filtering entirely: interposing a pipe
-	// would break the wrapped command's own TTY detection.
-	if isTTY(os.Stdout) {
-		return passthrough(st, args, true)
-	}
 	f, ok := filter.Default().Lookup(args)
+
+	// Interactive invocations bypass filtering entirely: interposing a pipe
+	// would break the wrapped command's own TTY detection. A bypassed covered
+	// command is not a coverage gap (tty-bypass); an uncovered one still is —
+	// suppression is keyed on the Lookup match, not the command family (#6).
+	if isTTY(os.Stdout) {
+		reason := spool.ReasonNoFilter
+		if ok {
+			reason = spool.ReasonTTYBypass
+		}
+		return passthrough(st, args, true, reason)
+	}
 	if !ok {
-		return passthrough(st, args, false)
+		return passthrough(st, args, false, spool.ReasonNoFilter)
 	}
 	return runFiltered(st, f, args)
 }
 
 // passthrough runs the command with output untouched. Unless the output is a
 // TTY it counts bytes through a tee so the gap entry is measurable.
-func passthrough(st *spool.Store, args []string, tty bool) int {
+func passthrough(st *spool.Store, args []string, tty bool, reason string) int {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
 	var out, errw countingWriter
@@ -70,7 +79,7 @@ func passthrough(st *spool.Store, args []string, tty bool) int {
 	code := exitCode(cmd.Run())
 	if st != nil {
 		n := out.n + errw.n
-		logInvocation(st, args, n, n, false, tty)
+		logInvocation(st, args, n, n, false, tty, reason)
 	}
 	return code
 }
@@ -88,31 +97,33 @@ func runFiltered(st *spool.Store, f filter.Func, args []string) int {
 	code := exitCode(cmd.Run())
 	raw := outBuf.String() + errBuf.String()
 
-	emitRaw := func() int {
+	emitRaw := func(reason string) int {
 		os.Stdout.Write(outBuf.Bytes())
 		os.Stderr.Write(errBuf.Bytes())
-		logInvocation(st, args, int64(len(raw)), int64(len(raw)), false, false)
+		logInvocation(st, args, int64(len(raw)), int64(len(raw)), false, false, reason)
 		return code
 	}
 
 	if code != 0 {
 		// When in doubt, pass through unchanged: failures keep full output.
-		return emitRaw()
+		return emitRaw(spool.ReasonNonzeroExit)
 	}
 	compact, ok := applyFilter(f, raw)
 	if !ok {
-		return emitRaw() // filter panicked: degrade + gap entry
+		// Filter panicked: degrade to raw, log + surface (invariant 2).
+		fmt.Fprintf(os.Stderr, "vtk: filter for %q panicked; raw passthrough (see vtk gaps)\n", args[0])
+		return emitRaw(spool.ReasonFilterPanic)
 	}
 	if len(compact) >= len(raw) {
 		// Nothing elided: raw output, no ID.
 		os.Stdout.Write(outBuf.Bytes())
 		os.Stderr.Write(errBuf.Bytes())
-		logInvocation(st, args, int64(len(raw)), int64(len(raw)), true, false)
+		logInvocation(st, args, int64(len(raw)), int64(len(raw)), true, false, "")
 		return code
 	}
 	id, err := st.Write(args, raw, time.Now())
 	if err != nil {
-		return emitRaw() // can't offer recovery: don't elide
+		return emitRaw(spool.ReasonSpoolFail) // can't offer recovery: don't elide
 	}
 	if compact != "" {
 		fmt.Print(compact)
@@ -121,7 +132,7 @@ func runFiltered(st *spool.Store, f filter.Func, args []string) int {
 		}
 	}
 	fmt.Printf("OK %s\n", id)
-	logInvocation(st, args, int64(len(raw)), int64(len(compact)), true, false)
+	logInvocation(st, args, int64(len(raw)), int64(len(compact)), true, false, "")
 	return code
 }
 
@@ -135,7 +146,7 @@ func applyFilter(f filter.Func, raw string) (compact string, ok bool) {
 	return f(raw), true
 }
 
-func logInvocation(st *spool.Store, args []string, rawBytes, outBytes int64, filtered, tty bool) {
+func logInvocation(st *spool.Store, args []string, rawBytes, outBytes int64, filtered, tty bool, reason string) {
 	if st == nil {
 		return
 	}
@@ -146,6 +157,7 @@ func logInvocation(st *spool.Store, args []string, rawBytes, outBytes int64, fil
 		OutBytes: outBytes,
 		Filtered: filtered,
 		TTY:      tty,
+		Reason:   reason,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vtk: gap log failed: %v\n", err)
@@ -165,12 +177,12 @@ func exitCode(err error) int {
 	return 127
 }
 
+// isTTY reports whether f is an interactive terminal. A real isatty check is
+// required: char-device sinks like /dev/null and Windows NUL are not
+// terminals, and treating them as such routed filtered commands through the
+// interactive bypass (#6).
 func isTTY(f *os.File) bool {
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(f.Fd()))
 }
 
 type countingWriter struct {
@@ -247,13 +259,30 @@ func cmdGaps() int {
 		fmt.Fprintf(os.Stderr, "vtk: %v\n", err)
 		return 1
 	}
-	if len(gaps) == 0 {
+	degraded, err := st.Degraded()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vtk: %v\n", err)
+		return 1
+	}
+	if len(gaps) == 0 && len(degraded) == 0 {
 		fmt.Println("no gap entries")
 		return 0
 	}
-	fmt.Printf("%-24s %7s %12s\n", "FAMILY", "CALLS", "RAW BYTES")
-	for _, g := range gaps {
-		fmt.Printf("%-24s %7d %12d\n", g.Family, g.Calls, g.RawBytes)
+	if len(gaps) > 0 {
+		fmt.Printf("%-24s %7s %12s\n", "FAMILY", "CALLS", "RAW BYTES")
+		for _, g := range gaps {
+			fmt.Printf("%-24s %7d %12d\n", g.Family, g.Calls, g.RawBytes)
+		}
+	}
+	if len(degraded) > 0 {
+		if len(gaps) > 0 {
+			fmt.Println()
+		}
+		fmt.Println("DEGRADED (filter panicked; output passed through raw)")
+		fmt.Printf("%-24s %7s %12s\n", "FAMILY", "CALLS", "RAW BYTES")
+		for _, g := range degraded {
+			fmt.Printf("%-24s %7d %12d\n", g.Family, g.Calls, g.RawBytes)
+		}
 	}
 	return 0
 }

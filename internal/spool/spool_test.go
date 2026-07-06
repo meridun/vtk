@@ -169,10 +169,24 @@ func TestInvocationsAndGaps(t *testing.T) {
 	s := newTestStore(t)
 	now := time.Now().UTC()
 	entries := []Invocation{
-		{Time: now, Cmd: "cargo build", RawBytes: 5000, OutBytes: 5000, Filtered: false},
-		{Time: now, Cmd: "cargo test", RawBytes: 7000, OutBytes: 7000, Filtered: false},
-		{Time: now, Cmd: "ls -la", RawBytes: 300, OutBytes: 300, Filtered: false},
+		// True coverage gaps: counted.
+		{Time: now, Cmd: "cargo build", RawBytes: 5000, OutBytes: 5000, Filtered: false, Reason: ReasonNoFilter},
+		{Time: now, Cmd: "cargo test", RawBytes: 7000, OutBytes: 7000, Filtered: false, Reason: ReasonNoFilter},
+		{Time: now, Cmd: "ls -la", RawBytes: 300, OutBytes: 300, Filtered: false, Reason: ReasonNoFilter},
+		// Uncovered command at a real terminal: still a gap (suppression is
+		// keyed on the registry match, not tty — #6).
+		{Time: now, Cmd: "cargo build", RawBytes: 0, OutBytes: 0, Filtered: false, TTY: true, Reason: ReasonNoFilter},
+		// Covered commands, unfiltered for a non-gap reason: excluded.
+		{Time: now, Cmd: "git status", RawBytes: 0, OutBytes: 0, Filtered: false, TTY: true, Reason: ReasonTTYBypass},
+		{Time: now, Cmd: "git diff badref", RawBytes: 90, OutBytes: 90, Filtered: false, Reason: ReasonNonzeroExit},
+		{Time: now, Cmd: "git log", RawBytes: 800, OutBytes: 800, Filtered: false, Reason: ReasonFilterPanic},
+		{Time: now, Cmd: "git show HEAD", RawBytes: 120, OutBytes: 120, Filtered: false, Reason: ReasonSpoolFail},
+		// Filtered: excluded regardless of reason.
 		{Time: now, Cmd: "git status", RawBytes: 400, OutBytes: 60, Filtered: true},
+		// Legacy pre-reason entries: non-tty counts as a gap; the polluted
+		// tty:true raw_bytes:0 shape (#6) is ignored.
+		{Time: now, Cmd: "ls -la", RawBytes: 250, OutBytes: 250, Filtered: false},
+		{Time: now, Cmd: "git branch", RawBytes: 0, OutBytes: 0, Filtered: false, TTY: true},
 	}
 	for _, e := range entries {
 		if err := s.LogInvocation(e); err != nil {
@@ -183,16 +197,16 @@ func TestInvocationsAndGaps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(invs) != 4 {
-		t.Fatalf("got %d invocations, want 4", len(invs))
+	if len(invs) != len(entries) {
+		t.Fatalf("got %d invocations, want %d", len(invs), len(entries))
 	}
 	gaps, err := s.Gaps()
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []GapSummary{
-		{Family: "cargo", Calls: 2, RawBytes: 12000},
-		{Family: "ls", Calls: 1, RawBytes: 300},
+		{Family: "cargo", Calls: 3, RawBytes: 12000},
+		{Family: "ls", Calls: 2, RawBytes: 550},
 	}
 	if len(gaps) != len(want) {
 		t.Fatalf("got %d gap families, want %d: %+v", len(gaps), len(want), gaps)
@@ -201,6 +215,32 @@ func TestInvocationsAndGaps(t *testing.T) {
 		if gaps[i] != want[i] {
 			t.Errorf("gaps[%d] = %+v, want %+v", i, gaps[i], want[i])
 		}
+	}
+}
+
+// Invariant 2: a crashing filter stays visible — filter-panic entries are
+// excluded from the gap list but surface via Degraded.
+func TestDegraded(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC()
+	entries := []Invocation{
+		{Time: now, Cmd: "git log --stat", RawBytes: 800, OutBytes: 800, Filtered: false, Reason: ReasonFilterPanic},
+		{Time: now, Cmd: "git log", RawBytes: 200, OutBytes: 200, Filtered: false, Reason: ReasonFilterPanic},
+		{Time: now, Cmd: "cargo build", RawBytes: 5000, OutBytes: 5000, Filtered: false, Reason: ReasonNoFilter},
+		{Time: now, Cmd: "git status", RawBytes: 400, OutBytes: 60, Filtered: true},
+	}
+	for _, e := range entries {
+		if err := s.LogInvocation(e); err != nil {
+			t.Fatalf("LogInvocation: %v", err)
+		}
+	}
+	degraded, err := s.Degraded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []GapSummary{{Family: "git", Calls: 2, RawBytes: 1000}}
+	if len(degraded) != 1 || degraded[0] != want[0] {
+		t.Errorf("Degraded() = %+v, want %+v", degraded, want)
 	}
 }
 

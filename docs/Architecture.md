@@ -68,8 +68,9 @@ vtk show 2e3f --grep pat  →   just the matching lines
 ## Key invariants
 
 1. Exit code of `vtk <cmd>` == exit code of `<cmd>`. Always.
-2. A filter failure (panic in filter code) degrades to raw passthrough + gap entry, never to
-   lost output or a vtk-originated nonzero exit.
+2. A filter failure (panic in filter code) degrades to raw passthrough, never to lost output or
+   a vtk-originated nonzero exit — and it stays visible: logged (`reason: filter-panic`) and
+   surfaced (stderr warning + a degraded section in `vtk gaps`).
 3. Gap/stats metadata never includes output content; only the short-lived spool files do.
 4. Filters are testable in isolation: fixture in, expected out, no process spawning in filter
    unit tests.
