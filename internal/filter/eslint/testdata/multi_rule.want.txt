@@ -1,0 +1,5 @@
+3x error semi  — src/app.js:2:10 Missing semicolon
+2x error no-undef  — src/app.js:1:1 'foo' is not defined
+1x warning no-unused-vars  — src/app.js:5:1 'bar' is assigned a value but never used
+1x warning no-console  — src/util.js:8:1 Unexpected console statement
+✖ 7 problems (5 errors, 2 warnings)

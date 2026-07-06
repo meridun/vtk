@@ -42,7 +42,7 @@ func run(args []string) int {
 	}
 	st.Sweep(spool.DefaultTTL, time.Now())
 
-	f, ok := filter.Default().Lookup(args)
+	entry, ok := filter.Default().Lookup(args)
 
 	// Interactive invocations bypass filtering entirely: interposing a pipe
 	// would break the wrapped command's own TTY detection. A bypassed covered
@@ -58,7 +58,7 @@ func run(args []string) int {
 	if !ok {
 		return passthrough(st, args, false, spool.ReasonNoFilter)
 	}
-	return runFiltered(st, f, args)
+	return runFiltered(st, entry, args)
 }
 
 // passthrough runs the command with output untouched. Unless the output is a
@@ -88,7 +88,7 @@ func passthrough(st *spool.Store, args []string, tty bool, reason string) int {
 // content was elided, and emits "OK <id>". Any failure on this path degrades
 // to raw passthrough — never to lost output (invariant 2). Exit-code parity
 // holds on every branch (invariant 1).
-func runFiltered(st *spool.Store, f filter.Func, args []string) int {
+func runFiltered(st *spool.Store, entry filter.Entry, args []string) int {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
 	var outBuf, errBuf bytes.Buffer
@@ -104,11 +104,13 @@ func runFiltered(st *spool.Store, f filter.Func, args []string) int {
 		return code
 	}
 
-	if code != 0 {
-		// When in doubt, pass through unchanged: failures keep full output.
+	if !entry.Filters(code) {
+		// Child exit is outside this filter's allowlist (a genuine failure for
+		// most tools; a fatal/config error for report-style ones). When in
+		// doubt, pass through unchanged: failures keep full output.
 		return emitRaw(spool.ReasonNonzeroExit)
 	}
-	compact, ok := applyFilter(f, raw)
+	compact, ok := applyFilter(entry.Fn, raw)
 	if !ok {
 		// Filter panicked: degrade to raw, log + surface (invariant 2).
 		fmt.Fprintf(os.Stderr, "vtk: filter for %q panicked; raw passthrough (see vtk gaps)\n", args[0])
