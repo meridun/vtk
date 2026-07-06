@@ -11,6 +11,9 @@ outgrows a screen.)
 - Implementation language is **Go** — [#1](https://github.com/meridun/vtk/issues/1)
 - Raw output is spooled per command with a 4-hex-char command-hash ID, provenance header,
   atomic-rename writes, ~1h TTL sweep — [#2](https://github.com/meridun/vtk/issues/2)
+- Registry entries may declare a per-filter exit-code allowlist of additional "expected" exit
+  codes to filter (report-style tools; eslint: {0, 1}, exit 2+ stays raw). Exit-code parity
+  unaffected — only the display path changes — [#7](https://github.com/meridun/vtk/issues/7)
 
 ## Pipeline
 
