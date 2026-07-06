@@ -10,13 +10,15 @@ vtk figures get measured from fixtures once filters ship.
 |---|---|---|---|
 | Tests | `playwright test`, generic `test <cmd>` wrapper | 90–94% | planned |
 | Lint/format | `lint` (eslint), `prettier --check` | 70–84% | planned |
-| Git | status, log, diff, show, add, commit, push, pull, branch, fetch, stash, worktree (+ passthrough for all subcommands) | 59–80% | planned |
+| Git (core) | status, log, diff, show, add, commit, push, pull, branch (+ passthrough for all other subcommands) | 59–80% | shipped — measured 47–89% on typical fixtures (status 84%, log 82%, diff 84%, show 85%, push-with-progress 89%; low end 2–11% on already-terse output, 100% on noise-only) |
+| Git (rest) | fetch, stash, worktree | 59–80% | planned |
 | GitHub | `gh pr view/checks`, `gh run list`, `gh issue list`, `gh api` | 26–87% | planned |
 | npm/npx | `npm run`, `npx` | 70–90% | planned |
 | Files/search | `ls`, `read`, `grep`, `find` | 60–75% | planned |
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned |
 | Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned |
-| Meta | `gain`, `discover`-equivalent (`gaps`), `proxy` | — | planned |
+| Meta | `show`, `discover`-equivalent (`gaps`) | — | shipped |
+| Meta | `gain`, `proxy` | — | planned |
 
 ## vtk expansions (candidates — promote/demote based on gap-log data)
 
