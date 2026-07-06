@@ -115,6 +115,126 @@ func mustOKID(t *testing.T, out string) string {
 	return m[1]
 }
 
+// runNull is like run but sends the child's stdout to the OS null device
+// (NUL on Windows, /dev/null elsewhere) — a char device, not a pipe. This is
+// the #6 regression shape: char-device sinks must not be mistaken for a TTY.
+func (h *harness) runNull(t *testing.T, dir string, args ...string) (stderr string, code int) {
+	t.Helper()
+	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open %s: %v", os.DevNull, err)
+	}
+	defer null.Close()
+	cmd := exec.Command(h.bin, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"LOCALAPPDATA="+h.home,
+		"XDG_CACHE_HOME="+h.home,
+		"HOME="+h.home,
+	)
+	var errb strings.Builder
+	cmd.Stdout = null
+	cmd.Stderr = &errb
+	runErr := cmd.Run()
+	code = 0
+	if runErr != nil {
+		if ee, ok := runErr.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else {
+			code = 127
+		}
+	}
+	return errb.String(), code
+}
+
+func (h *harness) invocationLog(t *testing.T) string {
+	t.Helper()
+	meta, err := os.ReadFile(filepath.Join(h.home, "vtk", "invocations.jsonl"))
+	if err != nil {
+		t.Fatalf("read invocation log: %v", err)
+	}
+	return string(meta)
+}
+
+// TestSmokeNullRedirect exercises #6 through the real binary: stdout
+// redirected to the null char device must take the filtered path, not the
+// interactive TTY bypass, and only genuine registry misses may appear in
+// `vtk gaps`.
+func TestSmokeNullRedirect(t *testing.T) {
+	h := newHarness(t)
+	if err := os.WriteFile(filepath.Join(h.repo, "file1.txt"), []byte("line 1 content\ndirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("covered command redirected to null device is filtered", func(t *testing.T) {
+		if _, code := h.runNull(t, h.repo, "git", "status"); code != 0 {
+			t.Fatalf("exit %d, want 0", code)
+		}
+		log := h.invocationLog(t)
+		if !strings.Contains(log, `"cmd":"git status"`) || !strings.Contains(log, `"filtered":true`) {
+			t.Errorf("expected filtered git status entry, got:\n%s", log)
+		}
+		if strings.Contains(log, `"tty":true`) {
+			t.Errorf("null-device redirect misdetected as tty:\n%s", log)
+		}
+		gaps, _, code := h.run(t, h.repo, "gaps")
+		if code != 0 {
+			t.Fatalf("gaps exit %d, want 0", code)
+		}
+		if strings.Contains(gaps, "git") {
+			t.Errorf("filtered invocation polluted gaps:\n%s", gaps)
+		}
+	})
+
+	t.Run("uncovered command redirected to null device is a no-filter gap", func(t *testing.T) {
+		if _, code := h.runNull(t, h.repo, "git", "rev-parse", "HEAD"); code != 0 {
+			t.Fatalf("exit %d, want 0", code)
+		}
+		if log := h.invocationLog(t); !strings.Contains(log, `"reason":"no-filter"`) {
+			t.Errorf("expected no-filter reason entry, got:\n%s", log)
+		}
+		gaps, _, code := h.run(t, h.repo, "gaps")
+		if code != 0 {
+			t.Fatalf("gaps exit %d, want 0", code)
+		}
+		if !strings.Contains(gaps, "git") {
+			t.Errorf("genuine gap missing from gaps:\n%s", gaps)
+		}
+	})
+
+	t.Run("nonzero exit keeps parity and is excluded from gaps", func(t *testing.T) {
+		rawCmd := exec.Command("git", "diff", "vtk-no-such-ref")
+		rawCmd.Dir = h.repo
+		rawCode := 0
+		if err := rawCmd.Run(); err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				rawCode = ee.ExitCode()
+			}
+		}
+		if rawCode == 0 {
+			t.Fatal("expected raw git diff on a bad ref to fail")
+		}
+		stderr, code := h.runNull(t, h.repo, "git", "diff", "vtk-no-such-ref")
+		if code != rawCode {
+			t.Errorf("exit %d, want %d (parity)", code, rawCode)
+		}
+		if !strings.Contains(stderr, "vtk-no-such-ref") {
+			t.Errorf("failure stderr not passed through raw:\n%s", stderr)
+		}
+		if log := h.invocationLog(t); !strings.Contains(log, `"reason":"nonzero-exit"`) {
+			t.Errorf("expected nonzero-exit reason entry, got:\n%s", log)
+		}
+		gaps, _, gcode := h.run(t, h.repo, "gaps")
+		if gcode != 0 {
+			t.Fatalf("gaps exit %d, want 0", gcode)
+		}
+		// The only git entries eligible for gaps remain the rev-parse miss.
+		if got := strings.Count(gaps, "git"); got != 1 {
+			t.Errorf("gaps git family lines = %d, want 1 (no-filter only):\n%s", got, gaps)
+		}
+	})
+}
+
 func TestSmoke(t *testing.T) {
 	h := newHarness(t)
 

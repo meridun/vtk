@@ -35,6 +35,9 @@ vtk figures get measured from fixtures once filters ship.
 
 ## Fallback logging (`vtk gaps`)
 
-Every passthrough writes a metadata-only gap entry. `vtk gaps` aggregates by command family and
-sorts by total raw bytes emitted — the top of that list is the next filter to write. This table
+Every passthrough writes a metadata-only entry tagged with a reason; `vtk gaps` counts only true
+coverage gaps (`no-filter` — no registry match), aggregated by command family and sorted by total
+raw bytes emitted — the top of that list is the next filter to write. Covered-but-unfiltered
+invocations (tty-bypass, nonzero-exit, filter-panic, spool-fail) are excluded; panicking filters
+surface separately in the DEGRADED section. This table
 should be re-prioritized from real gap data once vtk is in daily use.
