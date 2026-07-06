@@ -24,8 +24,10 @@ Early implementation, written in Go. Shipped so far:
   `branch` (other subcommands pass through). Measured savings 47–89% on typical fixtures.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
-- **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only);
-  `vtk gaps` aggregates by command family, sorted by raw bytes.
+- **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
+  reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`); `vtk gaps`
+  reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
+  bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
 
 `vtk gain` (cumulative savings stats) and further filter families are not yet implemented.
 Design decisions are recorded one line each in
@@ -37,7 +39,7 @@ Design decisions are recorded one line each in
 vtk git status          # compact status; prints "OK <id>" when content was elided
 vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
-vtk gaps                # unfiltered-command families ranked by raw bytes
+vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
 ```
 
 Build with `go build ./cmd/vtk`. Note for Windows: the spool directory relies on the default
