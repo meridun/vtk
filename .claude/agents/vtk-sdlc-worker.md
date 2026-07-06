@@ -17,6 +17,9 @@ unbounded loops.
 
 ## Working style
 
+- **Worktree isolation:** never work in the main checkout — use the issue-scoped worktree
+  `../vtk-wt/<issue#>` per the README universal loop. Claim with `sdlc:wip` + an `sdlc:claim
+  <run-id> <lane>` comment, then claim-verify (earliest claim wins).
 - Go conventions: `go vet ./...` before commits, `gofmt` clean, table-driven fixture tests.
 - The Architecture.md invariants (exit-code parity, panic-degrades-to-passthrough,
   metadata-never-holds-output-content) are acceptance criteria on every change.
