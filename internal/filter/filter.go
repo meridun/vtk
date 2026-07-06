@@ -3,42 +3,76 @@
 // spawn processes or touch the filesystem (docs/Architecture.md invariant 4).
 package filter
 
-import gitf "github.com/meridun/vtk/internal/filter/git"
+import (
+	eslintf "github.com/meridun/vtk/internal/filter/eslint"
+	gitf "github.com/meridun/vtk/internal/filter/git"
+)
 
 // Func is a pure filter: raw captured output in, compacted output out.
 // Returning the input unchanged means "nothing to elide".
 type Func func(raw string) string
 
-// Registry maps "cmd" or "cmd subcommand" keys to filters.
+// Entry is a registered filter plus the child exit codes on which it may run.
+// Most tools only produce filterable output on success (code 0); report-style
+// tools (eslint, tsc, ...) treat a nonzero "problems found" code as a report,
+// not a failure, and declare those codes here. Exit-code parity is unaffected:
+// the allowlist gates only whether the filter runs versus raw passthrough —
+// vtk always returns the child's own code (docs/Architecture.md invariant 1,
+// decision registry #7).
+type Entry struct {
+	Fn        Func
+	ExitCodes map[int]bool
+}
+
+// Filters reports whether this entry is allowed to run for child exit code.
+func (e Entry) Filters(code int) bool {
+	return e.ExitCodes[code]
+}
+
+// Registry maps "cmd" or "cmd subcommand" keys to entries.
 type Registry struct {
-	entries map[string]Func
+	entries map[string]Entry
 }
 
 // New returns an empty registry.
 func New() *Registry {
-	return &Registry{entries: make(map[string]Func)}
+	return &Registry{entries: make(map[string]Entry)}
 }
 
-// Register binds a key ("git status", "ls", ...) to a filter.
+// Register binds a key ("git status", "ls", ...) to a filter that runs only on
+// a clean (exit 0) child.
 func (r *Registry) Register(key string, f Func) {
-	r.entries[key] = f
+	r.RegisterCodes(key, f, 0)
+}
+
+// RegisterCodes binds a key to a filter that runs for any of the given child
+// exit codes. Passing no codes registers exit 0 only (same as Register).
+func (r *Registry) RegisterCodes(key string, f Func, codes ...int) {
+	if len(codes) == 0 {
+		codes = []int{0}
+	}
+	set := make(map[int]bool, len(codes))
+	for _, c := range codes {
+		set[c] = true
+	}
+	r.entries[key] = Entry{Fn: f, ExitCodes: set}
 }
 
 // Lookup matches argv against the registry: "argv[0] argv[1]" first, then
 // bare "argv[0]". Invocations whose second token is a flag (e.g.
 // `git -C dir status`) intentionally miss and fall through to passthrough —
 // the gap log will show whether that pattern is worth handling.
-func (r *Registry) Lookup(argv []string) (Func, bool) {
+func (r *Registry) Lookup(argv []string) (Entry, bool) {
 	if len(argv) == 0 {
-		return nil, false
+		return Entry{}, false
 	}
 	if len(argv) >= 2 {
-		if f, ok := r.entries[argv[0]+" "+argv[1]]; ok {
-			return f, true
+		if e, ok := r.entries[argv[0]+" "+argv[1]]; ok {
+			return e, true
 		}
 	}
-	f, ok := r.entries[argv[0]]
-	return f, ok
+	e, ok := r.entries[argv[0]]
+	return e, ok
 }
 
 // Default returns the registry with all shipped filter families wired in.
@@ -53,5 +87,9 @@ func Default() *Registry {
 	r.Register("git push", gitf.Push)
 	r.Register("git pull", gitf.Pull)
 	r.Register("git branch", gitf.Branch)
+	// eslint reports "problems found" via exit 1; that output is the whole
+	// point to compact. Exit 2+ is a fatal/config error and stays raw.
+	r.RegisterCodes("eslint", eslintf.Filter, 0, 1)
+	r.RegisterCodes("npx eslint", eslintf.Filter, 0, 1)
 	return r
 }
