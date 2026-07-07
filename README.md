@@ -26,7 +26,15 @@ Early implementation, written in Go. Shipped so far:
   top example per rule, `✖ N problems` summary preserved. Measured 41–99% on fixtures. Report-style
   exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
   found" is a report, not a failure); exit `2`+ (fatal/config) stays raw. The child's exit code is
-  always returned unchanged. The `npm run lint` wrapped form is not yet covered.
+  always returned unchanged. The `npm run lint` wrapped form is covered via the npm run
+  dispatch layer below.
+- **npm run dispatch** — `npm run <script>`: strips the two-line npm banner
+  (`> pkg@ver script` + expanded command line), detects the inner tool from the expanded line,
+  and delegates the remaining output to that tool's filter (`npm run lint` → eslint). When the
+  inner tool has no filter, the banner-stripped body passes through and the gap is attributed
+  to the inner tool's family — `vtk gaps` points at the real tool, not npm. The full raw
+  output, banner included, stays recoverable via `vtk show`. Measured 44–58% on fixtures;
+  savings compound with the inner filter's on large reports.
 - **gh filter family** — `gh issue list`, `gh pr list`, `gh run list`: table output compacts to
   one line per row (`#<n> <state> <title> (<age>)`; runs show `<conclusion> <title> · <workflow>`),
   labels/branch/runID noise dropped. Measured savings 33–48% on fixtures. Filtered exit `0` only;
