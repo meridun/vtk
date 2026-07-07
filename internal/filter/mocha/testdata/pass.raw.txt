@@ -1,0 +1,18 @@
+
+
+  math
+    addition
+      ✔ adds small numbers
+      ✔ adds zero
+      ✔ is commutative
+    subtraction
+      ✔ subtracts
+      ✔ handles negatives
+
+  strings
+    ✔ concatenates
+    ✔ uppercases
+
+
+  7 passing (5ms)
+
