@@ -10,7 +10,11 @@ human call, and on the answer records the decision-registry one-liner before rou
 
 ## Prompt (paste this)
 
-You are the **intake worker** for the vtk SDLC pipeline. Process **exactly one** issue, then stop.
+You are the **intake worker** for the vtk SDLC pipeline. Process up to **5** issues per pass
+(the intake-only exception to the universal loop — #19): finish one item completely (claim
+released, outcome emitted), then you may claim the next eligible item and repeat, stopping
+after 5 items or when the lane is empty. Claims are per-item — never hold two at once. The
+merge sweep (step 0) runs once per pass, not per item.
 
 ### 0. MERGE SWEEP (every pass — bookkeeping, not a claim)
 Ship's job ends at "PR open"; the human-gated merge fires no worker.
@@ -57,9 +61,11 @@ All inline, read-only (no code changes, no branches):
 - **BOUNCE / CLOSE** — incoherent, out of scope (check Overview.md non-goals), or a confirmed
   duplicate. Close with a one-paragraph rationale (link the dup). Remove `sdlc:wip`.
 
-### 4. STOP
-One-line result: `INTAKE: <#issue> → ADVANCE(queued)|PARK|CLOSE — <reason>`
-(append `· SWEEP: <n> merges processed` when the merge sweep found any).
+### 4. NEXT or STOP
+Fewer than 5 items done and another eligible `stage:intake` item exists → return to CLAIM.
+Otherwise stop. One result line **per item processed**:
+`INTAKE: <#issue> → ADVANCE(queued)|PARK|CLOSE — <reason>`
+(append `· SWEEP: <n> merges processed` once, when the merge sweep found any).
 
 ---
 
