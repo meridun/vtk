@@ -8,7 +8,7 @@ vtk figures get measured from fixtures once filters ship.
 
 | Family | Commands | rtk savings | Status |
 |---|---|---|---|
-| Tests | `playwright test`, generic `test <cmd>` wrapper | 90–94% | planned |
+| Tests | `mocha`, `npx mocha`, `playwright test`, generic `test <cmd>` wrapper | 90–94% | in-progress — `mocha`/`npx mocha` shipped (#12): folds passing/pending/suite spec-tree lines, keeps summary + failure-detail blocks (assertion + stack) verbatim; measured 23–94% on fixtures (green run 94%, pending 81%, 3-failure run 23% — savings scale with pass:fail ratio). Exit `{0,1}` filtered (1 = test failures, a report per decision #7), `2`+ (config error) stays raw; `npm run test`-wrapped mocha covered via the npm-run dispatch layer. `playwright test` + generic `test` wrapper still planned |
 | Lint/format | `eslint`, `npx eslint` | 70–84% | shipped — measured 41–99% on fixtures (small multi-rule 41%, 500-problem report 99%); direct invocations only, exit {0,1} filtered / 2+ raw |
 | Lint/format (rest) | `prettier --check`, `npm run lint` wrapped path | 70–84% | in-progress — `npm run` dispatch layer shipped (#8): banner strip + inner-tool delegation; `prettier` inner filter still planned |
 | Git (core) | status, log, diff, show, add, commit, push, pull, branch (+ passthrough for all other subcommands) | 59–80% | shipped — measured 47–89% on typical fixtures (status 84%, log 82%, diff 84%, show 85%, push-with-progress 89%; low end 2–11% on already-terse output, 100% on noise-only) |
