@@ -10,11 +10,11 @@ vtk figures get measured from fixtures once filters ship.
 |---|---|---|---|
 | Tests | `playwright test`, generic `test <cmd>` wrapper | 90–94% | planned |
 | Lint/format | `eslint`, `npx eslint` | 70–84% | shipped — measured 41–99% on fixtures (small multi-rule 41%, 500-problem report 99%); direct invocations only, exit {0,1} filtered / 2+ raw |
-| Lint/format (rest) | `prettier --check`, `npm run lint` wrapped path | 70–84% | planned — wrapped path is #8 |
+| Lint/format (rest) | `prettier --check`, `npm run lint` wrapped path | 70–84% | in-progress — `npm run` dispatch layer shipped (#8): banner strip + inner-tool delegation; `prettier` inner filter still planned |
 | Git (core) | status, log, diff, show, add, commit, push, pull, branch (+ passthrough for all other subcommands) | 59–80% | shipped — measured 47–89% on typical fixtures (status 84%, log 82%, diff 84%, show 85%, push-with-progress 89%; low end 2–11% on already-terse output, 100% on noise-only) |
 | Git (rest) | fetch, stash, worktree | 59–80% | planned |
 | GitHub | `gh pr view/checks`, `gh run list`, `gh issue list`, `gh api` | 26–87% | shipped (list shapes) — measured 33–48% on fixtures (`gh issue list` 33%, `gh pr list` 46%, `gh run list` 48%); compacts list-table output to `#<n> <state> <title> (<age>)` (runs: `<conclusion> <title> · <workflow>`), exit 0 only. `view`/`--json`/`api` shapes pass through structurally intact |
-| npm/npx | `npm run`, `npx` | 70–90% | planned |
+| npm/npx | `npm run`, `npx` | 70–90% | shipped (`npm run` dispatch, #8) — measured 44–58% on fixtures (eslint-delegated `npm run lint` 44%, banner-only strip on short script output 58%; savings compound with the inner filter's on large reports). Strips the npm banner, delegates the body to the inner tool's registered filter, gap-attributes uncovered inner tools to their own family (not npm); full raw (banner included) recoverable via `OK <id>`. Generic `npx` dispatch still planned |
 | Files/search | `ls`, `grep`, `find` | 60–75% | shipped — measured 17–75% on fixtures (`ls` 140-entry dir 75%, `grep -l` 75%, `grep -rn` 34%, `find` walk 17% — savings scale with list size; real gap-log target `vtk ls serverjs` 74.6%). Column-packed rows capped at 40 entries with `(+N more)` tail, grep capped at 5 matches/file, full listing behind `OK <id>`; `ls -l` long format passes through raw; exit 0 only (grep's no-match exit 1 stays raw) |
 | Files/search (rest) | `read` | 60–75% | planned |
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned |
