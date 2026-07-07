@@ -1,0 +1,6 @@
+[X] Applied: 18
+[ ] 20260101000019_add_read_flag.sql
+[ ] 20260101000020_create_audit_log.sql
+
+Applied: 18
+Pending: 2
