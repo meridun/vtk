@@ -51,12 +51,15 @@ Early implementation, written in Go. Shipped so far:
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
 
-`vtk gain` (cumulative savings stats) and further filter families are not yet implemented.
-The meta words `gain` and `proxy` are reserved: invoking them prints
-`vtk: "<word>" is not implemented yet` and exits `2` instead of falling through to exec — so
-they fail clearly rather than with a misleading "executable not found", and a real executable
-named `gain` or `proxy` cannot be run through vtk. Only these exact documented meta words are
-intercepted; any other unknown word still execs as usual.
+- **Cumulative savings + `vtk gain`** — aggregates the invocation log into total raw vs emitted
+  bytes, bytes saved and savings %, overall and per command family (ranked by bytes saved).
+  tty-bypass and other 0-byte rows are excluded so the percentage is honest.
+
+Further filter families are not yet implemented. The meta word `proxy` is reserved: invoking it
+prints `vtk: "proxy" is not implemented yet` and exits `2` instead of falling through to exec — so
+it fails clearly rather than with a misleading "executable not found", and a real executable
+named `proxy` cannot be run through vtk. Only this documented meta word is intercepted; any other
+unknown word still execs as usual.
 Design decisions are recorded one line each in
 [docs/Architecture.md](docs/Architecture.md#decision-registry) with links to the debate issues.
 
@@ -67,6 +70,7 @@ vtk git status          # compact status; prints "OK <id>" when content was elid
 vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
 vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
+vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family
 ```
 
 ## Install
@@ -88,7 +92,7 @@ user-scoped ACLs of `%LocalAppData%` (POSIX 0700 permissions are a no-op on NTFS
 - **Always safe**: `vtk <cmd>` never changes the command's semantics or exit code. If no filter
   matches, output passes through unchanged (and the fallback is logged).
 - **Chain-friendly**: works per-command inside `&&` chains.
-- **Measurable**: `vtk gain` (planned) reports cumulative token savings; fallback logs
+- **Measurable**: `vtk gain` reports cumulative token savings; fallback logs
   (`vtk gaps`) report the gap.
 - **Compact means folded**: on the filtered success path, stdout and stderr are folded into a
   single compact result on stdout. Per-stream separation is preserved on all raw, passthrough,

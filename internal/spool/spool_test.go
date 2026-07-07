@@ -244,6 +244,78 @@ func TestDegraded(t *testing.T) {
 	}
 }
 
+// Gain rolls up cumulative savings across countable invocations: filtered rows
+// contribute real savings, passthrough rows contribute raw==out (real volume,
+// zero savings), and tty/0-byte rows (uncountable-by-design — #6) are excluded
+// from both the totals and the call count.
+func TestGain(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC()
+	entries := []Invocation{
+		// Filtered: real savings, counted.
+		{Time: now, Cmd: "git status", RawBytes: 400, OutBytes: 60, Filtered: true},
+		{Time: now, Cmd: "git log", RawBytes: 1000, OutBytes: 200, Filtered: true},
+		// Passthrough coverage gap: raw==out, real volume but zero savings.
+		{Time: now, Cmd: "cargo build", RawBytes: 5000, OutBytes: 5000, Filtered: false, Reason: ReasonNoFilter},
+		// Nonzero-exit / spool-fail / filter-panic: byte-counted, zero savings.
+		{Time: now, Cmd: "git diff badref", RawBytes: 90, OutBytes: 90, Filtered: false, Reason: ReasonNonzeroExit},
+		// tty-bypass: raw_bytes:0, uncountable — excluded (must not inflate calls).
+		{Time: now, Cmd: "git status", RawBytes: 0, OutBytes: 0, Filtered: false, TTY: true, Reason: ReasonTTYBypass},
+		// Legacy tty:true (pre-reason): also excluded.
+		{Time: now, Cmd: "vim file", RawBytes: 0, OutBytes: 0, Filtered: false, TTY: true},
+	}
+	for _, e := range entries {
+		if err := s.LogInvocation(e); err != nil {
+			t.Fatalf("LogInvocation: %v", err)
+		}
+	}
+	report, err := s.Gain()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Overall: only the 4 countable rows. raw = 400+1000+5000+90 = 6490,
+	// out = 60+200+5000+90 = 5350, saved = 1140.
+	if report.Calls != 4 {
+		t.Errorf("Calls = %d, want 4 (tty rows excluded)", report.Calls)
+	}
+	if report.RawBytes != 6490 || report.OutBytes != 5350 {
+		t.Errorf("totals = %d raw / %d out, want 6490 / 5350", report.RawBytes, report.OutBytes)
+	}
+	if report.Saved() != 1140 {
+		t.Errorf("Saved() = %d, want 1140", report.Saved())
+	}
+	// Per family, sorted by bytes saved desc: git saved 340+800 = 1140 across
+	// 3 countable calls; cargo saved 0.
+	want := []FamilyGain{
+		{Family: "git", Calls: 3, RawBytes: 1490, OutBytes: 350},
+		{Family: "cargo", Calls: 1, RawBytes: 5000, OutBytes: 5000},
+	}
+	if len(report.Families) != len(want) {
+		t.Fatalf("got %d families, want %d: %+v", len(report.Families), len(want), report.Families)
+	}
+	for i := range want {
+		if report.Families[i] != want[i] {
+			t.Errorf("Families[%d] = %+v, want %+v", i, report.Families[i], want[i])
+		}
+	}
+	if report.Families[0].Saved() != 1140 {
+		t.Errorf("git Saved() = %d, want 1140", report.Families[0].Saved())
+	}
+}
+
+// An empty (or all-tty) log yields a zero report so `vtk gain` can print the
+// "no invocations" line rather than dividing by zero.
+func TestGainEmpty(t *testing.T) {
+	s := newTestStore(t)
+	report, err := s.Gain()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Calls != 0 || report.RawBytes != 0 || len(report.Families) != 0 {
+		t.Errorf("empty log gave %+v, want zero report", report)
+	}
+}
+
 // Invariant 3: metadata never contains output content. The Invocation schema
 // only carries the command line and counts; this guards the log file itself.
 func TestMetadataHoldsNoOutput(t *testing.T) {
