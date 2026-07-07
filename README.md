@@ -44,6 +44,11 @@ Early implementation, written in Go. Shipped so far:
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
 
 `vtk gain` (cumulative savings stats) and further filter families are not yet implemented.
+The meta words `gain` and `proxy` are reserved: invoking them prints
+`vtk: "<word>" is not implemented yet` and exits `2` instead of falling through to exec — so
+they fail clearly rather than with a misleading "executable not found", and a real executable
+named `gain` or `proxy` cannot be run through vtk. Only these exact documented meta words are
+intercepted; any other unknown word still execs as usual.
 Design decisions are recorded one line each in
 [docs/Architecture.md](docs/Architecture.md#decision-registry) with links to the debate issues.
 
