@@ -65,6 +65,10 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
    silent. **Every outcome removes `sdlc:wip`** on the way out. Leave the worktree in place
    (dispatcher maintenance prunes worktrees for merged/dead branches).
 4. **STOP** — reply the lane's one-line result. One item per pass; never pick up a second.
+   **Intake-only exception (#19):** the intake worker may loop up to **5 items** per pass —
+   triage is cheap and stateless. Each item is claimed and released individually (one claim
+   comment, one EMIT per item), so per-issue lock semantics are unchanged and the lane still
+   never has two workers.
 
 ## vtk specifics (bind in every lane)
 
