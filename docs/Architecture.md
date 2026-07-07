@@ -14,6 +14,9 @@ outgrows a screen.)
 - Registry entries may declare a per-filter exit-code allowlist of additional "expected" exit
   codes to filter (report-style tools; eslint: {0, 1}, exit 2+ stays raw). Exit-code parity
   unaffected — only the display path changes — [#7](https://github.com/meridun/vtk/issues/7)
+- Intake is exempt from the one-item-per-pass loop: an intake worker may triage up to **5**
+  items per pass, claiming/releasing each individually (per-issue lock semantics unchanged,
+  one claim comment + one EMIT per item) — [#19](https://github.com/meridun/vtk/issues/19)
 
 ## Pipeline
 
