@@ -30,14 +30,36 @@ every worker; workers use it in their claim comments.
 ### Step -1 — Dispatcher singleton gate
 
 Two dispatchers must not run maintenance concurrently. The pinned issue titled
-`sdlc:dispatch-lock` (create it once, label `sdlc:hold` so no worker touches it) is the mutex:
+`sdlc:dispatch-lock` (create it once, label `sdlc:hold` so no worker touches it) is the mutex.
+Acquisition mirrors the worker CLAIM claim-verify (README universal loop, CLAIM step 3): post,
+then re-read and yield if you lost — the read-then-post window is otherwise unguarded.
 
-- Read its most recent comment. `lock <run-id> <ISO timestamp>` younger than 2 hours with no
-  matching `unlock` → another dispatcher is live. Output one line:
+**Lock-comment format (anchored, exact-match, standalone).** A `lock`/`unlock` comment is one
+whose *entire body* matches, respectively:
+
+- `^lock <run-id> <ISO 8601 timestamp>$`
+- `^unlock <run-id>( \(.*\))?$`  (e.g. `unlock <run-id>` or `unlock <run-id> (yielded)`)
+
+Parse anchored against the whole comment body. A comment that merely *embeds* the string
+`lock <id>` or `unlock <id>` in a larger body (a digest, a discussion note) is **not** a
+lock/unlock comment and neither satisfies nor releases the gate.
+
+**Scan for the newest lock/unlock PAIR, not the newest comment.** Read all comments on the
+lock issue, keep only those matching the anchored formats above, and find the current holder:
+the newest `lock <run-id> …` for which there is **no** later `unlock <run-id>`. Ordinary
+comments on the lock issue never mask a live lock.
+
+- **A live holder exists** (its `lock` is younger than 2 hours with no matching `unlock`) →
+  another dispatcher is live. Output one line:
   `sdlc-dispatch: aborted — dispatcher lock held by <run-id> (<age>)`. Do nothing else.
-- Otherwise comment `lock <your run-id> <now>`. At the very end of the cycle, comment
-  `unlock <your run-id>`. A stale lock (≥2h, no unlock) is dead — note it in the digest and
-  proceed; your fresh `lock` comment supersedes it.
+- **No live holder** (no unmatched `lock`, or the newest unmatched `lock` is ≥2h old — stale,
+  dead: note it in the digest) → acquire: comment `lock <your run-id> <now ISO>`, then
+  **claim-verify**: re-read the lock issue's comments and recompute the current holder over the
+  anchored `lock`/`unlock` set. If a competing `lock` (not yours) is newer than the last
+  `unlock` and **predates yours, or ties with a lexicographically lower run-id**, you lost the
+  race → comment `unlock <your run-id> (yielded)` and abort the cycle with one line:
+  `sdlc-dispatch: aborted — lost dispatcher-lock race to <run-id>`. Do nothing else. Otherwise
+  you hold the lock; proceed. At the very end of the cycle, comment `unlock <your run-id>`.
 
 ### Step 0 — Snapshot + per-issue wip gate
 
