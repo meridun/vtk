@@ -26,13 +26,12 @@ func main() {
 // yet (docs/ToolCoverage.md, Meta row). Guarding them keeps exec fallthrough
 // from turning "not implemented" into "executable file not found" (#11).
 var reservedMeta = map[string]bool{
-	"gain":  true,
 	"proxy": true,
 }
 
 func run(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps")
+		fmt.Fprintln(os.Stderr, "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps | vtk gain")
 		return 2
 	}
 	switch args[0] {
@@ -40,6 +39,8 @@ func run(args []string) int {
 		return cmdShow(args[1:])
 	case "gaps":
 		return cmdGaps()
+	case "gain":
+		return cmdGain()
 	}
 	if reservedMeta[args[0]] {
 		// Documented-but-unshipped vtk subcommand (docs/ToolCoverage.md, Meta
@@ -428,4 +429,43 @@ func cmdGaps() int {
 		}
 	}
 	return 0
+}
+
+// cmdGain reports cumulative token savings from the invocation log: the overall
+// raw-vs-emitted roll-up plus a per-family breakdown ranked by bytes saved.
+// Read-only over metadata — no exec, no output content (invariant 3).
+func cmdGain() int {
+	st, err := spool.Open()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vtk: %v\n", err)
+		return 1
+	}
+	report, err := st.Gain()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "vtk: %v\n", err)
+		return 1
+	}
+	if report.Calls == 0 {
+		fmt.Println("no invocations logged")
+		return 0
+	}
+	fmt.Printf("cumulative savings: %d raw -> %d emitted, saved %d bytes (%s) over %d calls\n",
+		report.RawBytes, report.OutBytes, report.Saved(),
+		percent(report.Saved(), report.RawBytes), report.Calls)
+	fmt.Println()
+	fmt.Printf("%-24s %7s %12s %12s %8s\n", "FAMILY", "CALLS", "RAW BYTES", "SAVED", "SAVED%")
+	for _, g := range report.Families {
+		fmt.Printf("%-24s %7d %12d %12d %8s\n",
+			g.Family, g.Calls, g.RawBytes, g.Saved(), percent(g.Saved(), g.RawBytes))
+	}
+	return 0
+}
+
+// percent formats saved/raw as a percentage, guarding raw==0 (nothing counted)
+// to avoid a divide-by-zero.
+func percent(saved, raw int64) string {
+	if raw <= 0 {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.1f%%", float64(saved)/float64(raw)*100)
 }
