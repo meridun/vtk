@@ -1,0 +1,23 @@
+[X] 20260101000001_create_users.sql
+[X] 20260101000002_create_posts.sql
+[X] 20260101000003_add_index.sql
+[X] 20260101000004_create_sessions.sql
+[X] 20260101000005_add_email_col.sql
+[X] 20260101000006_create_orders.sql
+[X] 20260101000007_add_orders_idx.sql
+[X] 20260101000008_create_products.sql
+[X] 20260101000009_create_carts.sql
+[X] 20260101000010_add_cart_fk.sql
+[X] 20260101000011_create_reviews.sql
+[X] 20260101000012_add_review_rating.sql
+[X] 20260101000013_create_tags.sql
+[X] 20260101000014_create_post_tags.sql
+[X] 20260101000015_add_slug.sql
+[X] 20260101000016_create_media.sql
+[X] 20260101000017_add_media_type.sql
+[X] 20260101000018_create_notifications.sql
+[ ] 20260101000019_add_read_flag.sql
+[ ] 20260101000020_create_audit_log.sql
+
+Applied: 18
+Pending: 2

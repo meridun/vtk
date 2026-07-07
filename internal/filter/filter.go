@@ -4,6 +4,7 @@
 package filter
 
 import (
+	dbmatef "github.com/meridun/vtk/internal/filter/dbmate"
 	eslintf "github.com/meridun/vtk/internal/filter/eslint"
 	filesf "github.com/meridun/vtk/internal/filter/files"
 	ghf "github.com/meridun/vtk/internal/filter/gh"
@@ -103,5 +104,15 @@ func Default() *Registry {
 	r.Register("ls", filesf.Ls)
 	r.Register("grep", filesf.Grep)
 	r.Register("find", filesf.Find)
+	// dbmate migration family (direct, and via the npm-run inner-tool dispatch
+	// wired in cmd/vtk): status collapses the applied-migrations list to a
+	// count and keeps pending + summary; up/down/migrate/rollback drop progress
+	// chatter and keep result + error lines. Clean-run-only — a failed
+	// migration exits nonzero and passes through raw, preserving the error.
+	r.Register("dbmate status", dbmatef.Status)
+	r.Register("dbmate up", dbmatef.Migrate)
+	r.Register("dbmate down", dbmatef.Migrate)
+	r.Register("dbmate migrate", dbmatef.Migrate)
+	r.Register("dbmate rollback", dbmatef.Migrate)
 	return r
 }
