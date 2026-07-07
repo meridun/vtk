@@ -269,3 +269,83 @@ func (s *Store) aggregate(match func(Invocation) bool) ([]GapSummary, error) {
 	})
 	return out, nil
 }
+
+// FamilyGain is the cumulative savings for one command family.
+type FamilyGain struct {
+	Family   string
+	Calls    int
+	RawBytes int64
+	OutBytes int64
+}
+
+// Saved is raw minus emitted bytes for the family.
+func (g FamilyGain) Saved() int64 { return g.RawBytes - g.OutBytes }
+
+// GainReport is the cumulative savings across all countable invocations: an
+// overall roll-up plus a per-family breakdown sorted by bytes saved.
+type GainReport struct {
+	Calls    int
+	RawBytes int64
+	OutBytes int64
+	Families []FamilyGain
+}
+
+// Saved is total raw minus total emitted bytes.
+func (r GainReport) Saved() int64 { return r.RawBytes - r.OutBytes }
+
+// countable reports whether an invocation contributes real byte counts to the
+// savings roll-up. tty-bypass and legacy tty:true rows carry raw_bytes:0 by
+// design (uncountable — #6): including them would inflate call counts with
+// 0-byte noise without changing the saved total, so they are excluded.
+func countable(inv Invocation) bool {
+	if inv.TTY {
+		return false
+	}
+	return inv.Reason != ReasonTTYBypass
+}
+
+// Gain aggregates cumulative token savings from the invocation log: total raw
+// vs emitted bytes overall and per command family (first token), sorted by
+// bytes saved descending then family name. Only byte-counted invocations
+// participate (see countable) — filtered rows contribute the real savings,
+// passthrough rows contribute raw==out (real volume, zero savings), giving the
+// honest cumulative picture. Backs `vtk gain`.
+func (s *Store) Gain() (GainReport, error) {
+	invs, err := s.Invocations()
+	if err != nil {
+		return GainReport{}, err
+	}
+	var report GainReport
+	agg := make(map[string]*FamilyGain)
+	for _, inv := range invs {
+		if !countable(inv) {
+			continue
+		}
+		family, _, _ := strings.Cut(inv.Cmd, " ")
+		if family == "" {
+			continue
+		}
+		report.Calls++
+		report.RawBytes += inv.RawBytes
+		report.OutBytes += inv.OutBytes
+		g, ok := agg[family]
+		if !ok {
+			g = &FamilyGain{Family: family}
+			agg[family] = g
+		}
+		g.Calls++
+		g.RawBytes += inv.RawBytes
+		g.OutBytes += inv.OutBytes
+	}
+	report.Families = make([]FamilyGain, 0, len(agg))
+	for _, g := range agg {
+		report.Families = append(report.Families, *g)
+	}
+	sort.Slice(report.Families, func(i, j int) bool {
+		if report.Families[i].Saved() != report.Families[j].Saved() {
+			return report.Families[i].Saved() > report.Families[j].Saved()
+		}
+		return report.Families[i].Family < report.Families[j].Family
+	})
+	return report, nil
+}

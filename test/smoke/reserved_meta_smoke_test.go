@@ -17,7 +17,7 @@ import (
 func TestSmokeReservedMeta(t *testing.T) {
 	h := newHarness(t)
 
-	for _, word := range []string{"gain", "proxy"} {
+	for _, word := range []string{"proxy"} {
 		t.Run(word+" fails clearly with exit 2", func(t *testing.T) {
 			out, stderr, code := h.run(t, h.repo, word)
 			if code != 2 {
@@ -34,12 +34,6 @@ func TestSmokeReservedMeta(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("gain with args still reserved", func(t *testing.T) {
-		if _, _, code := h.run(t, h.repo, "gain", "--since", "7d"); code != 2 {
-			t.Errorf("exit %d, want 2", code)
-		}
-	})
 
 	t.Run("reserved words leave no spool or gap-log trace", func(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(h.home, "vtk", "invocations.jsonl")); !os.IsNotExist(err) {
@@ -63,6 +57,23 @@ func TestSmokeReservedMeta(t *testing.T) {
 		}
 		if _, _, code := h.run(t, h.repo, "gaps"); code != 0 {
 			t.Errorf("gaps exit %d, want 0", code)
+		}
+	})
+
+	// gain graduated from reserved stub to an implemented reporter (#14): it
+	// now routes to cmdGain, exiting 0 (like show/gaps) instead of the reserved
+	// guard's 2, and aggregates the invocation log into a cumulative-savings
+	// roll-up. Earlier subtests share this harness's isolated home and have
+	// already logged wrapped-command invocations, so gain reports the roll-up
+	// (not the empty-log line). Populate one more to be self-contained.
+	t.Run("gain reports cumulative savings", func(t *testing.T) {
+		h.run(t, h.repo, "git", "status") // ensure at least one logged invocation
+		out, _, code := h.run(t, h.repo, "gain")
+		if code != 0 {
+			t.Fatalf("gain exit %d, want 0", code)
+		}
+		if !strings.Contains(out, "cumulative savings:") {
+			t.Errorf("gain missing cumulative roll-up: %q", out)
 		}
 	})
 }
