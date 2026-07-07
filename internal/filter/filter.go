@@ -8,6 +8,7 @@ import (
 	filesf "github.com/meridun/vtk/internal/filter/files"
 	ghf "github.com/meridun/vtk/internal/filter/gh"
 	gitf "github.com/meridun/vtk/internal/filter/git"
+	mochaf "github.com/meridun/vtk/internal/filter/mocha"
 )
 
 // Func is a pure filter: raw captured output in, compacted output out.
@@ -93,6 +94,12 @@ func Default() *Registry {
 	// point to compact. Exit 2+ is a fatal/config error and stays raw.
 	r.RegisterCodes("eslint", eslintf.Filter, 0, 1)
 	r.RegisterCodes("npx eslint", eslintf.Filter, 0, 1)
+	// mocha reports test failures via exit 1; that failing run is exactly what
+	// to compact (fold passing specs, keep failures + summary). Exit 2+ is a
+	// mocha/config error and stays raw. Delegation from the `npm run` dispatch
+	// layer reuses these keys via the runner's inner-tool lookup (#8, #12).
+	r.RegisterCodes("mocha", mochaf.Filter, 0, 1)
+	r.RegisterCodes("npx mocha", mochaf.Filter, 0, 1)
 	// gh list families: TSV human output on success (exit 0). `gh --json`
 	// forms hit the same keys but pass through structurally intact (isJSON).
 	r.Register("gh issue", ghf.IssueList)
