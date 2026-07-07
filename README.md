@@ -35,6 +35,14 @@ Early implementation, written in Go. Shipped so far:
   to the inner tool's family — `vtk gaps` points at the real tool, not npm. The full raw
   output, banner included, stays recoverable via `vtk show`. Measured 44–58% on fixtures;
   savings compound with the inner filter's on large reports.
+- **mocha filter** — `mocha`, `npx mocha` (spec reporter): folds passing/pending/suite spec-tree
+  lines away and keeps the summary (`N passing`/`M failing`/`K pending`) plus every failure-detail
+  block (name + assertion + stack) verbatim — the signal an agent needs. Measured 23–94% on
+  fixtures (savings scale with the pass:fail ratio: a green run collapses to a single summary line,
+  a failure-heavy run keeps most of its bytes). Filtered exit `{0, 1}` (`1` = test failures, a
+  report not a crash); exit `2`+ (config error) stays raw, with the child's exit code always
+  returned unchanged. The `npm run test` wrapped form is covered via the npm run dispatch layer;
+  full raw is recoverable via `vtk show`.
 - **gh filter family** — `gh issue list`, `gh pr list`, `gh run list`: table output compacts to
   one line per row (`#<n> <state> <title> (<age>)`; runs show `<conclusion> <title> · <workflow>`),
   labels/branch/runID noise dropped. Measured savings 33–48% on fixtures. Filtered exit `0` only;
