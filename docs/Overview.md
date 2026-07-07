@@ -32,7 +32,10 @@ stable/release and moves only by PR from `dev`. Full discipline in
 - Not a shell, not a command runner with its own semantics. Exit codes, signals, and side
   effects of the wrapped command are preserved exactly.
 - Not agent-specific. vtk is agent-agnostic; anything that reads stdout benefits.
-- No network calls, no telemetry. Fallback logs are local files only.
+- No network calls of vtk's own on the wrap path, no telemetry leaving the machine. The wrapped
+  command's network behavior is untouched; gap/gain data is local files only. Explicit,
+  user-invoked maintenance subcommands (e.g. `gaps --file-issues`) may shell out to tools like
+  `gh` — that is the user's action, not background traffic.
 
 ## Comparison to rtk
 
