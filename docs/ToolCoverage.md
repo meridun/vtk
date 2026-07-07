@@ -20,7 +20,7 @@ vtk figures get measured from fixtures once filters ship.
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned |
 | Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned |
 | Meta | `show`, `discover`-equivalent (`gaps`) | — | shipped |
-| Meta | `gain`, `proxy` | — | planned |
+| Meta | `gain`, `proxy` | — | planned — names reserved: invoking exits 2 with "not implemented yet" instead of exec fallthrough (#11) |
 
 ## vtk expansions (candidates — promote/demote based on gap-log data)
 

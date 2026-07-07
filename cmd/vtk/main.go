@@ -21,6 +21,14 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
+// reservedMeta lists documented vtk meta subcommands that are not implemented
+// yet (docs/ToolCoverage.md, Meta row). Guarding them keeps exec fallthrough
+// from turning "not implemented" into "executable file not found" (#11).
+var reservedMeta = map[string]bool{
+	"gain":  true,
+	"proxy": true,
+}
+
 func run(args []string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps")
@@ -31,6 +39,13 @@ func run(args []string) int {
 		return cmdShow(args[1:])
 	case "gaps":
 		return cmdGaps()
+	}
+	if reservedMeta[args[0]] {
+		// Documented-but-unshipped vtk subcommand (docs/ToolCoverage.md, Meta
+		// row). Falling through to exec would produce a misleading
+		// "executable file not found" (#11); fail clearly instead.
+		fmt.Fprintf(os.Stderr, "vtk: %q is not implemented yet\n", args[0])
+		return 2
 	}
 
 	st, err := spool.Open()
