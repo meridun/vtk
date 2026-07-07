@@ -19,8 +19,8 @@ vtk figures get measured from fixtures once filters ship.
 | Files/search (rest) | `read` | 60–75% | planned |
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned |
 | Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned |
-| Meta | `show`, `discover`-equivalent (`gaps`) | — | shipped |
-| Meta | `gain`, `proxy` | — | planned — names reserved: invoking exits 2 with "not implemented yet" instead of exec fallthrough (#11) |
+| Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps` |
+| Meta | `proxy` | — | planned — name reserved: invoking exits 2 with "not implemented yet" instead of exec fallthrough (#11) |
 
 ## vtk expansions (candidates — promote/demote based on gap-log data)
 
