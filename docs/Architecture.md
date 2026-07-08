@@ -74,7 +74,11 @@ vtk show 2e3f --grep pat  →   just the matching lines
 ## Components
 
 - **Registry** — maps command/subcommand patterns to filters. Filters are pure functions:
-  raw output in, compacted output out. One filter per tool family (git, gh, npm, ...).
+  raw output in, compacted output out. Two filter sources coexist: hand-written Go packages (one
+  per tool family — git, gh, npm, ...) and declarative TOML specs embedded at build
+  (`internal/filter/tomlfilter/defs/*.toml`) compiled to the same pure-function signature.
+  Dispatch consults the exact command/subcommand key first, then a regex-matched fallback, so Go
+  families keep precedence over regex-keyed TOML filters.
 - **Runner** — spawns the wrapped command, streams/captures output, propagates exit code and
   signals. The only component with process-spawning responsibility.
 - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte

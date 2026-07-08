@@ -52,6 +52,12 @@ Early implementation, written in Go. Shipped so far:
   `(+N more)` tails. The full listing is always recoverable via `vtk show <id>`. Measured savings
   17–75% on fixtures (scales with list size). `ls -l` long format passes through raw; filtered
   exit `0` only, so grep's no-match exit `1` stays raw with exit-code parity intact.
+- **cargo filter (declarative TOML)** — `cargo build/check/test/run/clippy`: strips per-crate
+  progress (`Compiling`/`Checking`/`Downloading`/…), keeps warnings, errors, and the `Finished`
+  summary. Measured 12–66% on fixtures. Filtered exit `{0}`; a compile error (exit 101) passes
+  through raw with the child's exit code intact. This is vtk's first filter written as an embedded
+  TOML spec rather than a Go package — the cheap path for regex-only families; see
+  [docs/ToolCoverage.md](docs/ToolCoverage.md) for the authoring path.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a

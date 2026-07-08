@@ -4,6 +4,15 @@ Filter catalog: rtk-parity targets first, then vtk expansions. Status values:
 `planned` → `in-progress` → `shipped`. Savings % are rtk's published figures where they exist;
 vtk figures get measured from fixtures once filters ship.
 
+**Two ways to add a filter (#40).** Reformatters that restructure output stay hand-written Go
+(`internal/filter/<tool>/`). A family that is just *drop/keep/replace by regex* is a ~20-line
+declarative TOML file under `internal/filter/tomlfilter/defs/`, embedded at build and registered
+into the same dispatch (Go families keep precedence; TOML filters match via a regex fallback).
+This is the cheap path from a recurring `vtk gaps` passthrough family to a shipped filter — schema
+reference at `internal/filter/tomlfilter/defs/README.md`. One caveat: `filter_stderr` is parsed
+but rejected at load, since the runner merges stdout+stderr before a filter runs — honoring it
+needs runner-side stream separation (deferred).
+
 ## rtk parity targets
 
 | Family | Commands | rtk savings | Status |
@@ -27,7 +36,7 @@ vtk figures get measured from fixtures once filters ship.
 
 | Family | Commands | Rationale | Status |
 |---|---|---|---|
-| Language toolchains | `cargo`, `go`, `tsc`, `dotnet`, `mvn`/`gradle`, `pip`/`uv`, `pytest`, `jest`/`vitest` | rtk ships some of these; verify + fill gaps | planned |
+| Language toolchains | `cargo`, `go`, `tsc`, `dotnet`, `mvn`/`gradle`, `pip`/`uv`, `pytest`, `jest`/`vitest` | rtk ships some of these; verify + fill gaps | in-progress — `cargo build/check/test/run/clippy` shipped (#40) as vtk's first declarative TOML filter: strips per-crate progress (`Compiling`/`Checking`/`Downloading`/…), keeps warnings, errors, and the `Finished` summary. Measured 12–66% on fixtures (progress-heavy build 66%, warning-kept run 12% — savings scale with progress-line noise). Filtered exit `{0}`; a compile error (exit 101) passes through raw. Rest of the row still planned |
 | Package managers | `pnpm`, `yarn`, `winget`, `choco`, `brew`, `apt` | install/upgrade output is huge and low-signal | planned |
 | Kubernetes/cloud | `kubectl`, `helm`, `terraform plan/apply`, `az`, `aws`, `gcloud` | plan/apply and describe output are token bombs | planned |
 | CI/CD | `gh run view --log`, `act` | log dumps dominate CI debugging sessions | planned |
