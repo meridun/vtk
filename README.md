@@ -62,6 +62,9 @@ Early implementation, written in Go. Shipped so far:
 - **Cumulative savings + `vtk gain`** — aggregates the invocation log into total raw vs emitted
   bytes, bytes saved and savings %, overall and per command family (ranked by bytes saved).
   tty-bypass and other 0-byte rows are excluded so the percentage is honest.
+- **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
+  block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm` route through vtk without being
+  prefixed. Marker-delimited and idempotent, with `--print`/`--dry-run`/`--uninstall`/`--shell`.
 
 Further filter families are not yet implemented. The meta word `proxy` is reserved: invoking it
 prints `vtk: "proxy" is not implemented yet` and exits `2` instead of falling through to exec — so
@@ -79,7 +82,25 @@ vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
 vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
 vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family
+vtk install             # wire git/gh/npm -> vtk into your shell rc/profile (bash + pwsh)
+vtk install --print     # print the wrapper block(s) without writing anything
+vtk install --uninstall # remove the managed block
 ```
+
+### Shell integration (`vtk install`)
+
+`vtk <cmd>` filters when you prefix it, but to filter *every* `git`/`gh`/`npm` call without
+prefixing, `vtk install` splices wrapper functions into your shell startup file — `~/.bashrc`
+for bash, `$PROFILE.CurrentUserAllHosts` for PowerShell (resolved via pwsh, so OneDrive
+Documents redirection is handled). The block:
+
+- **points at this binary** (`os.Executable()`), so it keeps working wherever vtk lives;
+- is **guarded on `$CLAUDECODE`**, so it is inert in normal interactive shells and only wraps
+  commands inside Claude Code sessions;
+- is **marker-delimited and idempotent** — re-running with the same binary path is a no-op, a
+  moved binary updates in place, and `--uninstall` removes exactly the managed block.
+
+`--shell bash|pwsh` targets one shell; `--dry-run` reports actions without writing.
 
 ## Install
 
