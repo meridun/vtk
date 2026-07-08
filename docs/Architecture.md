@@ -23,6 +23,10 @@ outgrows a screen.)
 - `vtk install` wires the wrappers into a shell rc/profile itself, rather than shipping a
   hand-copied dotfile snippet: self-locating via `os.Executable()`, marker-delimited managed
   block (idempotent + exact `--uninstall`), guarded on `$CLAUDECODE` — [#49](https://github.com/meridun/vtk/issues/49)
+- Spool + the `OK <id>` recover-me signal are gated on **real** savings, not any positive byte
+  delta: the compact result must clear an absolute-byte floor **and** a savings ratio (option C);
+  below the bar vtk emits inline with no spool and no `OK`, so lossless reformats (e.g. `git
+  branch`) never fire a false recover-me signal — [#52](https://github.com/meridun/vtk/issues/52)
 
 ## Pipeline
 
