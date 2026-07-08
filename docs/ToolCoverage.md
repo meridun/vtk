@@ -4,6 +4,12 @@ Filter catalog: rtk-parity targets first, then vtk expansions. Status values:
 `planned` → `in-progress` → `shipped`. Savings % are rtk's published figures where they exist;
 vtk figures get measured from fixtures once filters ship.
 
+Upstream baseline: [rtk-ai/rtk](https://github.com/rtk-ai/rtk) now ships ~65 filters plus a TOML
+rule engine and `learn`/`discover`/`hooks`/`analytics` subsystems. Several parity rows below that
+vtk still lists `planned` are now shipped and validated upstream (noted per-row); the Status
+column tracks vtk's own implementation state, so those rows stay `planned` until vtk ships them.
+The TOML long-tail and the subsystems are fresh parity gaps tracked in #41 and #43–#46.
+
 **Two ways to add a filter (#40).** Reformatters that restructure output stay hand-written Go
 (`internal/filter/<tool>/`). A family that is just *drop/keep/replace by regex* is a ~20-line
 declarative TOML file under `internal/filter/tomlfilter/defs/`, embedded at build and registered
@@ -17,20 +23,22 @@ needs runner-side stream separation (deferred).
 
 | Family | Commands | rtk savings | Status |
 |---|---|---|---|
-| Tests | `mocha`, `npx mocha`, `playwright test`, generic `test <cmd>` wrapper | 90–94% | in-progress — `mocha`/`npx mocha` shipped (#12): folds passing/pending/suite spec-tree lines, keeps summary + failure-detail blocks (assertion + stack) verbatim; measured 23–94% on fixtures (green run 94%, pending 81%, 3-failure run 23% — savings scale with pass:fail ratio). Exit `{0,1}` filtered (1 = test failures, a report per decision #7), `2`+ (config error) stays raw; `npm run test`-wrapped mocha covered via the npm-run dispatch layer. `playwright test` + generic `test` wrapper still planned |
+| Tests | `mocha`, `npx mocha`, `playwright test`, generic `test <cmd>` wrapper | 90–94% | in-progress — `mocha`/`npx mocha` shipped (#12): folds passing/pending/suite spec-tree lines, keeps summary + failure-detail blocks (assertion + stack) verbatim; measured 23–94% on fixtures (green run 94%, pending 81%, 3-failure run 23% — savings scale with pass:fail ratio). Exit `{0,1}` filtered (1 = test failures, a report per decision #7), `2`+ (config error) stays raw; `npm run test`-wrapped mocha covered via the npm-run dispatch layer. `playwright test` now shipped/validated upstream (rtk-ai/rtk), vtk: planned; generic `test` wrapper planned |
 | Lint/format | `eslint`, `npx eslint` | 70–84% | shipped — measured 41–99% on fixtures (small multi-rule 41%, 500-problem report 99%); direct invocations only, exit {0,1} filtered / 2+ raw |
-| Lint/format (rest) | `prettier --check`, `npm run lint` wrapped path | 70–84% | in-progress — `npm run` dispatch layer shipped (#8): banner strip + inner-tool delegation; `prettier` inner filter still planned |
+| Lint/format (rest) | `prettier --check`, `npm run lint` wrapped path | 70–84% | in-progress — `npm run` dispatch layer shipped (#8): banner strip + inner-tool delegation; `prettier --check` now shipped/validated upstream (rtk-ai/rtk), vtk inner filter: planned |
 | Git (core) | status, log, diff, show, add, commit, push, pull, branch (+ passthrough for all other subcommands) | 59–80% | shipped — measured 47–89% on typical fixtures (status 84%, log 82%, diff 84%, show 85%, push-with-progress 89%; low end 2–11% on already-terse output, 100% on noise-only) |
 | Git (rest) | fetch, stash, worktree | 59–80% | planned |
 | GitHub | `gh pr view/checks`, `gh run list`, `gh issue list`, `gh api` | 26–87% | shipped (list shapes) — measured 33–48% on fixtures (`gh issue list` 33%, `gh pr list` 46%, `gh run list` 48%); compacts list-table output to `#<n> <state> <title> (<age>)` (runs: `<conclusion> <title> · <workflow>`), exit 0 only. `view`/`--json`/`api` shapes pass through structurally intact |
 | npm/npx | `npm run`, `npx` | 70–90% | shipped (`npm run` dispatch, #8) — measured 44–58% on fixtures (eslint-delegated `npm run lint` 44%, banner-only strip on short script output 58%; savings compound with the inner filter's on large reports). Strips the npm banner, delegates the body to the inner tool's registered filter, gap-attributes uncovered inner tools to their own family (not npm); full raw (banner included) recoverable via `OK <id>`. Generic `npx` dispatch still planned |
 | Files/search | `ls`, `grep`, `find` | 60–75% | shipped — measured 17–75% on fixtures (`ls` 140-entry dir 75%, `grep -l` 75%, `grep -rn` 34%, `find` walk 17% — savings scale with list size; real gap-log target `vtk ls serverjs` 74.6%). Column-packed rows capped at 40 entries with `(+N more)` tail, grep capped at 5 matches/file, full listing behind `OK <id>`; `ls -l` long format passes through raw; exit 0 only (grep's no-match exit 1 stays raw) |
-| Files/search (rest) | `read` | 60–75% | planned |
-| Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned |
-| Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned |
+| Files/search (rest) | `read`, `tree` | 60–75% | planned — both now shipped/validated upstream (rtk-ai/rtk) |
+| Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned — `err`/`log`/`json`/`env` now shipped/validated upstream (rtk-ai/rtk); `summary`/`diff` planned |
+| Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned — `docker ps/images/logs` + `curl` now shipped/validated upstream (rtk-ai/rtk) |
 | Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. `gaps --file-issues` (#34) turns recurring gap families into `stage:intake` `Filter: <family>` issues (over a raw-bytes/call-count threshold — defaults 50 KiB / 3 calls, hard floors 4 KiB / 2 calls; machine-readable `--json`-style calls excluded from the aggregation; dedupes open Filter issues). Dry-run by default, `--yes` files via `gh` — an explicit user-invoked maintenance write, outside the no-network non-goal which binds only the wrap path + telemetry storage (registry / #34) |
 | Meta | `install` | — | shipped (#49) — wires the git/gh/npm→vtk wrappers into a shell rc/profile (bash `~/.bashrc`, pwsh `$PROFILE.CurrentUserAllHosts`). Self-locating via `os.Executable()`, marker-delimited managed block (idempotent, byte-identical re-runs, exact `--uninstall`), `$CLAUDECODE`-guarded so it is inert outside Claude Code; `--print`/`--dry-run`/`--shell bash\|pwsh` |
 | Meta | `proxy` | — | planned — name reserved: invoking exits 2 with "not implemented yet" instead of exec fallthrough (#11) |
+| rtk TOML long-tail | `gcc`, `make`, `terraform`, `docker`, `systemctl`, linters, installers (rtk's TOML-driven engine) | — | planned — fresh upstream parity gap; vtk port tracked in #41 |
+| rtk subsystems | `learn` (#43), `discover` (#44), `hooks` (#45), `analytics`/gain-economics (#46) | — | planned — upstream subsystems beyond filtering; vtk equivalents tracked in #43–#46 |
 
 ## vtk expansions (candidates — promote/demote based on gap-log data)
 
