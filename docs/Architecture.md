@@ -17,6 +17,9 @@ outgrows a screen.)
 - Intake is exempt from the one-item-per-pass loop: an intake worker may triage up to **5**
   items per pass, claiming/releasing each individually (per-issue lock semantics unchanged,
   one claim comment + one EMIT per item) — [#19](https://github.com/meridun/vtk/issues/19)
+- The "no network calls" non-goal binds the **wrap path** and telemetry storage only; explicit
+  user-invoked maintenance subcommands may shell out to `gh` etc. —
+  [#34](https://github.com/meridun/vtk/issues/34)
 - `vtk install` wires the wrappers into a shell rc/profile itself, rather than shipping a
   hand-copied dotfile snippet: self-locating via `os.Executable()`, marker-delimited managed
   block (idempotent + exact `--uninstall`), guarded on `$CLAUDECODE` — [#49](https://github.com/meridun/vtk/issues/49)
