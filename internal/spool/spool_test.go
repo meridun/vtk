@@ -354,3 +354,68 @@ func TestLogInvocationRedactsCmd(t *testing.T) {
 		t.Error("credential in argv survived into metadata log")
 	}
 }
+
+func TestIsMachineReadable(t *testing.T) {
+	tests := []struct {
+		cmd  string
+		want bool
+	}{
+		{"gh pr list --json number,title", true},
+		{"gh issue view 5 --json=body", true},
+		{"gh run list --format json", true},
+		{"gh api repos --format=json", true},
+		{"kubectl get pods -o json", true},
+		{"tool --output json", true},
+		{"tool --output=json", true},
+		{"gh pr list", false},
+		{"git log --stat", false},
+		{"npm test", false},
+		{"cargo build --release", false},
+		{"echo --jsonish", false}, // narrow: not a real json flag
+		{"grep json file.txt", false},
+	}
+	for _, tt := range tests {
+		if got := isMachineReadable(tt.cmd); got != tt.want {
+			t.Errorf("isMachineReadable(%q) = %v, want %v", tt.cmd, got, tt.want)
+		}
+	}
+}
+
+func TestFileIssueGaps(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC()
+	entries := []Invocation{
+		// cargo: two real gaps, 30000 raw over 2 calls — over threshold.
+		{Time: now, Cmd: "cargo build", RawBytes: 20000, OutBytes: 20000, Reason: ReasonNoFilter},
+		{Time: now, Cmd: "cargo test", RawBytes: 10000, OutBytes: 10000, Reason: ReasonNoFilter},
+		// gh: mostly machine-readable — the json calls must be excluded, leaving
+		// only 5000 raw over 1 call, which is under the call threshold.
+		{Time: now, Cmd: "gh pr list --json number", RawBytes: 40000, OutBytes: 40000, Reason: ReasonNoFilter},
+		{Time: now, Cmd: "gh run view --json jobs", RawBytes: 40000, OutBytes: 40000, Reason: ReasonNoFilter},
+		{Time: now, Cmd: "gh pr diff 5", RawBytes: 5000, OutBytes: 5000, Reason: ReasonNoFilter},
+		// docker: real gaps but total under the byte threshold.
+		{Time: now, Cmd: "docker ps", RawBytes: 100, OutBytes: 100, Reason: ReasonNoFilter},
+		{Time: now, Cmd: "docker images", RawBytes: 100, OutBytes: 100, Reason: ReasonNoFilter},
+		{Time: now, Cmd: "docker build .", RawBytes: 100, OutBytes: 100, Reason: ReasonNoFilter},
+		// Non-gap reasons: never eligible even at high volume.
+		{Time: now, Cmd: "make all", RawBytes: 99000, OutBytes: 99000, Reason: ReasonNonzeroExit},
+		{Time: now, Cmd: "make lint", RawBytes: 99000, OutBytes: 99000, Reason: ReasonFilterPanic},
+		{Time: now, Cmd: "make build", RawBytes: 99000, OutBytes: 60, Filtered: true},
+	}
+	for _, e := range entries {
+		if err := s.LogInvocation(e); err != nil {
+			t.Fatalf("LogInvocation: %v", err)
+		}
+	}
+	got, err := s.FileIssueGaps(15000, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []GapSummary{{Family: "cargo", Calls: 2, RawBytes: 30000}}
+	if len(got) != len(want) {
+		t.Fatalf("got %d families, want %d: %+v", len(got), len(want), got)
+	}
+	if got[0] != want[0] {
+		t.Errorf("FileIssueGaps[0] = %+v, want %+v", got[0], want[0])
+	}
+}
