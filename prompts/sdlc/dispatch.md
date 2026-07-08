@@ -27,6 +27,32 @@ issue thread is the only state that carries between stages. Never work an issue 
 Mint a **run-id** for this cycle (e.g. `dispatch-<yyyymmdd-hhmm>-<4 random hex>`) and pass it to
 every worker; workers use it in their claim comments.
 
+### Step -2 — Root gate (fail fast, before touching anything)
+
+The dispatcher only works when the *session* is rooted at `C:\Claude\vtk`: the Agent registry and
+the Bash default cwd both derive from the session root, and a wrong root silently breaks both — a
+mis-rooted run cannot spawn `vtk-sdlc-worker` (it isn't in the registry) and its bare `gh` commands
+hit whatever repo the cwd resolves to (e.g. a sibling project), so it can create/close/label issues
+in the **wrong** repository. Prose alone can't fix this — no wording summons an agent the registry
+never loaded — so gate on it up front and abort clean.
+
+Two checks, both before Step -1 (before any lock, any `gh` write, any maintenance):
+
+1. **Agent registry:** confirm `vtk-sdlc-worker` is one of your available agent types. It is the
+   only thing that proves the session is vtk-rooted; you know your own registry without any tool
+   call.
+2. **Repo identity:** `git -C C:\Claude\vtk remote get-url origin` must contain `vtk` (not another
+   project). This is belt-and-suspenders for the gh-targeting risk.
+
+If **either** check fails, the session is mis-rooted. Output exactly one line and do **nothing
+else** — no lock, no maintenance, no `gh` writes anywhere:
+`sdlc-dispatch: aborted — session not rooted at C:\Claude\vtk (vtk-sdlc-worker unavailable / wrong origin); relaunch in the vtk root`.
+
+**Defense in depth (assume the root gate could be bypassed):** every `gh` command in this prompt and
+in the worker prompts targets vtk explicitly — pass `-R meridun/vtk` on all of them (list, view,
+comment, edit, label, delete) — and every `git`/`go` command runs against the vtk tree explicitly
+(`cd C:\Claude\vtk &&` or `git -C C:\Claude\vtk`). Never rely on the ambient cwd for repo selection.
+
 ### Step -1 — Dispatcher singleton gate
 
 Two dispatchers must not run maintenance concurrently. The pinned issue titled
@@ -64,7 +90,7 @@ comments on the lock issue never mask a live lock.
 ### Step 0 — Snapshot + per-issue wip gate
 
 Take ONE issue snapshot that serves the whole cycle:
-`gh issue list --state open --json number,labels,updatedAt --limit 200`
+`gh issue list -R meridun/vtk --state open --json number,labels,updatedAt --limit 200`
 From it compute locally: `sdlc:wip` items, per-lane depths, and the `sdlc:needs-human` /
 `sdlc:hold` lists.
 
@@ -104,10 +130,10 @@ worktree.**
 5. Prune local branches merged to `dev`: for every branch in `git branch --merged dev` except
    `dev`, `main`, and any branch checked out in a worktree — confirm
    `git merge-base --is-ancestor <branch> dev`, then `git branch -D <branch>`. Squash-merged
-   branches may be deleted ONLY if all three hold: upstream `[gone]`, `gh pr view <branch>`
+   branches may be deleted ONLY if all three hold: upstream `[gone]`, `gh pr view <branch> -R meridun/vtk`
    reports `MERGED`, and the local tip SHA equals the PR's `headRefOid`. Any check ambiguous →
    leave it, record it.
-6. PR snapshot: `gh pr list --state open --json
+6. PR snapshot: `gh pr list -R meridun/vtk --state open --json
    number,title,headRefName,mergeable,reviewDecision,isDraft`. For each PR whose `mergeable` is
    `CONFLICTING` and whose linked issue is not `sdlc:wip`/`sdlc:needs-human`/`sdlc:hold`:
    comment on the issue `sdlc-dispatch: branch <name> conflicts with dev — needs a dev merge`,
@@ -133,7 +159,7 @@ For each lane (intake, build, verify, audit, ship):
    and run a lane serially after the batch if it only became non-empty via an ADVANCE this
    cycle. Never spawn two workers for the same lane in one cycle.
 4. **Self-heal check (after each worker finishes):** parse the claimed issue # from the
-   worker's result, then `gh issue view <n> --json labels` plus its latest `sdlc:claim`
+   worker's result, then `gh issue view <n> -R meridun/vtk --json labels` plus its latest `sdlc:claim`
    comment. If it still carries `sdlc:wip` AND the claim's run-id belongs to this cycle
    (`<run-id>-<lane>`): resume that worker ONCE via SendMessage — complete the EMIT step now.
    Still locked after the resume → remove `sdlc:wip`, add `sdlc:needs-human`, comment

@@ -19,7 +19,7 @@ merge sweep (step 0) runs once per pass, not per item.
 ### 0. MERGE SWEEP (every pass — bookkeeping, not a claim)
 Ship's job ends at "PR open"; the human-gated merge fires no worker.
 - List PRs merged to `dev` in the last ~24h that close issues
-  (`gh pr list --state merged --base dev --json number,mergedAt,closingIssuesReferences`).
+  (`gh pr list -R meridun/vtk --state merged --base dev --json number,mergedAt,closingIssuesReferences`).
 - For each issue those PRs closed: find open issues whose body/comments say they are blocked by
   it ("blocked by #n", "depends on #n") and comment that the blocker has merged; if such an issue
   carries a `blocked` label, swap it to `ready`. **Readiness only** — admitting anything
@@ -32,7 +32,7 @@ Per the README universal loop — lane `stage:intake`, idle reply `INTAKE: idle`
 ### 2. WORK
 All inline, read-only (no code changes, no branches):
 - **Duplicate/overlap search:**
-  `gh issue list --search "<keywords>" --state all --limit 30 --json number,title,state`.
+  `gh issue list -R meridun/vtk --search "<keywords>" --state all --limit 30 --json number,title,state`.
 - **Docs + code assessment:** read the issue, then check whether it conflicts with or duplicates
   shipped/decided behavior — the [decision registry](../../docs/Architecture.md#decision-registry)
   first, then [ToolCoverage.md](../../docs/ToolCoverage.md) (is this filter already
