@@ -31,7 +31,7 @@ var reservedMeta = map[string]bool{
 
 func run(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps | vtk gain")
+		fmt.Fprintln(os.Stderr, "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps | vtk gain | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print]")
 		return 2
 	}
 	switch args[0] {
@@ -41,6 +41,8 @@ func run(args []string) int {
 		return cmdGaps()
 	case "gain":
 		return cmdGain()
+	case "install":
+		return cmdInstall(args[1:])
 	}
 	if reservedMeta[args[0]] {
 		// Documented-but-unshipped vtk subcommand (docs/ToolCoverage.md, Meta
