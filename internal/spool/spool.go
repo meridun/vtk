@@ -224,6 +224,62 @@ func (s *Store) Gaps() ([]GapSummary, error) {
 	})
 }
 
+// FileIssueGaps returns coverage-gap families eligible for auto-filed intake
+// issues (`vtk gaps --file-issues`): true gaps (ReasonNoFilter) that meet both
+// the cumulative raw-byte and call-count thresholds, excluding machine-readable
+// invocations (--json &c.) whose output is structurally uncompressable — not a
+// filter defect, so not worth a filter issue. Sorted by raw bytes descending.
+// Read-only over metadata (invariant 3): byte counts and redacted command
+// families only, never output content.
+func (s *Store) FileIssueGaps(minBytes int64, minCalls int) ([]GapSummary, error) {
+	all, err := s.aggregate(func(inv Invocation) bool {
+		if inv.Filtered {
+			return false
+		}
+		var isGap bool
+		if inv.Reason == "" { // legacy entry, pre-reason
+			isGap = !inv.TTY
+		} else {
+			isGap = inv.Reason == ReasonNoFilter
+		}
+		return isGap && !isMachineReadable(inv.Cmd)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]GapSummary, 0, len(all))
+	for _, g := range all {
+		if g.RawBytes >= minBytes && g.Calls >= minCalls {
+			out = append(out, g)
+		}
+	}
+	return out, nil
+}
+
+// isMachineReadable reports whether a command line requests machine-readable
+// (JSON) output. Such output is structurally uncompressable, so its raw bytes
+// are a routing artifact rather than a coverage gap and must not inflate a
+// family toward the filing threshold (#34). Conservative token match — a
+// heuristic, deliberately narrow to avoid false positives.
+func isMachineReadable(cmd string) bool {
+	fields := strings.Fields(cmd)
+	for i, f := range fields {
+		switch {
+		case f == "--json" || strings.HasPrefix(f, "--json="):
+			return true
+		case strings.EqualFold(f, "--format=json"),
+			strings.EqualFold(f, "--output=json"),
+			strings.EqualFold(f, "-o=json"):
+			return true
+		case f == "--format" || f == "--output" || f == "-o":
+			if i+1 < len(fields) && strings.EqualFold(fields[i+1], "json") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Degraded aggregates filter-panic invocations by command family: filters
 // that exist but are crashing on real output (invariant 2 — a broken filter
 // must stay visible).

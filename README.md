@@ -58,6 +58,14 @@ Early implementation, written in Go. Shipped so far:
   reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`); `vtk gaps`
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
+  `vtk gaps --file-issues` turns recurring gap families into `stage:intake` "Filter: `<family>`"
+  issues so coverage becomes a tracked queue: it selects families over a raw-bytes/call-count
+  threshold (defaults 50 KiB / 3 calls; hard floors 4 KiB / 2 calls clamp over-eager overrides),
+  excludes structurally-uncompressable machine-readable calls (`--json` and friends) from the
+  aggregation, and dedupes against already-open Filter issues so re-running never refiles. It is
+  **dry-run by default** (prints the plan); `--yes` actually files via `gh`. This is an explicit,
+  user-invoked maintenance command that shells to `gh` — outside the no-network non-goal, which
+  binds only the wrap path and telemetry storage (decision registry / #34).
 
 - **Cumulative savings + `vtk gain`** — aggregates the invocation log into total raw vs emitted
   bytes, bytes saved and savings %, overall and per command family (ranked by bytes saved).
@@ -81,6 +89,9 @@ vtk git status          # compact status; prints "OK <id>" when content was elid
 vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
 vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
+vtk gaps --file-issues  # draft stage:intake "Filter: <family>" issues for recurring gaps (dry-run)
+vtk gaps --file-issues --yes                        # actually file them via gh (dedupes open ones)
+vtk gaps --file-issues --min-bytes N --min-calls N  # tune the filing thresholds
 vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family
 vtk install             # wire git/gh/npm -> vtk into your shell rc/profile (bash + pwsh)
 vtk install --print     # print the wrapper block(s) without writing anything

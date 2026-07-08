@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,14 +32,14 @@ var reservedMeta = map[string]bool{
 
 func run(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps | vtk gain | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print]")
+		fmt.Fprintln(os.Stderr, "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps [--file-issues [--yes] [--min-bytes N] [--min-calls N]] | vtk gain | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print]")
 		return 2
 	}
 	switch args[0] {
 	case "show":
 		return cmdShow(args[1:])
 	case "gaps":
-		return cmdGaps()
+		return cmdGaps(args[1:])
 	case "gain":
 		return cmdGain()
 	case "install":
@@ -394,12 +395,81 @@ func cmdShow(args []string) int {
 	return 0
 }
 
-func cmdGaps() int {
+// cmdGaps prints the coverage-gap report, or with --file-issues turns recurring
+// gap families into stage:intake filter issues (#34). Filing is an explicit,
+// user-invoked action that shells to `gh` — outside the no-network non-goal,
+// which binds only the wrap path and telemetry storage (registry / #34). It is
+// dry-run by default; --yes actually creates issues.
+func cmdGaps(args []string) int {
+	var (
+		fileIssues bool
+		o          = fileIssuesOpts{minBytes: defaultMinBytes, minCalls: defaultMinCalls}
+	)
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--file-issues":
+			fileIssues = true
+		case "--yes":
+			o.yes = true
+		case "--min-bytes":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "vtk gaps: --min-bytes requires a value")
+				return 2
+			}
+			i++
+			v, err := strconv.ParseInt(args[i], 10, 64)
+			if err != nil || v < 0 {
+				fmt.Fprintf(os.Stderr, "vtk gaps: invalid --min-bytes %q\n", args[i])
+				return 2
+			}
+			o.minBytes = v
+		case "--min-calls":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "vtk gaps: --min-calls requires a value")
+				return 2
+			}
+			i++
+			v, err := strconv.Atoi(args[i])
+			if err != nil || v < 0 {
+				fmt.Fprintf(os.Stderr, "vtk gaps: invalid --min-calls %q\n", args[i])
+				return 2
+			}
+			o.minCalls = v
+		default:
+			fmt.Fprintf(os.Stderr, "vtk gaps: unexpected argument %q\n", args[i])
+			return 2
+		}
+	}
+
 	st, err := spool.Open()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vtk: %v\n", err)
 		return 1
 	}
+	if !fileIssues {
+		if o.yes || o.minBytes != defaultMinBytes || o.minCalls != defaultMinCalls {
+			fmt.Fprintln(os.Stderr, "vtk gaps: --yes/--min-bytes/--min-calls require --file-issues")
+			return 2
+		}
+		return printGapsReport(st)
+	}
+
+	// Sane floors: below-floor thresholds clamp up (anti-spam guard) so an
+	// over-eager invocation can't file trivial gaps.
+	if o.minBytes < floorMinBytes {
+		fmt.Fprintf(os.Stderr, "vtk gaps: --min-bytes %d below floor; using %d\n", o.minBytes, floorMinBytes)
+		o.minBytes = floorMinBytes
+	}
+	if o.minCalls < floorMinCalls {
+		fmt.Fprintf(os.Stderr, "vtk gaps: --min-calls %d below floor; using %d\n", o.minCalls, floorMinCalls)
+		o.minCalls = floorMinCalls
+	}
+	return cmdGapsFileIssues(st, o)
+}
+
+// printGapsReport emits the human-facing coverage-gap and degraded-filter
+// tables (the default `vtk gaps` output).
+func printGapsReport(st *spool.Store) int {
 	gaps, err := st.Gaps()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vtk: %v\n", err)
