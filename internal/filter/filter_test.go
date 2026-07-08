@@ -1,6 +1,9 @@
 package filter
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
 
 func TestLookup(t *testing.T) {
 	r := Default()
@@ -88,5 +91,58 @@ func TestRegisterCodesDefaultsToZero(t *testing.T) {
 	}
 	if !e.Filters(0) || e.Filters(1) {
 		t.Errorf("default allowlist should be {0}, got %v", e.ExitCodes)
+	}
+}
+
+// RegisterRegex filters match against the full command string and are consulted
+// only after the exact-key map misses.
+func TestRegisterRegexLookup(t *testing.T) {
+	r := New()
+	marker := "REGEX"
+	r.RegisterRegex(regexp.MustCompile(`^cargo (build|test)\b`), func(string) string { return marker }, 0, 1)
+
+	if _, ok := r.Lookup([]string{"cargo", "clippy"}); ok {
+		t.Error("cargo clippy should not match `build|test` regex")
+	}
+	e, ok := r.Lookup([]string{"cargo", "build", "--release"})
+	if !ok {
+		t.Fatal("cargo build should match the regex filter")
+	}
+	if e.Fn("x") != marker {
+		t.Error("wrong filter returned for regex match")
+	}
+	if !e.Filters(0) || !e.Filters(1) {
+		t.Error("regex filter should honor its declared exit codes")
+	}
+}
+
+// Exact keys win over regex fallbacks: a Go family key is never shadowed.
+func TestExactKeyBeatsRegex(t *testing.T) {
+	r := New()
+	r.Register("git status", func(string) string { return "KEY" })
+	r.RegisterRegex(regexp.MustCompile(`^git`), func(string) string { return "REGEX" })
+
+	e, ok := r.Lookup([]string{"git", "status"})
+	if !ok {
+		t.Fatal("git status not found")
+	}
+	if e.Fn("x") != "KEY" {
+		t.Error("regex shadowed an exact key; exact keys must win")
+	}
+}
+
+// The default registry wires the embedded TOML filters onto the regex path:
+// cargo (a TOML demonstrator) matches, and its exit-code allowlist is {0}.
+func TestDefaultLoadsTOMLFilters(t *testing.T) {
+	r := Default()
+	e, ok := r.Lookup([]string{"cargo", "build"})
+	if !ok {
+		t.Fatal("embedded cargo TOML filter not registered")
+	}
+	if e.Fn == nil {
+		t.Error("cargo filter has nil Fn")
+	}
+	if !e.Filters(0) || e.Filters(101) {
+		t.Error("cargo should filter exit 0 only (compile errors exit 101 stay raw)")
 	}
 }

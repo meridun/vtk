@@ -4,12 +4,16 @@
 package filter
 
 import (
+	"regexp"
+	"strings"
+
 	dbmatef "github.com/meridun/vtk/internal/filter/dbmate"
 	eslintf "github.com/meridun/vtk/internal/filter/eslint"
 	filesf "github.com/meridun/vtk/internal/filter/files"
 	ghf "github.com/meridun/vtk/internal/filter/gh"
 	gitf "github.com/meridun/vtk/internal/filter/git"
 	mochaf "github.com/meridun/vtk/internal/filter/mocha"
+	"github.com/meridun/vtk/internal/filter/tomlfilter"
 )
 
 // Func is a pure filter: raw captured output in, compacted output out.
@@ -33,9 +37,20 @@ func (e Entry) Filters(code int) bool {
 	return e.ExitCodes[code]
 }
 
-// Registry maps "cmd" or "cmd subcommand" keys to entries.
+// regexEntry is a filter matched by a regex against the whole command string,
+// rather than by an exact "cmd"/"cmd subcommand" key. Declarative TOML filters
+// register here; they are consulted only after the exact-key map misses, so the
+// hand-written Go families keep precedence and their behavior is unchanged.
+type regexEntry struct {
+	re *regexp.Regexp
+	Entry
+}
+
+// Registry maps "cmd" or "cmd subcommand" keys to entries, with a
+// regex-matched fallback list for declarative filters.
 type Registry struct {
 	entries map[string]Entry
+	regexes []regexEntry
 }
 
 // New returns an empty registry.
@@ -62,10 +77,27 @@ func (r *Registry) RegisterCodes(key string, f Func, codes ...int) {
 	r.entries[key] = Entry{Fn: f, ExitCodes: set}
 }
 
-// Lookup matches argv against the registry: "argv[0] argv[1]" first, then
-// bare "argv[0]". Invocations whose second token is a flag (e.g.
-// `git -C dir status`) intentionally miss and fall through to passthrough —
-// the gap log will show whether that pattern is worth handling.
+// RegisterRegex binds a regex (matched against the full command string, argv
+// joined by spaces) to a filter running for the given child exit codes. No
+// codes means exit 0 only. Regex entries are the declarative-filter path and
+// are checked only after the exact-key map misses.
+func (r *Registry) RegisterRegex(re *regexp.Regexp, f Func, codes ...int) {
+	if len(codes) == 0 {
+		codes = []int{0}
+	}
+	set := make(map[int]bool, len(codes))
+	for _, c := range codes {
+		set[c] = true
+	}
+	r.regexes = append(r.regexes, regexEntry{re: re, Entry: Entry{Fn: f, ExitCodes: set}})
+}
+
+// Lookup matches argv against the registry: exact "argv[0] argv[1]" first, then
+// bare "argv[0]", then (only if both miss) the regex fallback list against the
+// full command string. Invocations whose second token is a flag (e.g.
+// `git -C dir status`) miss the exact keys; a regex filter may still claim them
+// if its pattern matches. A total miss falls through to passthrough — the gap
+// log will show whether that pattern is worth handling.
 func (r *Registry) Lookup(argv []string) (Entry, bool) {
 	if len(argv) == 0 {
 		return Entry{}, false
@@ -75,8 +107,16 @@ func (r *Registry) Lookup(argv []string) (Entry, bool) {
 			return e, true
 		}
 	}
-	e, ok := r.entries[argv[0]]
-	return e, ok
+	if e, ok := r.entries[argv[0]]; ok {
+		return e, true
+	}
+	cmd := strings.Join(argv, " ")
+	for _, re := range r.regexes {
+		if re.re.MatchString(cmd) {
+			return re.Entry, true
+		}
+	}
+	return Entry{}, false
 }
 
 // Default returns the registry with all shipped filter families wired in.
@@ -121,5 +161,15 @@ func Default() *Registry {
 	r.Register("dbmate down", dbmatef.Migrate)
 	r.Register("dbmate migrate", dbmatef.Migrate)
 	r.Register("dbmate rollback", dbmatef.Migrate)
+	// Declarative TOML filters (embedded at build) register on the regex path,
+	// so they coexist with the Go families above without shadowing any exact
+	// key. The embedded defs are parse/validate/fixture-checked by the
+	// tomlfilter tests; a load error here would mean a corrupt binary, so skip
+	// them and keep the Go families working rather than fail the whole registry.
+	if defs, err := tomlfilter.Load(); err == nil {
+		for _, d := range defs {
+			r.RegisterRegex(d.Match, Func(d.Fn), d.ExitCodes...)
+		}
+	}
 	return r
 }
