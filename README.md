@@ -4,7 +4,7 @@ A command-output compaction wrapper for AI coding agents. Prefix any shell comma
 and it filters the output down to what the agent actually needs — failures, diffs, deltas —
 cutting token usage by 60–90% on common development operations.
 
-`vtk` is a workalike of [rtk (rust-token-killer)](https://github.com/wildmaples/rust-token-killer)
+`vtk` is a workalike of [rtk](https://github.com/rtk-ai/rtk)
 with two headline additions:
 
 1. **Expanded tool coverage** — filters for more tools beyond rtk's catalog (see
