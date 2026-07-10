@@ -1,0 +1,8 @@
+success Add name-based resolution to gh project item-edit and item-list · PR Triaging (1h)
+action_required Add name-based resolution to gh project item-edit and item-list · Lint (1h)
+action_required Add name-based resolution to gh project item-edit and item-list · Unit and Integration Tests (1h)
+action_required Add name-based resolution to gh project item-edit and item-list · Code Scanning (1h)
+success Triage Scheduled Tasks · Triage Scheduled Tasks (1h)
+success - [ ] · Issue Triaging (1h)
+success - [ ] · Spam Issue Detection (1h)
+success Triage Scheduled Tasks · Triage Scheduled Tasks (2h)
