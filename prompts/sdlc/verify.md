@@ -65,5 +65,9 @@ One-line result: `VERIFY: <#issue> → ADVANCE(audit)|BOUNCE(build)|PARK — <re
 - **Exit-code parity is the sacred AC.** Test it on success, failure, and command-not-found
   paths for anything touching the runner.
 - **Race detector always** — the spool is concurrent by design.
-- **Idempotent.** A green report for current HEAD = done; any new commit invalidates it.
+- **Idempotent.** A green report for current HEAD = done; any new commit invalidates it. An
+  item rewound here by a human with a still-valid green report → re-confirm cheaply and
+  ADVANCE, unless their rewind comment names a reason to distrust it — then re-verify that
+  part. Evidence that the work already shipped (merged PR) → PARK with the evidence for a
+  human to close.
 - Honors the universal worker loop in [`README.md`](README.md).

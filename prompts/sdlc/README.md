@@ -44,7 +44,19 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
 2. **WORK** — per the lane file, with these constraints:
    - **Never delegate — do all work inline, yourself.** No subagents (they run async; the worker
      yields and the item strands under `sdlc:wip`), no background tasks, no wait loops.
-   - **Idempotent.** If the stage's artifact already exists, treat as done; do not redo.
+   - **Idempotent — reconcile, don't re-execute.** If the stage's artifact already exists, treat
+     as done; do not redo. Schedulers fire on a clock, not on need — a re-run must be a safe
+     no-op. The same applies to items a human rewound to an earlier stage or reopened after
+     close: investigate what already exists before doing any work. Evidence hierarchy: merged
+     code / branch state / PR status › recorded reports for the current branch HEAD › issue
+     comments › labels — cite what you relied on when you no-op. Presume an existing valid
+     artifact good unless the human's rewind comment gives a reason to distrust it or your own
+     check finds something significant; then redo exactly the invalidated part. Keep the check
+     cheap — dig deeper only when evidence conflicts, and PARK if it stays ambiguous rather than
+     burn the pass. For partial work, post a short reconciliation note (what's already done +
+     evidence, what remains) before continuing, then do only the gap. If the item is conclusively
+     shipped already, PARK with the evidence (PR#, commit, observed behavior) for a human to
+     close — don't march it through the remaining lanes.
    - **Worktree isolation.** Never work in the main checkout — it may hold human WIP or another
      worker. For any lane that touches a branch, use the issue-scoped worktree
      `../vtk-wt/<issue#>`: create it if missing (`git worktree add ../vtk-wt/<issue#> <branch>`,

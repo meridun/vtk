@@ -75,6 +75,11 @@ One-line result:
 - **Build owns merge conflicts.** Other lanes BOUNCE conflicted branches here; resolve the
   `origin/dev` merge as part of the work.
 - **Minimal change.** A good idea spotted mid-build is a new issue, not a bigger diff.
+- **Idempotent — reconcile on rewind.** Re-runs continue an incomplete branch; they never
+  restart it. An item **rewound here by a human** is reconciled per the README: read their
+  rewind comment, post a reconciliation note (what's already implemented + evidence, what
+  remains), and build only the gap — existing work is presumed good unless the comment or your
+  own check says otherwise.
 - **Targeted tests only.** Full suite, race detector, and the real-run smoke belong to verify.
 - **Fixtures are the test currency.** Every filter change ships with a fixture pair; captured
   real output beats hand-written approximations.
