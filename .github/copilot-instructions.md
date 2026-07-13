@@ -22,7 +22,8 @@
 
 - **L1** (this file) — loaded every request. Principles + routing only.
 - **L2** (`.github/skills/*/SKILL.md`) — task-scoped patterns, auto-loaded on match.
-  (None yet; add via a `skills` directory as patterns stabilize.)
+  Mirrored to `.claude/skills/` for Claude Code (same as the L1 `CLAUDE.md` ↔ this file mirror).
+  Present: `caveman` (house-style terse-output mode). Add more as patterns stabilize.
 - **L3** (`docs/`) — read explicitly when needed.
 
 L3 entry points: [Overview.md](../docs/Overview.md),

@@ -17,9 +17,20 @@ outgrows a screen.)
 - Intake is exempt from the one-item-per-pass loop: an intake worker may triage up to **5**
   items per pass, claiming/releasing each individually (per-issue lock semantics unchanged,
   one claim comment + one EMIT per item) — [#19](https://github.com/meridun/vtk/issues/19)
+- The "no network calls" non-goal binds the **wrap path** and telemetry storage only; explicit
+  user-invoked maintenance subcommands may shell out to `gh` etc. —
+  [#34](https://github.com/meridun/vtk/issues/34)
 - `vtk install` wires the wrappers into a shell rc/profile itself, rather than shipping a
   hand-copied dotfile snippet: self-locating via `os.Executable()`, marker-delimited managed
   block (idempotent + exact `--uninstall`), guarded on `$CLAUDECODE` — [#49](https://github.com/meridun/vtk/issues/49)
+- Spool + the `OK <id>` recover-me signal are gated on **real** savings, not any positive byte
+  delta: the compact result must clear an absolute-byte floor **and** a savings ratio (option C);
+  below the bar vtk emits inline with no spool and no `OK`, so lossless reformats (e.g. `git
+  branch`) never fire a false recover-me signal — [#52](https://github.com/meridun/vtk/issues/52)
+- `vtk hooks` targets a **single canonical vtk binary — the C# port** (retiring the two-binary
+  wiring); MVP scope first (`hooks init` + `verify`) with installers for **both Claude Code and
+  GitHub Copilot**; trust/permissions port deferred to follow-ups —
+  [#45](https://github.com/meridun/vtk/issues/45)
 
 ## Pipeline
 
@@ -71,7 +82,11 @@ vtk show 2e3f --grep pat  →   just the matching lines
 ## Components
 
 - **Registry** — maps command/subcommand patterns to filters. Filters are pure functions:
-  raw output in, compacted output out. One filter per tool family (git, gh, npm, ...).
+  raw output in, compacted output out. Two filter sources coexist: hand-written Go packages (one
+  per tool family — git, gh, npm, ...) and declarative TOML specs embedded at build
+  (`internal/filter/tomlfilter/defs/*.toml`) compiled to the same pure-function signature.
+  Dispatch consults the exact command/subcommand key first, then a regex-matched fallback, so Go
+  families keep precedence over regex-keyed TOML filters.
 - **Runner** — spawns the wrapped command, streams/captures output, propagates exit code and
   signals. The only component with process-spawning responsibility.
 - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte
