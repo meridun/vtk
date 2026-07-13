@@ -84,7 +84,7 @@ Design decisions are recorded one line each in
 ## Usage
 
 ```
-vtk git status          # compact status; prints "OK <id>" when content was elided
+vtk git status          # compact status; prints "OK <id>" when filtering clears the savings bar
 vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
 vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)

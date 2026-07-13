@@ -66,7 +66,8 @@ vtk <cmd> [args...]
 
 ## Output spool
 
-When a filter elides content, the compact result carries a retrieval ID:
+When a filter elides content and the saving clears the bar (see below), the compact result
+carries a retrieval ID:
 
 ```
 vtk git commit -m "msg"   →   OK 2e3f
@@ -87,7 +88,10 @@ vtk show 2e3f --grep pat  →   just the matching lines
   blocks) are masked before write. The spool dir is user-local with restrictive permissions,
   never inside a repo. On Windows, POSIX 0700 is a no-op on NTFS; protection rests on the
   default user-scoped ACLs of `%LocalAppData%`.
-- The ID is emitted only when content was actually elided; full-passthrough commands print no ID.
+- The ID (and the spool write behind it) is emitted only when the compact result clears the
+  savings bar — an absolute-byte floor (256 B) **and** a savings ratio (20%). Below the bar, and
+  for full-passthrough commands, vtk prints inline and no ID: a lossless reformat that saves ~0
+  bytes (e.g. `git branch`) never fires a false recover-me signal.
 
 ## Components
 

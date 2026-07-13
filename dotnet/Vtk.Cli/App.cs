@@ -154,6 +154,16 @@ public static class Program
         {
             return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode);
         }
+        if (!ClearsSavingsBar(raw.Length, compact.Length))
+        {
+            // Inner filter shrank the body, but against the full raw the agent
+            // would otherwise see the delta is below the savings bar (#52):
+            // emit compact inline, no spool, no `OK`.
+            Console.Out.Write(compact);
+            if (compact != "" && !compact.EndsWith('\n')) Console.Out.WriteLine();
+            LogInvocation(st, strip.Inner, raw.Length, compact.Length, filtered: true, tty: false, "");
+            return result.ExitCode;
+        }
         // Spool the full raw (banner + body) so `vtk show` recovers everything.
         string id;
         try
@@ -190,6 +200,17 @@ public static class Program
             Console.Out.Write(raw);
             if (raw != "" && !raw.EndsWith('\n')) Console.Out.WriteLine();
             LogInvocation(st, inner, raw.Length, raw.Length, filtered: false, tty: false, Store.ReasonNoFilter);
+            return code;
+        }
+
+        if (!ClearsSavingsBar(raw.Length, body.Length))
+        {
+            // Banner stripping saved bytes but below the savings bar (#52):
+            // emit the body inline, no spool, no `OK`. Still a coverage gap
+            // for the inner tool, logged with the bytes the body saved.
+            Console.Out.Write(body);
+            if (body != "" && !body.EndsWith('\n')) Console.Out.WriteLine();
+            LogInvocation(st, inner, raw.Length, body.Length, filtered: false, tty: false, Store.ReasonNoFilter);
             return code;
         }
 
@@ -271,6 +292,17 @@ public static class Program
             return result.ExitCode;
         }
 
+        if (!ClearsSavingsBar(raw.Length, compact.Length))
+        {
+            // Compact is smaller but the delta is below the savings bar (#52):
+            // emit it inline with no spool and no `OK` — nothing worth a
+            // recover-me round-trip was elided.
+            Console.Out.Write(compact);
+            if (compact != "" && !compact.EndsWith('\n')) Console.Out.WriteLine();
+            LogInvocation(st, args, raw.Length, compact.Length, filtered: true, tty: false, "");
+            return result.ExitCode;
+        }
+
         string id;
         try
         {
@@ -303,6 +335,27 @@ public static class Program
             compact = "";
             return false;
         }
+    }
+
+    /// <summary>Absolute-byte floor a compact result must save before spool + `OK` fire (#52).</summary>
+    internal const int MinSavingsBytes = 256;
+
+    /// <summary>Savings ratio (0..1) a compact result must clear before spool + `OK` fire (#52).</summary>
+    internal const double MinSavingsRatio = 0.20;
+
+    /// <summary>
+    /// True when compacting to <paramref name="shownLen"/> from <paramref name="rawLen"/> saves
+    /// enough to justify spooling the raw and emitting the `OK &lt;id&gt;` recover-me signal:
+    /// the byte delta must clear an absolute floor <b>and</b> a savings ratio (option C, #52).
+    /// Below the bar the caller emits the compact output inline with no spool and no `OK`, so a
+    /// lossless reformat (e.g. `git branch`) never fires a false recover-me signal.
+    /// </summary>
+    internal static bool ClearsSavingsBar(int rawLen, int shownLen)
+    {
+        var savings = rawLen - shownLen;
+        if (savings < MinSavingsBytes) return false;
+        if (rawLen <= 0) return false;
+        return savings / (double)rawLen >= MinSavingsRatio;
     }
 
     private static void LogInvocation(Store st, string[] args, long rawBytes, long outBytes, bool filtered, bool tty, string reason)
