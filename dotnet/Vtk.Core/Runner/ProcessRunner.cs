@@ -63,9 +63,16 @@ public static class ProcessRunner
             resolved.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
         {
             psi.FileName = Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe";
-            psi.ArgumentList.Add("/c");
-            psi.ArgumentList.Add(resolved);
-            for (var i = 1; i < argv.Count; i++) psi.ArgumentList.Add(argv[i]);
+            // cmd.exe does NOT parse its command line by the C-runtime rules
+            // that ArgumentList encodes. When the script path holds a space it
+            // gets quoted, and any additional quoted token (e.g. a multi-word
+            // arg) pushes the line past two quote chars — at which point cmd /c
+            // strips the OUTER pair and runs the rest verbatim, splitting a
+            // spaced path ("C:\Program Files\...\npm.cmd" -> `C:\Program` is not
+            // recognized). Build the line by cmd's own rules instead: quote each
+            // token, wrap the whole thing in a sacrificial outer pair, and pass
+            // /s so cmd strips exactly that pair and runs the remainder as-is.
+            psi.Arguments = BuildCmdArguments(resolved, argv);
         }
         else
         {
@@ -73,6 +80,44 @@ public static class ProcessRunner
             for (var i = 1; i < argv.Count; i++) psi.ArgumentList.Add(argv[i]);
         }
         return psi;
+    }
+
+    private static readonly char[] CmdQuoteTriggers =
+        { ' ', '\t', '"', '&', '|', '<', '>', '^', '(', ')' };
+
+    /// <summary>
+    /// Builds the raw <c>cmd.exe</c> argument string for launching a .cmd/.bat
+    /// script: <c>/s /c "&lt;quoted script&gt; &lt;quoted args...&gt;"</c>. The
+    /// outer quote pair is sacrificial — <c>/s</c> tells cmd to strip the first
+    /// and last character and treat everything between literally, so the inner
+    /// per-token quoting survives intact (fixes the spaced-path + multi-word-arg
+    /// break where cmd /c would otherwise strip the wrong quote pair).
+    /// </summary>
+    internal static string BuildCmdArguments(string resolved, IReadOnlyList<string> argv)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append(QuoteForCmd(resolved));
+        for (var i = 1; i < argv.Count; i++)
+        {
+            sb.Append(' ');
+            sb.Append(QuoteForCmd(argv[i]));
+        }
+        return $"/s /c \"{sb}\"";
+    }
+
+    /// <summary>
+    /// Quotes one token for a cmd.exe command line: wraps it in double quotes
+    /// when it is empty or contains whitespace, a quote, or a cmd
+    /// metacharacter (&amp;|&lt;&gt;^()), escaping any embedded quote with the
+    /// C-runtime backslash convention the wrapped program's own parser
+    /// understands. Bare tokens pass through unchanged so simple lines stay
+    /// readable. Not handled: a literal '%' (cmd variable expansion has no
+    /// command-line-safe escape outside a batch file).
+    /// </summary>
+    internal static string QuoteForCmd(string arg)
+    {
+        if (arg.Length > 0 && arg.IndexOfAny(CmdQuoteTriggers) < 0) return arg;
+        return "\"" + arg.Replace("\"", "\\\"") + "\"";
     }
 
     /// <summary>Runs argv with stdout/stderr captured to strings (for filtering). Returns exit 127 if the command could not run.</summary>
