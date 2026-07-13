@@ -17,7 +17,9 @@ Per the README universal loop — lane `stage:ship`, idle reply `SHIP: idle`.
 
 ### 2. WORK
 Idempotency first: a PR for this branch already open with the docs fan-out done → skip to
-ADVANCE. Otherwise, in the issue's worktree (`../vtk-wt/<issue#>`) on build's branch:
+ADVANCE. A PR for this branch already **merged** with the issue still open → PARK with the
+merge evidence for a human to close (intake's merge sweep normally handles these).
+Otherwise, in the issue's worktree (`../vtk-wt/<issue#>`) on build's branch:
 
 - **Merge `origin/dev` unconditionally** — ship is the exception to the staleness rule's
   overlap check, because the PR must be mergeable. Docs-only conflicts you may resolve

@@ -59,5 +59,9 @@ One-line result: `AUDIT: <#issue> → ADVANCE(ship)|BOUNCE(build)|PARK — <reas
 ## Notes
 - **Read-only.** Audit commits nothing, cuts no branch, patches nothing.
 - **Review the diff, not the world.** Full-repo audits are a separate, human-initiated activity.
-- **Idempotent.** A clean report for current HEAD = done; new commits invalidate it.
+- **Idempotent.** A clean report for current HEAD = done; new commits invalidate it. An item
+  rewound here by a human with a still-valid clean report → re-confirm cheaply and ADVANCE,
+  unless their rewind comment names a reason to distrust it — then re-audit that part.
+  Evidence that the work already shipped (merged PR) → PARK with the evidence for a human to
+  close.
 - Honors the universal worker loop in [`README.md`](README.md).
