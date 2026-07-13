@@ -18,7 +18,7 @@ with two headline additions:
 
 ## Status
 
-Early implementation, written in Go. Shipped so far:
+Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 
 - **git filter family** — `status`, `log`, `diff`, `show`, `add`, `commit`, `push`, `pull`,
   `branch` (other subcommands pass through). Measured savings 47–89% on typical fixtures.
@@ -52,26 +52,14 @@ Early implementation, written in Go. Shipped so far:
   `(+N more)` tails. The full listing is always recoverable via `vtk show <id>`. Measured savings
   17–75% on fixtures (scales with list size). `ls -l` long format passes through raw; filtered
   exit `0` only, so grep's no-match exit `1` stays raw with exit-code parity intact.
-- **cargo filter (declarative TOML)** — `cargo build/check/test/run/clippy`: strips per-crate
-  progress (`Compiling`/`Checking`/`Downloading`/…), keeps warnings, errors, and the `Finished`
-  summary. Measured 12–66% on fixtures. Filtered exit `{0}`; a compile error (exit 101) passes
-  through raw with the child's exit code intact. This is vtk's first filter written as an embedded
-  TOML spec rather than a Go package — the cheap path for regex-only families; see
-  [docs/ToolCoverage.md](docs/ToolCoverage.md) for the authoring path.
+- **dbmate filter** — `dbmate up/status/rollback` (#13): collapses the applied-migration spam,
+  keeps pending migrations and counts.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
   reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`); `vtk gaps`
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
-  `vtk gaps --file-issues` turns recurring gap families into `stage:intake` "Filter: `<family>`"
-  issues so coverage becomes a tracked queue: it selects families over a raw-bytes/call-count
-  threshold (defaults 50 KiB / 3 calls; hard floors 4 KiB / 2 calls clamp over-eager overrides),
-  excludes structurally-uncompressable machine-readable calls (`--json` and friends) from the
-  aggregation, and dedupes against already-open Filter issues so re-running never refiles. It is
-  **dry-run by default** (prints the plan); `--yes` actually files via `gh`. This is an explicit,
-  user-invoked maintenance command that shells to `gh` — outside the no-network non-goal, which
-  binds only the wrap path and telemetry storage (decision registry / #34).
 
 - **Cumulative savings + `vtk gain`** — aggregates the invocation log into total raw vs emitted
   bytes, bytes saved and savings %, overall and per command family (ranked by bytes saved).
@@ -79,6 +67,11 @@ Early implementation, written in Go. Shipped so far:
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm` route through vtk without being
   prefixed. Marker-delimited and idempotent, with `--print`/`--dry-run`/`--uninstall`/`--shell`.
+
+Planned next ([#61](https://github.com/meridun/vtk/issues/61)): a **declarative TOML filter
+engine** (~20-line regex specs as the cheap path for new filter families, starting with cargo)
+and **`vtk gaps --file-issues`** (turn recurring gap families into `stage:intake` filter issues
+via `gh`).
 
 Further filter families are not yet implemented. The meta word `proxy` is reserved: invoking it
 prints `vtk: "proxy" is not implemented yet` and exits `2` instead of falling through to exec — so
@@ -95,9 +88,6 @@ vtk git status          # compact status; prints "OK <id>" when content was elid
 vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
 vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
-vtk gaps --file-issues  # draft stage:intake "Filter: <family>" issues for recurring gaps (dry-run)
-vtk gaps --file-issues --yes                        # actually file them via gh (dedupes open ones)
-vtk gaps --file-issues --min-bytes N --min-calls N  # tune the filing thresholds
 vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family
 vtk install             # wire git/gh/npm -> vtk into your shell rc/profile (bash + pwsh)
 vtk install --print     # print the wrapper block(s) without writing anything
@@ -111,7 +101,8 @@ prefixing, `vtk install` splices wrapper functions into your shell startup file 
 for bash, `$PROFILE.CurrentUserAllHosts` for PowerShell (resolved via pwsh, so OneDrive
 Documents redirection is handled). The block:
 
-- **points at this binary** (`os.Executable()`), so it keeps working wherever vtk lives;
+- **points at this binary** (self-locating via the running executable's path), so it keeps
+  working wherever vtk lives;
 - is **guarded on `$CLAUDECODE`**, so it is inert in normal interactive shells and only wraps
   commands inside Claude Code sessions;
 - is **marker-delimited and idempotent** — re-running with the same binary path is a no-op, a
@@ -121,16 +112,14 @@ Documents redirection is handled). The block:
 
 ## Install
 
-With a Go toolchain (no clone needed):
+From source, with the .NET 9 SDK:
 
 ```
-go install github.com/meridun/vtk/cmd/vtk@latest
+dotnet publish dotnet/Vtk.Cli -c Release -o <install-dir>
 ```
 
-Without Go: grab a prebuilt binary (windows/amd64, linux/amd64, darwin/arm64) from the
-[releases page](https://github.com/meridun/vtk/releases).
-
-From source: `go build ./cmd/vtk`. Note for Windows: the spool directory relies on the default
+The published `vtk` executable is self-contained within `<install-dir>`; put it on `PATH` (or
+let `vtk install` reference it in place). Note for Windows: the spool directory relies on the default
 user-scoped ACLs of `%LocalAppData%` (POSIX 0700 permissions are a no-op on NTFS).
 
 ## Core behavior (design contract)
