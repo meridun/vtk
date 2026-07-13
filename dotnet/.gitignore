@@ -1,0 +1,7 @@
+# .NET build output
+bin/
+obj/
+
+# User-specific / IDE
+*.user
+.vs/

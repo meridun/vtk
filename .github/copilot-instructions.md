@@ -12,12 +12,18 @@
 - **Test every filter** — each filter needs fixture-based tests: raw captured output in,
   expected compacted output out, with a measured savings assertion.
 - **No git operations** unless explicitly requested.
+- **Git flow** — `{feature} → dev → main`. All work happens on feature branches
+  (`<type>/<issue#>-<slug>`) cut from `dev` (the default/integration branch) and lands via PR to
+  `dev`. `main` is the stable/release branch: it only moves by PR from `dev`; never branch from,
+  checkout, commit to, or merge to `main` unless explicitly requested. Both hops are PRs — no
+  direct pushes to `dev` or `main` except trivial docs-only commits to `dev`.
 
 ## Documentation Tiers
 
 - **L1** (this file) — loaded every request. Principles + routing only.
 - **L2** (`.github/skills/*/SKILL.md`) — task-scoped patterns, auto-loaded on match.
-  (None yet; add via a `skills` directory as patterns stabilize.)
+  Mirrored to `.claude/skills/` for Claude Code (same as the L1 `CLAUDE.md` ↔ this file mirror).
+  Present: `caveman` (house-style terse-output mode). Add more as patterns stabilize.
 - **L3** (`docs/`) — read explicitly when needed.
 
 L3 entry points: [Overview.md](../docs/Overview.md),
