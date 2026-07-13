@@ -13,9 +13,8 @@ The TOML long-tail and the subsystems are fresh parity gaps tracked in #41 and #
 **Adding a filter.** Filters are hand-written C# classes under `dotnet/Vtk.Core/Filter/`,
 registered in `Registry.cs`, with fixture-based tests (raw in → expected compact out + savings
 assertion) under `dotnet/Vtk.Tests/Filter/`. A second, cheaper path — a ~20-line declarative
-TOML spec for families that are just *drop/keep/replace by regex* (#40) — shipped in the Go
-implementation but was not carried into the C# port; its re-port is tracked in
-[#61](https://github.com/meridun/vtk/issues/61).
+TOML spec for families that are just *drop/keep/replace by regex* — is planned
+([#61](https://github.com/meridun/vtk/issues/61)).
 
 ## rtk parity targets
 
@@ -32,7 +31,7 @@ implementation but was not carried into the C# port; its re-port is tracked in
 | Files/search (rest) | `read`, `tree` | 60–75% | planned — both now shipped/validated upstream (rtk-ai/rtk) |
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned — `err`/`log`/`json`/`env` now shipped/validated upstream (rtk-ai/rtk); `summary`/`diff` planned |
 | Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned — `docker ps/images/logs` + `curl` now shipped/validated upstream (rtk-ai/rtk) |
-| Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. `gaps --file-issues` (#34 — turns recurring gap families into `stage:intake` `Filter: <family>` issues via `gh`, dry-run by default) shipped in the Go implementation but was not carried into the C# port; re-port tracked in [#61](https://github.com/meridun/vtk/issues/61) |
+| Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. `gaps --file-issues` (turns recurring gap families into `stage:intake` `Filter: <family>` issues via `gh`, dry-run by default) is planned — [#61](https://github.com/meridun/vtk/issues/61) |
 | Meta | `install` | — | shipped (#49) — wires the git/gh/npm→vtk wrappers into a shell rc/profile (bash `~/.bashrc`, pwsh `$PROFILE.CurrentUserAllHosts`). Self-locating via the running executable's path, marker-delimited managed block (idempotent, byte-identical re-runs, exact `--uninstall`), `$CLAUDECODE`-guarded so it is inert outside Claude Code; `--print`/`--dry-run`/`--shell bash\|pwsh` |
 | Meta | `proxy` | — | planned — name reserved: invoking exits 2 with "not implemented yet" instead of exec fallthrough (#11) |
 | rtk TOML long-tail | `gcc`, `make`, `terraform`, `docker`, `systemctl`, linters, installers (rtk's TOML-driven engine) | — | planned — fresh upstream parity gap; vtk port tracked in #41 |
@@ -42,7 +41,7 @@ implementation but was not carried into the C# port; its re-port is tracked in
 
 | Family | Commands | Rationale | Status |
 |---|---|---|---|
-| Language toolchains | `cargo`, `go`, `tsc`, `dotnet`, `mvn`/`gradle`, `pip`/`uv`, `pytest`, `jest`/`vitest` | rtk ships some of these; verify + fill gaps | planned — a `cargo build/check/test/run/clippy` declarative TOML filter shipped in the Go implementation (#40; measured 12–66% on fixtures) but was not carried into the C# port; returns with the TOML engine re-port ([#61](https://github.com/meridun/vtk/issues/61)). Rest of the row planned |
+| Language toolchains | `cargo`, `go`, `tsc`, `dotnet`, `mvn`/`gradle`, `pip`/`uv`, `pytest`, `jest`/`vitest` | rtk ships some of these; verify + fill gaps | planned — `cargo build/check/test/run/clippy` is the first target of the declarative TOML filter engine ([#61](https://github.com/meridun/vtk/issues/61)): strip per-crate progress lines, keep warnings/errors and the `Finished` summary |
 | Package managers | `pnpm`, `yarn`, `winget`, `choco`, `brew`, `apt` | install/upgrade output is huge and low-signal | planned |
 | Kubernetes/cloud | `kubectl`, `helm`, `terraform plan/apply`, `az`, `aws`, `gcloud` | plan/apply and describe output are token bombs | planned |
 | CI/CD | `gh run view --log`, `act` | log dumps dominate CI debugging sessions | planned |

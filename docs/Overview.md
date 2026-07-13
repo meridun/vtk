@@ -46,4 +46,4 @@ stable/release and moves only by PR from `dev`. Full discipline in
 | Gap analysis | `rtk discover` (post-hoc session scan) | `vtk gaps` (execution-time log) |
 | Savings stats | `rtk gain` | `vtk gain` (same idea) |
 | Raw output recovery | rerun the command | `vtk show <id>` from the spool |
-| Language | Rust | C# / .NET 9 (originally Go — [#1](https://github.com/meridun/vtk/issues/1); ported in [PR #57](https://github.com/meridun/vtk/pull/57)) |
+| Language | Rust | C# / .NET 9 ([#1](https://github.com/meridun/vtk/issues/1)) |

@@ -18,8 +18,7 @@ with two headline additions:
 
 ## Status
 
-Early implementation, written in C# (.NET 9) under `dotnet/`; originally Go, cut over in
-[PR #57](https://github.com/meridun/vtk/pull/57). Shipped so far:
+Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 
 - **git filter family** — `status`, `log`, `diff`, `show`, `add`, `commit`, `push`, `pull`,
   `branch` (other subcommands pass through). Measured savings 47–89% on typical fixtures.
@@ -69,10 +68,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`; originally Go, cut
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm` route through vtk without being
   prefixed. Marker-delimited and idempotent, with `--print`/`--dry-run`/`--uninstall`/`--shell`.
 
-Two features shipped in the original Go implementation after the C# port branched and await
-re-port ([#61](https://github.com/meridun/vtk/issues/61)): the **declarative TOML filter
-engine** with its cargo filter (#40), and **`vtk gaps --file-issues`** (#34), which turned
-recurring gap families into `stage:intake` filter issues via `gh`.
+Planned next ([#61](https://github.com/meridun/vtk/issues/61)): a **declarative TOML filter
+engine** (~20-line regex specs as the cheap path for new filter families, starting with cargo)
+and **`vtk gaps --file-issues`** (turn recurring gap families into `stage:intake` filter issues
+via `gh`).
 
 Further filter families are not yet implemented. The meta word `proxy` is reserved: invoking it
 prints `vtk: "proxy" is not implemented yet` and exits `2` instead of falling through to exec — so
