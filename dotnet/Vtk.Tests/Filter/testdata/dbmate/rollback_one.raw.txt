@@ -1,0 +1,2 @@
+Rolling back: 20260101000020_create_audit_log.sql
+Rolled back: 20260101000020_create_audit_log.sql in 2.0049ms
