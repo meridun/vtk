@@ -1,2 +1,0 @@
-Applied: 20260101000019_add_read_flag.sql in 956.9µs
-Applied: 20260101000020_create_audit_log.sql in 2.0052ms

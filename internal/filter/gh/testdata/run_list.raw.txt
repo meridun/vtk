@@ -1,8 +1,0 @@
-completed	success	Add name-based resolution to gh project item-edit and item-list	PR Triaging	zwick-projects-name-resolution	pull_request_target	28818797569	10s	2026-07-06T19:49:14Z
-completed	action_required	Add name-based resolution to gh project item-edit and item-list	Lint	zwick-projects-name-resolution	pull_request	28818797315	0s	2026-07-06T19:49:14Z
-completed	action_required	Add name-based resolution to gh project item-edit and item-list	Unit and Integration Tests	zwick-projects-name-resolution	pull_request	28818797295	0s	2026-07-06T19:49:14Z
-completed	action_required	Add name-based resolution to gh project item-edit and item-list	Code Scanning	zwick-projects-name-resolution	pull_request	28818797294	0s	2026-07-06T19:49:14Z
-completed	success	Triage Scheduled Tasks	Triage Scheduled Tasks	trunk	schedule	28818418182	10s	2026-07-06T19:42:40Z
-completed	success	- [ ]	Issue Triaging	trunk	issues	28818409902	8s	2026-07-06T19:42:31Z
-completed	success	- [ ]	Spam Issue Detection	trunk	issues	28818409572	17s	2026-07-06T19:42:30Z
-completed	success	Triage Scheduled Tasks	Triage Scheduled Tasks	trunk	schedule	28815182681	11s	2026-07-06T18:46:35Z

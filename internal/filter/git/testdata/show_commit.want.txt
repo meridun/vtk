@@ -1,7 +1,0 @@
-453dc13 feat: staged batch
-alpha.txt | +1 -0
-beta.txt | +1 -0
-gamma.txt | +1 -0
-staged_new.txt | +1 -0
-untracked.txt | +1 -0
-5 files, +5 -0

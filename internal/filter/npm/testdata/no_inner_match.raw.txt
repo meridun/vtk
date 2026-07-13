@@ -1,5 +1,0 @@
-
-> isekai-rpg@0.0.1 sync:claude-config:check
-> node scripts/sync-claude-config.mjs --check
-
-.claude config is in sync with .github sources (12 files checked)

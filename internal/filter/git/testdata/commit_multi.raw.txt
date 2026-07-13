@@ -1,4 +1,0 @@
-[main 453dc13] feat: staged batch
- 5 files changed, 5 insertions(+)
- create mode 100644 staged_new.txt
- create mode 100644 untracked.txt

@@ -1,3 +1,0 @@
-To C:/tmp/vtk-fixtures/remote.git
- * [new branch]      main -> main
-branch 'main' set up to track 'origin/main'.

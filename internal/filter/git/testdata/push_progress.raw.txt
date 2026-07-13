@@ -1,8 +1,0 @@
-Enumerating objects: 4, done.
-Counting objects:  25% (1/4)Counting objects:  50% (2/4)Counting objects:  75% (3/4)Counting objects: 100% (4/4)Counting objects: 100% (4/4), done.
-Delta compression using up to 8 threads
-Compressing objects:  50% (1/2)Compressing objects: 100% (2/2)Compressing objects: 100% (2/2), done.
-Writing objects:  33% (1/3)Writing objects:  66% (2/3)Writing objects: 100% (3/3)Writing objects: 100% (3/3), 280 bytes | 280.00 KiB/s, done.
-Total 3 (delta 1), reused 0 (delta 0), pack-reused 0 (from 0)
-To C:/tmp/vtk-fixtures/remote.git
-   d9e3f14..ed25fb7  main -> main
