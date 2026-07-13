@@ -27,6 +27,10 @@ outgrows a screen.)
   delta: the compact result must clear an absolute-byte floor **and** a savings ratio (option C);
   below the bar vtk emits inline with no spool and no `OK`, so lossless reformats (e.g. `git
   branch`) never fire a false recover-me signal — [#52](https://github.com/meridun/vtk/issues/52)
+- `vtk hooks` targets a **single canonical vtk binary — the C# port** (retiring the two-binary
+  wiring); MVP scope first (`hooks init` + `verify`) with installers for **both Claude Code and
+  GitHub Copilot**; trust/permissions port deferred to follow-ups —
+  [#45](https://github.com/meridun/vtk/issues/45)
 
 ## Pipeline
 
