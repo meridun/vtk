@@ -79,6 +79,16 @@ public class SmokeTests : IDisposable
         Assert.Equal(0, diffCode);
         Assert.Equal("", diffOut.Trim());
 
+        // #52: a small lossless reformat (git branch --merged) saves ~nothing, so it
+        // clears no savings bar — it prints inline with NO OK spool signal, and holds
+        // exit-code parity with bare git. This is the exact regression #52 reported.
+        var rawBranch = SmokeHarness.Git(_h.Repo, "branch", "--merged");
+        var (branchOut, _, branchCode) = _h.Run(_h.Repo, "git", "branch", "--merged");
+        Assert.Equal(0, branchCode);
+        Assert.DoesNotMatch(@"(?m)^OK [0-9a-f]{4}$", branchOut);
+        Assert.Contains("main", branchOut);
+        Assert.Contains("main", rawBranch);
+
         // passthrough is gap-logged without output content
         var (revOut, _, revCode) = _h.Run(_h.Repo, "git", "rev-parse", "HEAD");
         Assert.Equal(0, revCode);
@@ -95,8 +105,13 @@ public class SmokeTests : IDisposable
         Assert.DoesNotContain("supersecret123", meta);
         Assert.Contains("AWS_SECRET_ACCESS_KEY=[REDACTED]", meta);
 
-        // spooled content is redacted
-        File.WriteAllText(Path.Combine(_h.Repo, "file2.txt"), "line 2 content\nAuthorization: Bearer sk-live-abc123\n");
+        // spooled content is redacted. The mutation is deliberately large so the
+        // raw diff clears the #52 savings bar (>=256 bytes AND >=20%): a summarized
+        // diff still spools + emits OK, keeping the redaction path exercised.
+        var file2Lines = new List<string> { "line 2 content", "Authorization: Bearer sk-live-abc123" };
+        for (var i = 0; i < 20; i++)
+            file2Lines.Add($"padding line {i}: extra tracked content to grow the raw diff well past the savings floor");
+        File.WriteAllText(Path.Combine(_h.Repo, "file2.txt"), string.Join('\n', file2Lines) + "\n");
         var (diff2Out, _, diff2Code) = _h.Run(_h.Repo, "git", "diff");
         Assert.Equal(0, diff2Code);
         var id2 = SmokeHarness.MustOkId(diff2Out);
