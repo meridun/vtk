@@ -37,6 +37,10 @@ outgrows a screen.)
   rollups (`--graph/--history/--daily`) split to
   [#58](https://github.com/meridun/vtk/issues/58), per-session view stays in #46 blocked on the
   shared session provider (#43/#44) — [#46](https://github.com/meridun/vtk/issues/46)
+- Windows-native coverage is a **tracking epic**, not one filter: split into per-tool build
+  children (strip-only `winget`/`choco`/`reg query` via the TOML engine first, PowerShell-object
+  reformatter later); PowerShell interception is owned by the `vtk hooks` work (#45), so the epic
+  stays blocked until that path exists — [#47](https://github.com/meridun/vtk/issues/47)
 
 ## Pipeline
 
