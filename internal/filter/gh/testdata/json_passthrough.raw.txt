@@ -1,7 +1,0 @@
-[
-  {
-    "number": 21,
-    "title": "line-ending hygiene",
-    "state": "OPEN"
-  }
-]

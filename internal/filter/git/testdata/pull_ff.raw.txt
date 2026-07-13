@@ -1,8 +1,0 @@
-From C:/tmp/vtk-fixtures/remote
-   453dc13..d9e3f14  main       -> origin/main
-Updating 453dc13..d9e3f14
-Fast-forward
- alpha.txt | 1 +
- delta.txt | 2 ++
- 2 files changed, 3 insertions(+)
- create mode 100644 delta.txt

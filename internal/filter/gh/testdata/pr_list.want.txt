@@ -1,6 +1,0 @@
-#13807 draft Add name-based resolution to gh project item-edit and item-list (1h)
-#13803 open chore(deps): bump github/codeql-action/init from 4.36.2 to 4.36.3 (6h)
-#13802 open chore(deps): bump github/codeql-action/upload-sarif from 4.36.2 to 4.36.3 (6h)
-#13801 open chore(deps): bump github/codeql-action/analyze from 4.36.2 to 4.36.3 (6h)
-#13800 open chore(deps): bump charm.land/bubbletea/v2 from 2.0.7 to 2.0.8 (6h)
-#13798 open Add JSON output support to pr create (11h)

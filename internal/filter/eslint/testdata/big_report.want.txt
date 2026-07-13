@@ -1,5 +1,0 @@
-140x warning no-unused-vars  — src/module01.js:1:2 'x' is assigned a value but never used
-120x error no-undef  — src/module01.js:2:3 'y' is not defined
-120x warning no-console  — src/module01.js:3:4 Unexpected console statement
-120x error semi  — src/module01.js:4:5 Missing semicolon
-✖ 500 problems (240 errors, 260 warnings)

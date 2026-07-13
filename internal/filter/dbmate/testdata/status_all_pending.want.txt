@@ -1,6 +1,0 @@
-[ ] 20260101000001_create_users.sql
-[ ] 20260101000002_create_posts.sql
-[ ] 20260101000003_add_index.sql
-
-Applied: 0
-Pending: 3

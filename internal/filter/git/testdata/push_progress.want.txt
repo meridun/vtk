@@ -1,2 +1,0 @@
-To C:/tmp/vtk-fixtures/remote.git
-d9e3f14..ed25fb7  main -> main
