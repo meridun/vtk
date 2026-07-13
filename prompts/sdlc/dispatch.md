@@ -118,9 +118,10 @@ worktree.**
    checked out, `git pull --ff-only origin dev`). Non-fast-forward or dirty-tree collision →
    skip and record; never rebase or force anything.
 3. **Dogfooding binary rebuild:** if step 2 moved the `dev` tip, rebuild the wrapper the shell
-   wiring runs: `go build -o ~/tools/vtk/vtk.exe ./cmd/vtk`. Only build when
-   `git status --porcelain -- '*.go' go.mod go.sum` is clean in the tree you build from —
-   never bake uncommitted code into the binary; dirty or failed build → keep the old binary
+   wiring runs: `dotnet publish dotnet/Vtk.Cli -c Release -o ~/tools/vtk` (the deployment is
+   the full publish output — vtk.exe plus its dlls/json — not a single file). Only build when
+   `git status --porcelain -- dotnet` is clean in the tree you build from — never bake
+   uncommitted code into the binary; dirty or failed build → keep the old deployment
    (passthrough fallback still works), record it. This runs before any worker spawns, so no
    vtk process holds the exe.
 4. **Worktree sweep:** `git worktree list`. For each `../vtk-wt/<issue#>` worktree whose branch
