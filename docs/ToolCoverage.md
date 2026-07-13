@@ -10,14 +10,12 @@ vtk still lists `planned` are now shipped and validated upstream (noted per-row)
 column tracks vtk's own implementation state, so those rows stay `planned` until vtk ships them.
 The TOML long-tail and the subsystems are fresh parity gaps tracked in #41 and #43–#46.
 
-**Two ways to add a filter (#40).** Reformatters that restructure output stay hand-written Go
-(`internal/filter/<tool>/`). A family that is just *drop/keep/replace by regex* is a ~20-line
-declarative TOML file under `internal/filter/tomlfilter/defs/`, embedded at build and registered
-into the same dispatch (Go families keep precedence; TOML filters match via a regex fallback).
-This is the cheap path from a recurring `vtk gaps` passthrough family to a shipped filter — schema
-reference at `internal/filter/tomlfilter/defs/README.md`. One caveat: `filter_stderr` is parsed
-but rejected at load, since the runner merges stdout+stderr before a filter runs — honoring it
-needs runner-side stream separation (deferred).
+**Adding a filter.** Filters are hand-written C# classes under `dotnet/Vtk.Core/Filter/`,
+registered in `Registry.cs`, with fixture-based tests (raw in → expected compact out + savings
+assertion) under `dotnet/Vtk.Tests/Filter/`. A second, cheaper path — a ~20-line declarative
+TOML spec for families that are just *drop/keep/replace by regex* (#40) — shipped in the Go
+implementation but was not carried into the C# port; its re-port is tracked in
+[#61](https://github.com/meridun/vtk/issues/61).
 
 ## rtk parity targets
 
@@ -34,8 +32,8 @@ needs runner-side stream separation (deferred).
 | Files/search (rest) | `read`, `tree` | 60–75% | planned — both now shipped/validated upstream (rtk-ai/rtk) |
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned — `err`/`log`/`json`/`env` now shipped/validated upstream (rtk-ai/rtk); `summary`/`diff` planned |
 | Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned — `docker ps/images/logs` + `curl` now shipped/validated upstream (rtk-ai/rtk) |
-| Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. `gaps --file-issues` (#34) turns recurring gap families into `stage:intake` `Filter: <family>` issues (over a raw-bytes/call-count threshold — defaults 50 KiB / 3 calls, hard floors 4 KiB / 2 calls; machine-readable `--json`-style calls excluded from the aggregation; dedupes open Filter issues). Dry-run by default, `--yes` files via `gh` — an explicit user-invoked maintenance write, outside the no-network non-goal which binds only the wrap path + telemetry storage (registry / #34) |
-| Meta | `install` | — | shipped (#49) — wires the git/gh/npm→vtk wrappers into a shell rc/profile (bash `~/.bashrc`, pwsh `$PROFILE.CurrentUserAllHosts`). Self-locating via `os.Executable()`, marker-delimited managed block (idempotent, byte-identical re-runs, exact `--uninstall`), `$CLAUDECODE`-guarded so it is inert outside Claude Code; `--print`/`--dry-run`/`--shell bash\|pwsh` |
+| Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. `gaps --file-issues` (#34 — turns recurring gap families into `stage:intake` `Filter: <family>` issues via `gh`, dry-run by default) shipped in the Go implementation but was not carried into the C# port; re-port tracked in [#61](https://github.com/meridun/vtk/issues/61) |
+| Meta | `install` | — | shipped (#49) — wires the git/gh/npm→vtk wrappers into a shell rc/profile (bash `~/.bashrc`, pwsh `$PROFILE.CurrentUserAllHosts`). Self-locating via the running executable's path, marker-delimited managed block (idempotent, byte-identical re-runs, exact `--uninstall`), `$CLAUDECODE`-guarded so it is inert outside Claude Code; `--print`/`--dry-run`/`--shell bash\|pwsh` |
 | Meta | `proxy` | — | planned — name reserved: invoking exits 2 with "not implemented yet" instead of exec fallthrough (#11) |
 | rtk TOML long-tail | `gcc`, `make`, `terraform`, `docker`, `systemctl`, linters, installers (rtk's TOML-driven engine) | — | planned — fresh upstream parity gap; vtk port tracked in #41 |
 | rtk subsystems | `learn` (#43), `discover` (#44), `hooks` (#45), `analytics`/gain-economics (#46) | — | planned — upstream subsystems beyond filtering; vtk equivalents tracked in #43–#46 |
@@ -44,11 +42,11 @@ needs runner-side stream separation (deferred).
 
 | Family | Commands | Rationale | Status |
 |---|---|---|---|
-| Language toolchains | `cargo`, `go`, `tsc`, `dotnet`, `mvn`/`gradle`, `pip`/`uv`, `pytest`, `jest`/`vitest` | rtk ships some of these; verify + fill gaps | in-progress — `cargo build/check/test/run/clippy` shipped (#40) as vtk's first declarative TOML filter: strips per-crate progress (`Compiling`/`Checking`/`Downloading`/…), keeps warnings, errors, and the `Finished` summary. Measured 12–66% on fixtures (progress-heavy build 66%, warning-kept run 12% — savings scale with progress-line noise). Filtered exit `{0}`; a compile error (exit 101) passes through raw. Rest of the row still planned |
+| Language toolchains | `cargo`, `go`, `tsc`, `dotnet`, `mvn`/`gradle`, `pip`/`uv`, `pytest`, `jest`/`vitest` | rtk ships some of these; verify + fill gaps | planned — a `cargo build/check/test/run/clippy` declarative TOML filter shipped in the Go implementation (#40; measured 12–66% on fixtures) but was not carried into the C# port; returns with the TOML engine re-port ([#61](https://github.com/meridun/vtk/issues/61)). Rest of the row planned |
 | Package managers | `pnpm`, `yarn`, `winget`, `choco`, `brew`, `apt` | install/upgrade output is huge and low-signal | planned |
 | Kubernetes/cloud | `kubectl`, `helm`, `terraform plan/apply`, `az`, `aws`, `gcloud` | plan/apply and describe output are token bombs | planned |
 | CI/CD | `gh run view --log`, `act` | log dumps dominate CI debugging sessions | planned |
-| Databases | `psql`, `mysql`, `sqlite3`, `dbmate` | wide result sets, migration chatter | planned |
+| Databases | `psql`, `mysql`, `sqlite3`, `dbmate` | wide result sets, migration chatter | in-progress — `dbmate` shipped (#13): collapses applied-migration lines, keeps pending migrations + counts; rest planned |
 | Windows-native | PowerShell cmdlet output shaping, `wsl`, `reg query` | rtk is unix-centric; first-class Windows support | planned |
 | HTTP/API | `http`(ie), `grpcurl` | beyond rtk's `curl` | planned |
 | Media/misc | `ffmpeg` (progress spam), `pandoc` | verbose stderr progress noise | planned |

@@ -8,7 +8,12 @@ issues, not here.
 One line per decision, present tense, pointer to the debate. (Split into a child file when this
 outgrows a screen.)
 
-- Implementation language is **Go** — [#1](https://github.com/meridun/vtk/issues/1)
+- Implementation language is **C# / .NET 9** — originally Go
+  ([#1](https://github.com/meridun/vtk/issues/1)); C# port cut over in
+  [PR #57](https://github.com/meridun/vtk/pull/57), Go tree removed in
+  [PR #59](https://github.com/meridun/vtk/pull/59). Features that landed in Go after the port
+  branched (TOML filter engine #40, `gaps --file-issues` #34) are unported —
+  [#61](https://github.com/meridun/vtk/issues/61)
 - Raw output is spooled per command with a 4-hex-char command-hash ID, provenance header,
   atomic-rename writes, ~1h TTL sweep — [#2](https://github.com/meridun/vtk/issues/2)
 - Registry entries may declare a per-filter exit-code allowlist of additional "expected" exit
@@ -21,7 +26,7 @@ outgrows a screen.)
   user-invoked maintenance subcommands may shell out to `gh` etc. —
   [#34](https://github.com/meridun/vtk/issues/34)
 - `vtk install` wires the wrappers into a shell rc/profile itself, rather than shipping a
-  hand-copied dotfile snippet: self-locating via `os.Executable()`, marker-delimited managed
+  hand-copied dotfile snippet: self-locating via the running executable's path, marker-delimited managed
   block (idempotent + exact `--uninstall`), guarded on `$CLAUDECODE` — [#49](https://github.com/meridun/vtk/issues/49)
 - Spool + the `OK <id>` recover-me signal are gated on **real** savings, not any positive byte
   delta: the compact result must clear an absolute-byte floor **and** a savings ratio (option C);
@@ -87,11 +92,11 @@ vtk show 2e3f --grep pat  →   just the matching lines
 ## Components
 
 - **Registry** — maps command/subcommand patterns to filters. Filters are pure functions:
-  raw output in, compacted output out. Two filter sources coexist: hand-written Go packages (one
-  per tool family — git, gh, npm, ...) and declarative TOML specs embedded at build
-  (`internal/filter/tomlfilter/defs/*.toml`) compiled to the same pure-function signature.
-  Dispatch consults the exact command/subcommand key first, then a regex-matched fallback, so Go
-  families keep precedence over regex-keyed TOML filters.
+  raw output in, compacted output out. Filters are hand-written C# classes, one per tool family
+  (git, gh, npm, ... in `dotnet/Vtk.Core/Filter/`). A second declarative-TOML filter source
+  (regex drop/keep/replace specs embedded at build, regex-fallback dispatch below exact-key
+  matches — #40) existed in the Go tree and awaits re-port —
+  [#61](https://github.com/meridun/vtk/issues/61).
 - **Runner** — spawns the wrapped command, streams/captures output, propagates exit code and
   signals. The only component with process-spawning responsibility.
 - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte
