@@ -31,6 +31,11 @@ outgrows a screen.)
   wiring); MVP scope first (`hooks init` + `verify`) with installers for **both Claude Code and
   GitHub Copilot**; trust/permissions port deferred to follow-ups —
   [#45](https://github.com/meridun/vtk/issues/45)
+- `vtk gain` dollarization prices from a **local checked-in model→$ table** (updated by PR; no
+  runtime fetch — no-network non-goal stands) using a **bytes/4 token heuristic**; log-based
+  rollups (`--graph/--history/--daily`) split to
+  [#58](https://github.com/meridun/vtk/issues/58), per-session view stays in #46 blocked on the
+  shared session provider (#43/#44) — [#46](https://github.com/meridun/vtk/issues/46)
 
 ## Pipeline
 
