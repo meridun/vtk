@@ -46,6 +46,9 @@ outgrows a screen.)
   (`.git/sdlc-maint.lock`), idempotent verify-before-write GitHub writes, and a versioned
   binary deploy (junction flip at `~/tools/vtk`); the pinned `sdlc:dispatch-lock` issue is
   retired — [#71](https://github.com/meridun/vtk/issues/71)
+- A dispatch cycle places **no cap** on follow-on lane spawns (option A): a lane that becomes
+  non-empty via an ADVANCE runs again in the same cycle, favoring per-item throughput over
+  bounded cycle cost — [#80](https://github.com/meridun/vtk/issues/80)
 
 ## Pipeline
 
