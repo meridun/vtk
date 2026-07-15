@@ -28,9 +28,16 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
 ## Universal worker loop (binding)
 
 1. **CLAIM** — list open issues labeled `stage:<lane>` that are **NOT** labeled `sdlc:wip`,
-   `sdlc:needs-human` (parked), or `sdlc:hold` (human keep-off). Pick the next: higher priority
+   `sdlc:needs-human` (parked), or `sdlc:hold` (human keep-off). If the invoking message
+   supplies a **candidate snapshot** for the lane (issue#, labels, createdAt — the dispatcher
+   inlines one from its maintenance digest), select from that list instead of re-querying;
+   without one (e.g. a manual run), self-query as above. The snapshot only seeds candidate
+   selection, never ownership — steps i–iii below always run against live GitHub data, so a
+   stale entry (closed, relabeled, or claimed since the snapshot) just loses the claim; move to
+   the next candidate. Pick the next: higher priority
    first (`priority:critical` › `priority:medium` › `priority:future`), then oldest by creation
-   date (FIFO). If none → reply `<LANE>: idle` and stop. Then take the lock, in this order:
+   date (FIFO). If none (or the snapshot is exhausted) → reply `<LANE>: idle` and stop. Then
+   take the lock, in this order:
    1. Add `sdlc:wip` to the chosen issue.
    2. Post a claim comment: `sdlc:claim <run-id> <lane>` (run-id = the dispatcher-supplied id,
       or any unique id you mint for a manual run). The label is the visibility signal; the

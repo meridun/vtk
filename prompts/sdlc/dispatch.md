@@ -141,12 +141,17 @@ For each lane (intake, build, verify, audit, ship):
    from the digest's issue snapshot; re-query the lane fresh ONLY if an earlier worker this cycle
    ADVANCEd an item into it. Zero eligible → skip the lane; record `<LANE>: skipped (empty)`.
 2. Otherwise spawn ONE subagent, `subagent_type: vtk-sdlc-worker`, with this prompt (substitute
-   the lane and run-id): "You are an autonomous SDLC pipeline worker for the vtk project.
-   Repository (local working directory): C:\Claude\vtk. Your run-id is `<run-id>-<lane>`. Read
-   prompts/sdlc/README.md — its universal worker loop and invariants are binding. Then execute
-   the lane prompt at prompts/sdlc/<lane>.md. If there is no eligible item, report idle. Return
-   your one-line result plus any PARK/BOUNCE specifics, ending with the fenced JSON result
-   block per the README STOP contract."
+   the lane, run-id, and candidate list): "You are an autonomous SDLC pipeline worker for the
+   vtk project. Repository (local working directory): C:\Claude\vtk. Your run-id is
+   `<run-id>-<lane>`. Read prompts/sdlc/README.md — its universal worker loop and invariants
+   are binding. Then execute the lane prompt at prompts/sdlc/<lane>.md. Candidate snapshot for
+   your lane (from this cycle's digest — seeds selection only; claim per the README against
+   live data): <for each eligible item: `#<number> labels=[<label,...>] createdAt=<createdAt>`>.
+   If no candidate can be claimed, report idle. Return your one-line result plus any
+   PARK/BOUNCE specifics, ending with the fenced JSON result block per the README STOP
+   contract." Build the candidate list from the same digest snapshot as step 1 (the lane's
+   eligible items only, all three fields per item); a fresh per-lane re-query happens only in
+   the step-1 ADVANCE case.
 3. **Concurrency:** lane workers claim per-issue and work in issue-scoped worktrees, so they
    may run concurrently — spawn all non-empty lanes' workers in one batch and wait for all.
    Exception: run intake before the batch when its merge sweep has pending merges to process,
