@@ -15,10 +15,12 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
 ## How to run
 
 - **Scheduled:** an `sdlc-dispatch` scheduled task runs the dispatcher prompt
-  ([`dispatch.md`](dispatch.md)) — dispatcher singleton gate, per-issue wip gate (stale-lock
-  reaping), git + worktree maintenance, one `vtk-sdlc-worker` subagent per non-empty lane
-  (concurrently — per-issue claims and issue-scoped worktrees make lanes independent). **Not
-  yet enabled** — turn on once queue depth justifies the spend.
+  ([`dispatch.md`](dispatch.md)) — per-issue wip gate (stale-lock reaping, verify-before-write),
+  machine-locked git + worktree maintenance, one `vtk-sdlc-worker` subagent per non-empty lane
+  (concurrently — per-issue claims and issue-scoped worktrees make lanes independent). There is
+  no dispatcher singleton: overlapping dispatch runs — same machine or different machines —
+  deconflict via per-issue claims, a per-machine maintenance lock, and idempotent GitHub
+  writes. **Not yet enabled** — turn on once queue depth justifies the spend.
 - **Manual:** paste this README plus a worker file's body into an agent session. Identical
   behavior — the prompt doesn't know what fired it. Mint your own run-id for the claim comment.
   Manual and scheduled runs coexist safely: claims deconflict per-issue.
@@ -39,8 +41,8 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
       claim untouched, delete nothing, and go pick the next eligible item. Only the losing
       worker's own claim comment may be edited to note `superseded`.
 
-   The lock is machine-owned and volatile; the dispatcher's reaper may strip it, and it checks
-   the claim comment's run-id + timestamp before doing so.
+   The lock is machine-owned and volatile; the dispatcher's reaper may strip it, and it
+   re-checks the claim comment's run-id + timestamp immediately before doing so.
 2. **WORK** — per the lane file, with these constraints:
    - **Never delegate — do all work inline, yourself.** No subagents (they run async; the worker
      yields and the item strands under `sdlc:wip`), no background tasks, no wait loops.
