@@ -2,3 +2,6 @@
 *.go text eol=lf
 go.mod text eol=lf
 go.sum text eol=lf
+# Filter golden fixtures are byte-exact captured output; never eol-convert
+# them, or fresh Windows checkouts materialize CRLF and the parity tests fail.
+dotnet/Vtk.Tests/Filter/testdata/** -text
