@@ -119,6 +119,58 @@ public class StoreTests : IDisposable
         Assert.Single(_store.Recent(10));
     }
 
+    [Theory]
+    [InlineData("gh pr list --json number,title", true)]
+    [InlineData("gh issue view 5 --json=body", true)]
+    [InlineData("gh run list --format json", true)]
+    [InlineData("gh api repos --format=json", true)]
+    [InlineData("kubectl get pods -o json", true)]
+    [InlineData("tool --output json", true)]
+    [InlineData("tool --output=json", true)]
+    [InlineData("gh pr list", false)]
+    [InlineData("git log --stat", false)]
+    [InlineData("npm test", false)]
+    [InlineData("cargo build --release", false)]
+    [InlineData("echo --jsonish", false)] // narrow: not a real json flag
+    [InlineData("grep json file.txt", false)]
+    public void IsMachineReadable_MatchesNarrowJsonForms(string cmd, bool want)
+    {
+        Assert.Equal(want, Store.IsMachineReadable(cmd));
+    }
+
+    [Fact]
+    public void FileIssueGaps_SelectsTrueGapsOverBothThresholds()
+    {
+        var now = DateTime.UtcNow;
+        var entries = new[]
+        {
+            // cargo: two real gaps, 30000 raw over 2 calls — over threshold.
+            new Invocation { Time = now, Cmd = "cargo build", RawBytes = 20000, OutBytes = 20000, Reason = Store.ReasonNoFilter },
+            new Invocation { Time = now, Cmd = "cargo test", RawBytes = 10000, OutBytes = 10000, Reason = Store.ReasonNoFilter },
+            // gh: mostly machine-readable — the json calls must be excluded,
+            // leaving only 5000 raw over 1 call, under the call threshold.
+            new Invocation { Time = now, Cmd = "gh pr list --json number", RawBytes = 40000, OutBytes = 40000, Reason = Store.ReasonNoFilter },
+            new Invocation { Time = now, Cmd = "gh run view --json jobs", RawBytes = 40000, OutBytes = 40000, Reason = Store.ReasonNoFilter },
+            new Invocation { Time = now, Cmd = "gh pr diff 5", RawBytes = 5000, OutBytes = 5000, Reason = Store.ReasonNoFilter },
+            // docker: real gaps but total under the byte threshold.
+            new Invocation { Time = now, Cmd = "docker ps", RawBytes = 100, OutBytes = 100, Reason = Store.ReasonNoFilter },
+            new Invocation { Time = now, Cmd = "docker images", RawBytes = 100, OutBytes = 100, Reason = Store.ReasonNoFilter },
+            new Invocation { Time = now, Cmd = "docker build .", RawBytes = 100, OutBytes = 100, Reason = Store.ReasonNoFilter },
+            // Non-gap reasons: never eligible even at high volume.
+            new Invocation { Time = now, Cmd = "make all", RawBytes = 99000, OutBytes = 99000, Reason = Store.ReasonNonzeroExit },
+            new Invocation { Time = now, Cmd = "make lint", RawBytes = 99000, OutBytes = 99000, Reason = Store.ReasonFilterPanic },
+            new Invocation { Time = now, Cmd = "make build", RawBytes = 99000, OutBytes = 60, Filtered = true },
+        };
+        foreach (var e in entries) _store.LogInvocation(e);
+
+        var got = _store.FileIssueGaps(15000, 2);
+
+        var cargo = Assert.Single(got);
+        Assert.Equal("cargo", cargo.Family);
+        Assert.Equal(2, cargo.Calls);
+        Assert.Equal(30000, cargo.RawBytes);
+    }
+
     [Fact]
     public void Sweep_RemovesEntriesOlderThanTtl()
     {

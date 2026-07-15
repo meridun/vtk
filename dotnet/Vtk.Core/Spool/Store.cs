@@ -161,6 +161,56 @@ public sealed class Store
     /// <summary>Aggregates filter-panic invocations by command family.</summary>
     public List<GapSummary> Degraded() => Aggregate(inv => inv.Reason == ReasonFilterPanic);
 
+    /// <summary>
+    /// Returns coverage-gap families eligible for auto-filed intake issues
+    /// (`vtk gaps --file-issues`, #34): true gaps (ReasonNoFilter) that meet
+    /// both the cumulative raw-byte and call-count thresholds, excluding
+    /// machine-readable invocations (--json &amp;c.) whose output is
+    /// structurally uncompressable — not a filter defect, so not worth a
+    /// filter issue. Sorted by raw bytes descending. Read-only over metadata
+    /// (invariant 3): byte counts and redacted command families only, never
+    /// output content.
+    /// </summary>
+    public List<GapSummary> FileIssueGaps(long minBytes, int minCalls)
+    {
+        var all = Aggregate(inv =>
+        {
+            if (inv.Filtered) return false;
+            var isGap = inv.Reason == ""
+                ? !inv.TTY // legacy entry, pre-reason
+                : inv.Reason == ReasonNoFilter;
+            return isGap && !IsMachineReadable(inv.Cmd);
+        });
+        return all.Where(g => g.RawBytes >= minBytes && g.Calls >= minCalls).ToList();
+    }
+
+    /// <summary>
+    /// Reports whether a command line requests machine-readable (JSON)
+    /// output. Such output is structurally uncompressable, so its raw bytes
+    /// are a routing artifact rather than a coverage gap and must not inflate
+    /// a family toward the filing threshold (#34). Conservative token match —
+    /// a heuristic, deliberately narrow to avoid false positives.
+    /// </summary>
+    internal static bool IsMachineReadable(string cmd)
+    {
+        var fields = cmd.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < fields.Length; i++)
+        {
+            var f = fields[i];
+            if (f == "--json" || f.StartsWith("--json=", StringComparison.Ordinal))
+                return true;
+            if (string.Equals(f, "--format=json", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(f, "--output=json", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(f, "-o=json", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if ((f == "--format" || f == "--output" || f == "-o") &&
+                i + 1 < fields.Length &&
+                string.Equals(fields[i + 1], "json", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
     private List<GapSummary> Aggregate(Func<Invocation, bool> match)
     {
         var agg = new Dictionary<string, GapSummary>();
