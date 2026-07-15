@@ -21,6 +21,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Vtk.Core\Vtk.Core.csproj" />
     <ProjectReference Include="..\Vtk.Cli\Vtk.Cli.csproj" />
+    <!-- Fake external tools for the end-to-end smoke suite. The reference
+         copies vtk-faketool.dll (+ runtimeconfig) into the test output dir;
+         SmokeHarness materializes per-tool .cmd shims around it at runtime. -->
+    <ProjectReference Include="..\Vtk.FakeTool\Vtk.FakeTool.csproj" />
   </ItemGroup>
 
   <ItemGroup>
