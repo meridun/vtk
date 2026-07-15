@@ -53,3 +53,13 @@ public sealed class GainReport
     public List<FamilyGain> Families { get; set; } = new();
     public long Saved => RawBytes - OutBytes;
 }
+
+/// <summary>Cumulative savings for one UTC day. Backs `vtk gain --daily` / `--graph` (#58).</summary>
+public sealed class DailyGain
+{
+    public DateOnly Date { get; init; }
+    public int Calls { get; set; }
+    public long RawBytes { get; set; }
+    public long OutBytes { get; set; }
+    public long Saved => RawBytes - OutBytes;
+}

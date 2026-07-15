@@ -63,7 +63,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 
 - **Cumulative savings + `vtk gain`** — aggregates the invocation log into total raw vs emitted
   bytes, bytes saved and savings %, overall and per command family (ranked by bytes saved).
-  tty-bypass and other 0-byte rows are excluded so the percentage is honest.
+  tty-bypass and other 0-byte rows are excluded so the percentage is honest. The summary includes
+  an *approximate* dollarized line (bytes/4 token heuristic, checked-in per-model input prices
+  updated by PR — no network calls), and optional rollups: `--daily` (per-UTC-day table),
+  `--graph` (bar chart of daily saved bytes over the last 30 logged days), `--history` (the last
+  10 invocations with per-command savings).
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm` route through vtk without being
   prefixed. Marker-delimited and idempotent, with `--print`/`--dry-run`/`--uninstall`/`--shell`.
@@ -88,7 +92,11 @@ vtk git status          # compact status; prints "OK <id>" when filtering clears
 vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
 vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
-vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family
+vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family,
+                        # plus an approximate dollarized total (bytes/4 heuristic)
+vtk gain --daily        # per-UTC-day savings table (~tokens, ~USD per day)
+vtk gain --graph        # bar chart of daily saved bytes, last 30 logged days
+vtk gain --history      # last 10 invocations with per-command savings (flags combine)
 vtk install             # wire git/gh/npm -> vtk into your shell rc/profile (bash + pwsh)
 vtk install --print     # print the wrapper block(s) without writing anything
 vtk install --uninstall # remove the managed block

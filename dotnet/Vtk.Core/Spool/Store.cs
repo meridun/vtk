@@ -220,6 +220,42 @@ public sealed class Store
         return report;
     }
 
+    /// <summary>
+    /// Aggregates countable invocations per UTC day, oldest day first. Backs
+    /// `vtk gain --daily` and `--graph` (#58). Same countable gate as Gain(),
+    /// so TTY/tty-bypass entries never inflate a day.
+    /// </summary>
+    public List<DailyGain> Daily()
+    {
+        var agg = new Dictionary<DateOnly, DailyGain>();
+        foreach (var inv in Invocations())
+        {
+            if (!Countable(inv)) continue;
+            var day = DateOnly.FromDateTime(inv.Time.ToUniversalTime());
+            if (!agg.TryGetValue(day, out var d))
+            {
+                d = new DailyGain { Date = day };
+                agg[day] = d;
+            }
+            d.Calls++;
+            d.RawBytes += inv.RawBytes;
+            d.OutBytes += inv.OutBytes;
+        }
+        var outList = agg.Values.ToList();
+        outList.Sort((a, b) => a.Date.CompareTo(b.Date));
+        return outList;
+    }
+
+    /// <summary>
+    /// The last <paramref name="n"/> countable invocations in log order
+    /// (oldest of the window first). Backs `vtk gain --history` (#58).
+    /// </summary>
+    public List<Invocation> Recent(int n)
+    {
+        var countable = Invocations().Where(Countable).ToList();
+        return countable.Count <= n ? countable : countable[^n..];
+    }
+
     private static string FirstToken(string cmd)
     {
         var idx = cmd.IndexOf(' ');

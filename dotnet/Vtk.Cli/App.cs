@@ -1,6 +1,8 @@
 // vtk — V Token Killer. Transparent command wrapper that compacts tool
 // output for AI coding agents. Port of cmd/vtk/main.go.
+using System.Globalization;
 using System.Text.RegularExpressions;
+using Vtk.Core.Analytics;
 using Vtk.Core.Filter;
 using Vtk.Core.Runner;
 using Vtk.Core.Spool;
@@ -25,7 +27,7 @@ public static class Program
 
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps | vtk gain | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print]");
+            Console.Error.WriteLine("usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps | vtk gain [--daily] [--graph] [--history] | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print]");
             return 2;
         }
 
@@ -33,7 +35,7 @@ public static class Program
         {
             case "show": return CmdShow(args[1..]);
             case "gaps": return CmdGaps();
-            case "gain": return CmdGain();
+            case "gain": return CmdGain(args[1..]);
             case "install": return Install.Run(args[1..]);
         }
 
@@ -475,9 +477,30 @@ public static class Program
         return 0;
     }
 
-    /// <summary>Reports cumulative token savings from the invocation log. Read-only over metadata — no exec, no output content (invariant 3).</summary>
-    private static int CmdGain()
+    /// <summary>
+    /// Reports cumulative token savings from the invocation log, dollarized
+    /// via the checked-in price table + bytes/4 heuristic (#58). Optional
+    /// rollups: --daily (per-UTC-day table), --graph (bar chart of daily
+    /// saved bytes), --history (recent invocations). Read-only over metadata
+    /// — no exec, no network, no output content (invariant 3).
+    /// </summary>
+    private static int CmdGain(string[] args)
     {
+        bool daily = false, graph = false, history = false;
+        foreach (var a in args)
+        {
+            switch (a)
+            {
+                case "--daily": daily = true; break;
+                case "--graph": graph = true; break;
+                case "--history": history = true; break;
+                default:
+                    Console.Error.WriteLine($"vtk gain: unexpected argument \"{a}\"");
+                    Console.Error.WriteLine("usage: vtk gain [--daily] [--graph] [--history]");
+                    return 2;
+            }
+        }
+
         Store st;
         try { st = Store.Open(); }
         catch (Exception ex) { Console.Error.WriteLine($"vtk: {ex.Message}"); return 1; }
@@ -489,12 +512,52 @@ public static class Program
             return 0;
         }
         Console.Out.WriteLine($"cumulative savings: {report.RawBytes} raw -> {report.OutBytes} emitted, saved {report.Saved} bytes ({Percent(report.Saved, report.RawBytes)}) over {report.Calls} calls");
+        Console.Out.WriteLine($"~ {Tokens(report.Saved)} tokens = {Usd(Economics.SavedUsd(report.Saved))} saved ({Economics.DefaultModel} input @ {Usd(Economics.PriceFor(Economics.DefaultModel))}/MTok, bytes/4 heuristic)");
         Console.Out.WriteLine();
         Console.Out.WriteLine($"{"FAMILY",-24} {"CALLS",7} {"RAW BYTES",12} {"SAVED",12} {"SAVED%",8}");
         foreach (var g in report.Families)
             Console.Out.WriteLine($"{g.Family,-24} {g.Calls,7} {g.RawBytes,12} {g.Saved,12} {Percent(g.Saved, g.RawBytes),8}");
+
+        var days = daily || graph ? st.Daily() : null;
+        if (daily && days is not null)
+        {
+            Console.Out.WriteLine();
+            Console.Out.WriteLine($"{"DATE",-10} {"CALLS",7} {"RAW BYTES",12} {"SAVED",12} {"SAVED%",8} {"~TOKENS",9} {"~USD",10}");
+            foreach (var d in days)
+                Console.Out.WriteLine($"{d.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),-10} {d.Calls,7} {d.RawBytes,12} {d.Saved,12} {Percent(d.Saved, d.RawBytes),8} {Tokens(d.Saved),9} {Usd(Economics.SavedUsd(d.Saved)),10}");
+        }
+        if (graph && days is not null)
+        {
+            Console.Out.WriteLine();
+            Console.Out.WriteLine("daily saved bytes (last 30 days logged)");
+            var window = days.Count <= 30 ? days : days[^30..];
+            var max = window.Max(d => Math.Max(d.Saved, 0));
+            foreach (var d in window)
+            {
+                var len = max > 0 ? (int)Math.Round(Math.Max(d.Saved, 0) / (double)max * 40) : 0;
+                Console.Out.WriteLine($"{d.Date.ToString("MM-dd", CultureInfo.InvariantCulture)} |{new string('#', len),-40} {d.Saved} ({Usd(Economics.SavedUsd(d.Saved))})");
+            }
+        }
+        if (history)
+        {
+            Console.Out.WriteLine();
+            Console.Out.WriteLine("recent invocations");
+            foreach (var inv in st.Recent(10))
+            {
+                var saved = inv.RawBytes - inv.OutBytes;
+                var cmd = inv.Cmd.Length <= 40 ? inv.Cmd : inv.Cmd[..37] + "...";
+                Console.Out.WriteLine($"{inv.Time.ToUniversalTime().ToString("MM-dd HH:mm", CultureInfo.InvariantCulture)}  {cmd,-40}  saved {saved,10} ({Percent(saved, inv.RawBytes),6}, {Usd(Economics.SavedUsd(saved))})");
+            }
+        }
         return 0;
     }
+
+    /// <summary>Formats a token count with invariant thousands separators.</summary>
+    private static string Tokens(long savedBytes) =>
+        Economics.TokensFromBytes(savedBytes).ToString("N0", CultureInfo.InvariantCulture);
+
+    /// <summary>Formats USD with invariant culture: two decimals minimum, four when the value is tiny.</summary>
+    private static string Usd(double v) => "$" + v.ToString("0.00##", CultureInfo.InvariantCulture);
 
     /// <summary>Formats saved/raw as a percentage, guarding raw&lt;=0 to avoid a divide-by-zero.</summary>
     private static string Percent(long saved, long raw)

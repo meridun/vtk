@@ -12,7 +12,9 @@ The TOML long-tail and the subsystems are fresh parity gaps tracked in #41 and #
 
 **Adding a filter.** Filters are hand-written C# classes under `dotnet/Vtk.Core/Filter/`,
 registered in `Registry.cs`, with fixture-based tests (raw in → expected compact out + savings
-assertion) under `dotnet/Vtk.Tests/Filter/`. A second, cheaper path — a ~20-line declarative
+assertion) under `dotnet/Vtk.Tests/Filter/`. Captured fixtures under
+`dotnet/Vtk.Tests/Filter/testdata/` are exempt from git eol conversion (`.gitattributes -text`)
+so golden files stay byte-exact on every platform. A second, cheaper path — a ~20-line declarative
 TOML spec for families that are just *drop/keep/replace by regex* — is planned
 ([#61](https://github.com/meridun/vtk/issues/61)).
 
@@ -31,11 +33,11 @@ TOML spec for families that are just *drop/keep/replace by regex* — is planned
 | Files/search (rest) | `read`, `tree` | 60–75% | planned — both now shipped/validated upstream (rtk-ai/rtk) |
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned — `err`/`log`/`json`/`env` now shipped/validated upstream (rtk-ai/rtk); `summary`/`diff` planned |
 | Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned — `docker ps/images/logs` + `curl` now shipped/validated upstream (rtk-ai/rtk) |
-| Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. `gaps --file-issues` (turns recurring gap families into `stage:intake` `Filter: <family>` issues via `gh`, dry-run by default) is planned — [#61](https://github.com/meridun/vtk/issues/61) |
+| Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. Dollarized rollups (#58): the summary gains an *approximate* $ line (bytes/4 token heuristic, checked-in per-model input price table updated by PR — no network), plus combinable `--daily` (per-UTC-day table with ~tokens/~USD), `--graph` (bar chart of daily saved bytes, last 30 logged days), `--history` (last 10 invocations); unknown flag → usage + exit 2 like `vtk show`. `gaps --file-issues` (turns recurring gap families into `stage:intake` `Filter: <family>` issues via `gh`, dry-run by default) is planned — [#61](https://github.com/meridun/vtk/issues/61) |
 | Meta | `install` | — | shipped (#49) — wires the git/gh/npm→vtk wrappers into a shell rc/profile (bash `~/.bashrc`, pwsh `$PROFILE.CurrentUserAllHosts`). Self-locating via the running executable's path, marker-delimited managed block (idempotent, byte-identical re-runs, exact `--uninstall`), `$CLAUDECODE`-guarded so it is inert outside Claude Code; `--print`/`--dry-run`/`--shell bash\|pwsh` |
 | Meta | `proxy` | — | planned — name reserved: invoking exits 2 with "not implemented yet" instead of exec fallthrough (#11) |
 | rtk TOML long-tail | `gcc`, `make`, `terraform`, `docker`, `systemctl`, linters, installers (rtk's TOML-driven engine) | — | planned — fresh upstream parity gap; vtk port tracked in #41 |
-| rtk subsystems | `learn` (#43), `discover` (#44), `hooks` (#45), `analytics`/gain-economics (#46) | — | planned — upstream subsystems beyond filtering; vtk equivalents tracked in #43–#46 |
+| rtk subsystems | `learn` (#43), `discover` (#44), `hooks` (#45), `analytics`/gain-economics (#46) | — | planned — upstream subsystems beyond filtering; vtk equivalents tracked in #43–#46. The log-based half of gain-economics (dollarized `--daily`/`--graph`/`--history` rollups) shipped via #58; the per-session view stays in #46, blocked on the shared session provider (#43/#44) |
 
 ## vtk expansions (candidates — promote/demote based on gap-log data)
 

@@ -243,3 +243,43 @@ public class ReservedMetaSmokeTests : IDisposable
         Assert.Contains("cumulative savings:", outp);
     }
 }
+
+/// <summary>
+/// Real-run smoke for the #58 gain rollups: dollarized summary plus the
+/// --daily / --graph / --history flavors through the real binary.
+/// </summary>
+[Collection("Smoke")]
+public class GainRollupsSmokeTests : IDisposable
+{
+    private readonly SmokeHarness _h = new();
+
+    public void Dispose() => _h.Dispose();
+
+    [Fact]
+    public void RollupFlagsReportDollarizedSavings()
+    {
+        // Dirty the tree and wrap a covered command so the log has one
+        // countable invocation feeding every rollup.
+        File.WriteAllText(Path.Combine(_h.Repo, "file1.txt"), "line 1 content\ndirty\n");
+        var (_, _, wrapCode) = _h.Run(_h.Repo, "git", "status");
+        Assert.Equal(0, wrapCode);
+
+        var (outp, _, code) = _h.Run(_h.Repo, "gain", "--daily", "--graph", "--history");
+        Assert.Equal(0, code);
+        Assert.Contains("cumulative savings:", outp);
+        Assert.Contains("bytes/4 heuristic", outp);   // dollarized summary line
+        Assert.Contains("~USD", outp);                // --daily table header
+        Assert.Contains("daily saved bytes", outp);   // --graph section
+        Assert.Contains("recent invocations", outp);  // --history section
+        Assert.Contains("git status", outp);          // history row names the command
+    }
+
+    [Fact]
+    public void UnknownGainFlagExits2WithUsage()
+    {
+        var (stdout, stderr, code) = _h.Run(_h.Repo, "gain", "--bogus");
+        Assert.Equal(2, code);
+        Assert.Contains("usage: vtk gain", stderr);
+        Assert.Equal("", stdout);
+    }
+}
