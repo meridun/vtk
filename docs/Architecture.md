@@ -29,9 +29,10 @@ outgrows a screen.)
   below the bar vtk emits inline with no spool and no `OK`, so lossless reformats (e.g. `git
   branch`) never fire a false recover-me signal — [#52](https://github.com/meridun/vtk/issues/52)
 - `vtk hooks` targets a **single canonical vtk binary — the C# port** (retiring the two-binary
-  wiring); MVP scope first (`hooks init` + `verify`) with installers for **both Claude Code and
-  GitHub Copilot**; trust/permissions port deferred to follow-ups —
-  [#45](https://github.com/meridun/vtk/issues/45)
+  wiring); MVP scope is **Claude-Code-only** (`hooks init` + `verify`); the GitHub Copilot
+  installer is split to [#83](https://github.com/meridun/vtk/issues/83), gated on research
+  confirming a Copilot pre-invocation hook surface; trust/permissions port deferred to
+  follow-ups — [#45](https://github.com/meridun/vtk/issues/45)
 - `vtk gain` dollarization prices from a **local checked-in model→$ table** (updated by PR; no
   runtime fetch — no-network non-goal stands) using a **bytes/4 token heuristic**; log-based
   rollups (`--graph/--history/--daily`) split to
