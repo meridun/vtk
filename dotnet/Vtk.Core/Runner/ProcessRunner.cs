@@ -126,6 +126,14 @@ public static class ProcessRunner
         var psi = BuildStartInfo(argv);
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
+        // Decode captured output as UTF-8, not the ambient console codepage:
+        // wrapped tools (git, eslint, mocha, gh, ...) emit UTF-8 to pipes, and
+        // a legacy-codepage decode mangles non-ASCII bytes ("✔" -> "Γ£ö")
+        // before a filter ever sees them. The Go binary treated captured
+        // bytes opaquely; UTF-8 in (here) / UTF-8 out (Program.Run) is the
+        // C# equivalent of that transparency.
+        psi.StandardOutputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        psi.StandardErrorEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
         try
         {

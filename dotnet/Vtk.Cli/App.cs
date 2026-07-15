@@ -19,6 +19,17 @@ public static class Program
 
     public static int Run(string[] args)
     {
+        // Redirected (pipe/file) output re-encodes as UTF-8, matching the
+        // UTF-8 decode in ProcessRunner.RunCaptured: without this, writes go
+        // out in the ambient console codepage, whose best-fit mapping quietly
+        // rewrites non-ASCII bytes a wrapped tool emitted ("—" -> "-") —
+        // altered output, which vtk must never produce. A real console is
+        // left untouched (the TTY path never writes captured content anyway).
+        if (Console.IsOutputRedirected)
+            Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false)) { AutoFlush = true });
+        if (Console.IsErrorRedirected)
+            Console.SetError(new StreamWriter(Console.OpenStandardError(), new System.Text.UTF8Encoding(false)) { AutoFlush = true });
+
         // Go's fmt.Println always emits "\n"; Console.WriteLine defaults to
         // Environment.NewLine ("\r\n" on Windows). Force "\n" so output is
         // byte-identical to the Go binary (spooled bytes, golden fixtures).
