@@ -140,6 +140,10 @@ user-scoped ACLs of `%LocalAppData%` (POSIX 0700 permissions are a no-op on NTFS
 - **Compact means folded**: on the filtered success path, stdout and stderr are folded into a
   single compact result on stdout. Per-stream separation is preserved on all raw, passthrough,
   and degraded paths.
+- **Codepage-proof**: when vtk's stdout/stderr are redirected (the agent-capture path), output
+  is written as BOM-less UTF-8 regardless of the console codepage, so Unicode in wrapped-tool
+  output (`✔`, `—`, `ü`) survives byte-faithfully even under Windows legacy codepages. Raw
+  passthrough copies the child's bytes stream-to-stream, untouched.
 
 ## Documentation
 

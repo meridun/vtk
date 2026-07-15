@@ -106,7 +106,10 @@ vtk show 2e3f --grep pat  →   just the matching lines
   (regex drop/keep/replace specs embedded at build, regex-fallback dispatch below exact-key
   matches) is planned — [#61](https://github.com/meridun/vtk/issues/61).
 - **Runner** — spawns the wrapped command, streams/captures output, propagates exit code and
-  signals. The only component with process-spawning responsibility.
+  signals. The only component with process-spawning responsibility. Captured child output is
+  decoded as UTF-8 (replacement-char fallback), and when vtk's own stdout/stderr are redirected
+  they are written as BOM-less UTF-8 regardless of the ambient console codepage; the raw
+  passthrough path copies child bytes stream-to-stream, untouched.
 - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte
   counts, filtered/passthrough, unfiltered reason, timestamp). Backs `vtk show`, `vtk gain`,
   and `vtk gaps` — one store, three queries.
