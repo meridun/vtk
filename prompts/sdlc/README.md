@@ -41,6 +41,11 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
       claim untouched, delete nothing, and go pick the next eligible item. Only the losing
       worker's own claim comment may be edited to note `superseded`.
 
+   Mechanical form: `pwsh scripts/sdlc-claim.ps1 <issue#> <run-id> <lane>` executes i–iii
+   exactly and prints `WON` or `LOST <winner-run-id>` (also `INELIGIBLE`/`ERROR`; on LOST it
+   marks its own claim comment `superseded` per iii). Use it when available; this prose
+   remains the normative spec.
+
    The lock is machine-owned and volatile; the dispatcher's reaper may strip it, and it
    re-checks the claim comment's run-id + timestamp immediately before doing so.
 2. **WORK** — per the lane file, with these constraints:
@@ -76,7 +81,8 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
      naming the conflicting paths. Ship always merges (the PR must be mergeable) and may resolve
      docs-only conflicts itself; code conflicts BOUNCE to build.
 3. **EMIT exactly one outcome** — ADVANCE, BOUNCE, or PARK (build also defines CONTINUE) — never
-   silent. **Every outcome removes `sdlc:wip`** on the way out. Leave the worktree in place
+   silent. **Every outcome removes `sdlc:wip`** on the way out
+   (`pwsh scripts/sdlc-release.ps1 <issue#>` — idempotent). Leave the worktree in place
    (dispatcher maintenance prunes worktrees for merged/dead branches).
 4. **STOP** — reply the lane's one-line result. One item per pass; never pick up a second.
    **Intake-only exception (#19):** the intake worker may loop up to **5 items** per pass —
