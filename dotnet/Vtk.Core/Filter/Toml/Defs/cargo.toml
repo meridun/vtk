@@ -1,0 +1,49 @@
+# cargo build/check/test/run/clippy — strip per-crate progress chatter, keep
+# warnings, errors, and the Finished summary. rtk's canonical "data not code"
+# example: a whole tool family covered by regex line-stripping, no filter class.
+#
+# exit_codes defaults to {0}: a clean build/warning run is exit 0 and gets
+# compacted; a compile error exits 101 and passes through raw (failures always
+# emit raw — Architecture.md invariant 1).
+
+name = "cargo"
+match_command = '^cargo (build|check|test|run|clippy)\b'
+
+strip_lines_matching = [
+  '^\s*(Compiling|Checking|Downloading|Downloaded|Updating|Installing|Fresh|Adding|Removing|Blocking|Locking) ',
+]
+
+[[tests.build_progress]]
+input = """
+   Compiling libc v0.2.169
+   Compiling proc-macro2 v1.0.92
+   Compiling unicode-ident v1.0.14
+    Checking myapp v0.1.0 (/home/u/myapp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.21s
+"""
+expected = """
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.21s
+"""
+
+[[tests.warning_kept]]
+input = """
+   Compiling myapp v0.1.0 (/home/u/myapp)
+warning: unused variable: `count`
+ --> src/main.rs:4:9
+  |
+4 |     let count = 0;
+  |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_count`
+  |
+warning: `myapp` (bin "myapp") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s
+"""
+expected = """
+warning: unused variable: `count`
+ --> src/main.rs:4:9
+  |
+4 |     let count = 0;
+  |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_count`
+  |
+warning: `myapp` (bin "myapp") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s
+"""

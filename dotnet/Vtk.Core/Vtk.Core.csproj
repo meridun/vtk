@@ -6,4 +6,13 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Tomlyn" Version="0.17.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Declarative TOML filter definitions, embedded at build (#40/#61). -->
+    <EmbeddedResource Include="Filter\Toml\Defs\*.toml" />
+  </ItemGroup>
+
 </Project>
