@@ -90,9 +90,10 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
   `dev` (the default/integration branch); PRs target `dev`; the human merges. `main` is the
   stable/release branch — it moves only by human-initiated PR from `dev`. **No worker ever
   branches from, checks out, commits to, or targets `main`.**
-- **Go conventions:** `go vet ./...` before any commit; `gofmt` formatting; table-driven
-  fixture tests for filters (fixture in → expected compact out, no process spawning in filter
-  unit tests).
+- **.NET conventions:** `dotnet build dotnet/Vtk.sln` clean (0 errors, no new warnings) and
+  `dotnet format whitespace dotnet/Vtk.sln --verify-no-changes` before any commit; table-driven
+  fixture tests (xunit `[Theory]`) for filters (fixture in → expected compact out, no process
+  spawning in filter unit tests).
 - **Invariants from [Architecture.md](../../docs/Architecture.md#key-invariants)** are
   acceptance criteria on every change: exit-code parity, filter-failure degrades to passthrough,
   metadata never contains output content, filters fixture-testable.

@@ -38,7 +38,9 @@ Decide the sub-case first (idempotency):
     function, raw output in → compact out; new fixtures captured from real command output
     (scrub anything sensitive before committing a fixture).
   - **Tests:** table-driven fixture tests for everything changed; run targeted
-    (`go test ./internal/<pkg>/...`) until green; `go vet ./...` and `gofmt -l .` clean.
+    (`dotnet test dotnet/Vtk.Tests --filter "FullyQualifiedName~Vtk.Tests.<Area>"`) until green;
+    `dotnet build dotnet/Vtk.sln` clean (0 errors, no new warnings) and
+    `dotnet format whitespace dotnet/Vtk.sln --verify-no-changes` clean.
   - **Invariant check before advancing:** does the change preserve exit-code parity, degrade
     filter failures to passthrough, and keep output content out of gap/stats metadata? If the AC
     itself conflicts with an invariant, that's a BOUNCE to intake (decision needed), not a
@@ -80,7 +82,7 @@ One-line result:
   rewind comment, post a reconciliation note (what's already implemented + evidence, what
   remains), and build only the gap — existing work is presumed good unless the comment or your
   own check says otherwise.
-- **Targeted tests only.** Full suite, race detector, and the real-run smoke belong to verify.
+- **Targeted tests only.** Full suite, concurrency exercise, and the real-run smoke belong to verify.
 - **Fixtures are the test currency.** Every filter change ships with a fixture pair; captured
   real output beats hand-written approximations.
 - Honors the universal worker loop in [`README.md`](README.md).

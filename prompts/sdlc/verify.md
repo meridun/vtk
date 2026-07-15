@@ -2,7 +2,7 @@
 
 Stage: `stage:verify` → `stage:audit`
 
-The gate between "code written" and "audited": full suite, race detector, and a **real-run
+The gate between "code written" and "audited": full suite, concurrency exercise, and a **real-run
 smoke** — build the binary and exercise the change through actual wrapped commands. Build proved
 targeted wiring; verify proves the tool behaves. Canonical BOUNCE-back-to-build.
 
@@ -28,17 +28,21 @@ Idempotency first: a green verify report for the **current branch HEAD** (no new
   - **No-branch fallback** (built outside the pipeline, already on `dev`): validate on `dev`;
     identify the introducing commits (`git log -S`/`--grep`) and name them in your report so
     audit can isolate the same diff. Any new test then has no branch home — flag it for ship.
-- **Full suite:** `go vet ./...`, `go test ./...`, and `go test -race ./...` (the spool's
-  atomic-rename concurrency claims make the race detector non-optional).
+- **Full suite:** `dotnet build dotnet/Vtk.sln` clean (0 errors, no new warnings),
+  `dotnet format whitespace dotnet/Vtk.sln --verify-no-changes`, and `dotnet test dotnet/Vtk.sln`
+  (.NET has no race detector; the spool's atomic-rename concurrency claims make the smoke
+  suite's concurrent-invocation tests non-optional instead — run them, and extend them whenever
+  the change touches the spool).
 - **Real-run smoke against the ACs** — green unit tests alone are never an ADVANCE:
-  - `go build -o vtk.exe ./cmd/vtk`, then exercise each AC through the real binary with real
-    commands (e.g. for a git filter: run `vtk git status` in a dirty scratch repo, compare
-    against raw `git status`; force a failing command and assert **exit-code parity**; run the
-    same vtk command twice concurrently if the change touches the spool).
-  - Prefer scripting the smoke as a repeatable test under `test/smoke/` (Go test with
-    `//go:build smoke` tag or a script), committed to the **same feat branch** — repeatable and
-    schedule-friendly beats ad-hoc. If the repo has a smoke harness already, extend it; don't
-    fork a second pattern.
+  - `dotnet publish dotnet/Vtk.Cli -c Release -o dotnet/Vtk.Cli/bin/smoke`, then exercise each
+    AC through the real binary with real commands (e.g. for a git filter: run `vtk git status`
+    in a dirty scratch repo, compare against raw `git status`; force a failing command and
+    assert **exit-code parity**; run the same vtk command twice concurrently if the change
+    touches the spool).
+  - Prefer scripting the smoke as a repeatable test in the `dotnet/Vtk.Tests/Smoke/` xunit
+    collection (runs against the published binary; `VTK_SMOKE_BIN` overrides the default path),
+    committed to the **same feat branch** — repeatable and schedule-friendly beats ad-hoc. If
+    the repo has a smoke harness already, extend it; don't fork a second pattern.
   - Windows is the primary verify environment; note any AC whose behavior is OS-dependent as
     unverified-on-unix in the report rather than skipping silently.
 - **Check the diff against build's plan comment** — the plan is the spec; an unexplained
@@ -46,7 +50,7 @@ Idempotency first: a green verify report for the **current branch HEAD** (no new
 - Commit any new tests to the same feat branch (in the worktree) and push.
 
 ### 3. EMIT exactly one outcome
-- **ADVANCE** — suite + race green, every AC exercised through the real binary. Swap
+- **ADVANCE** — suite + concurrency exercise green, every AC exercised through the real binary. Swap
   `stage:verify` → `stage:audit`, remove `sdlc:wip`. Comment the verify report: suites run,
   ACs walked and how, exit-code parity evidence, what audit should aim at.
 - **BOUNCE → `stage:build`** — any test red, any AC unmet, any invariant violated (exit-code
@@ -64,7 +68,8 @@ One-line result: `VERIFY: <#issue> → ADVANCE(audit)|BOUNCE(build)|PARK — <re
 ## Notes
 - **Exit-code parity is the sacred AC.** Test it on success, failure, and command-not-found
   paths for anything touching the runner.
-- **Race detector always** — the spool is concurrent by design.
+- **Concurrency exercise always** — the spool is concurrent by design; with no .NET race
+  detector, the smoke suite's concurrent-invocation tests are the standing substitute.
 - **Idempotent.** A green report for current HEAD = done; any new commit invalidates it. An
   item rewound here by a human with a still-valid green report → re-confirm cheaply and
   ADVANCE, unless their rewind comment names a reason to distrust it — then re-verify that
