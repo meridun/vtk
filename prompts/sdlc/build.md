@@ -82,7 +82,7 @@ One-line result:
   rewind comment, post a reconciliation note (what's already implemented + evidence, what
   remains), and build only the gap — existing work is presumed good unless the comment or your
   own check says otherwise.
-- **Targeted tests only.** Full suite, race detector, and the real-run smoke belong to verify.
+- **Targeted tests only.** Full suite, concurrency exercise, and the real-run smoke belong to verify.
 - **Fixtures are the test currency.** Every filter change ships with a fixture pair; captured
   real output beats hand-written approximations.
 - Honors the universal worker loop in [`README.md`](README.md).
