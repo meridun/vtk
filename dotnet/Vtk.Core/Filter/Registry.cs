@@ -2,6 +2,9 @@
 // Filters take raw captured output and return a compacted form; they never
 // spawn processes or touch the filesystem (docs/Architecture.md invariant 4).
 // Port of internal/filter/filter.go.
+using System.Text.RegularExpressions;
+using Vtk.Core.Filter.Toml;
+
 namespace Vtk.Core.Filter;
 
 /// <summary>A pure filter: raw captured output in, compacted output out. Returning the input unchanged means "nothing to elide".</summary>
@@ -24,10 +27,16 @@ public sealed class Entry
     public bool Filters(int code) => ExitCodes.Contains(code);
 }
 
-/// <summary>Maps "cmd" or "cmd subcommand" keys to filter entries.</summary>
+/// <summary>
+/// Maps "cmd" or "cmd subcommand" keys to filter entries, with a
+/// regex-matched fallback list for declarative TOML filters. Regex entries
+/// are consulted only after the exact-key map misses, so the hand-written
+/// families keep precedence and their behavior is unchanged (#40/#61).
+/// </summary>
 public sealed class Registry
 {
     private readonly Dictionary<string, Entry> _entries = new();
+    private readonly List<(Regex Re, Entry Entry)> _regexes = new();
 
     /// <summary>Binds a key ("git status", "ls", ...) to a filter that runs only on a clean (exit 0) child.</summary>
     public void Register(string key, FilterFunc fn) => RegisterCodes(key, fn, 0);
@@ -40,9 +49,23 @@ public sealed class Registry
     }
 
     /// <summary>
+    /// Binds a regex (matched against the full command string, argv joined by
+    /// spaces) to a filter running for the given child exit codes. No codes
+    /// means exit 0 only. Regex entries are the declarative-filter path and
+    /// are checked only after the exact-key map misses.
+    /// </summary>
+    public void RegisterRegex(Regex re, FilterFunc fn, params int[] codes)
+    {
+        if (codes.Length == 0) codes = new[] { 0 };
+        _regexes.Add((re, new Entry { Fn = fn, ExitCodes = new HashSet<int>(codes) }));
+    }
+
+    /// <summary>
     /// Matches argv against the registry: "argv[0] argv[1]" first, then bare
-    /// "argv[0]". Invocations whose second token is a flag (e.g.
-    /// `git -C dir status`) intentionally miss and fall through to
+    /// "argv[0]", then (only if both miss) the regex fallback list against
+    /// the full command string. Invocations whose second token is a flag
+    /// (e.g. `git -C dir status`) miss the exact keys; a regex filter may
+    /// still claim them if its pattern matches. A total miss falls through to
     /// passthrough — the gap log shows whether that pattern is worth handling.
     /// </summary>
     public bool TryLookup(IReadOnlyList<string> argv, out Entry entry)
@@ -58,6 +81,15 @@ public sealed class Registry
         {
             entry = byName;
             return true;
+        }
+        var cmd = string.Join(" ", argv);
+        foreach (var (re, byRegex) in _regexes)
+        {
+            if (re.IsMatch(cmd))
+            {
+                entry = byRegex;
+                return true;
+            }
         }
         return false;
     }
@@ -104,6 +136,23 @@ public sealed class Registry
         r.Register("dbmate down", Dbmate.Migrate);
         r.Register("dbmate migrate", Dbmate.Migrate);
         r.Register("dbmate rollback", Dbmate.Migrate);
+        // Declarative TOML filters (embedded at build) register on the regex
+        // path, so they coexist with the hand-written families above without
+        // shadowing any exact key. The embedded defs are
+        // parse/validate/fixture-checked by the TomlFilter tests; a load
+        // error here would mean a corrupt binary, so skip them and keep the
+        // hand-written families working rather than fail the whole registry.
+        try
+        {
+            foreach (var d in TomlFilter.Load())
+            {
+                r.RegisterRegex(d.Match, d.Fn, d.ExitCodes);
+            }
+        }
+        catch
+        {
+            // degrade: exact-key families stay available
+        }
         return r;
     }
 }

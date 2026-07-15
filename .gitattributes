@@ -5,3 +5,6 @@ go.sum text eol=lf
 # Filter golden fixtures are byte-exact captured output; never eol-convert
 # them, or fresh Windows checkouts materialize CRLF and the parity tests fail.
 dotnet/Vtk.Tests/Filter/testdata/** -text
+# TOML filter defs embed inline fixtures (same byte-exactness concern) and are
+# compiled into the binary as embedded resources: keep them LF everywhere.
+dotnet/Vtk.Core/Filter/Toml/Defs/*.toml text eol=lf
