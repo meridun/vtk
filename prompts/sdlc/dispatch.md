@@ -53,7 +53,7 @@ else** — no lock, no maintenance, no `gh` writes anywhere:
 
 **Defense in depth (assume the root gate could be bypassed):** every `gh` command in this prompt and
 in the worker prompts targets vtk explicitly — pass `-R meridun/vtk` on all of them (list, view,
-comment, edit, label, delete) — and every `git`/`go` command runs against the vtk tree explicitly
+comment, edit, label, delete) — and every `git`/`dotnet` command runs against the vtk tree explicitly
 (`cd C:\Claude\vtk &&` or `git -C C:\Claude\vtk`). Never rely on the ambient cwd for repo selection.
 
 ### Step -1 — Concurrency model + machine maintenance lock
