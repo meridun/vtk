@@ -19,8 +19,15 @@
       conflicting flags. The dispatcher performs all GitHub writes
       (verify-before-write reaps, conflict comments/label swaps).
 
-    Exit codes: 0 = digest emitted (individual operations may have been
-    skipped; see .notes), 2 = root gate failed (nothing was touched).
+    A third mode, -AppendTokens (issue #79), appends per-lane-pass token cost
+    rows to the machine-local telemetry CSV ($ToolsDir\vtk-sdlc\tokens.csv)
+    and exits: no lock, no maintenance, no GitHub reads. The dispatcher calls
+    it at digest time, once per cycle, with one row per lane worker spawned.
+    The CSV is machine-local and never committed or uploaded.
+
+    Exit codes: 0 = digest emitted / rows appended (individual operations may
+    have been skipped; see .notes), 2 = root gate failed (nothing was touched),
+    4 = -AppendTokens payload invalid (CSV untouched).
 
 .PARAMETER RunId
     Run identifier for lock ownership. Minted (dispatch-<yyyymmdd-hhmm>-<4 hex>)
@@ -29,11 +36,20 @@
 .PARAMETER DataOnly
     Skip the machine lock and all local maintenance; emit only the GitHub data
     sections (issues, prs). Read-only against both git and GitHub.
+
+.PARAMETER AppendTokens
+    Token-append mode. A JSON array (single object also accepted) of rows,
+    each {lane, issue, outcome, tokens, toolUses, durationMs} — lane and
+    outcome required, the rest nullable (issue null for an IDLE pass; unknown
+    metrics stay null, never guessed). The script stamps the UTC timestamp
+    and RunId and appends one CSV row per element to
+    $ToolsDir\vtk-sdlc\tokens.csv, creating directory and header when missing.
 #>
 [CmdletBinding()]
 param(
     [string]$RunId,
     [switch]$DataOnly,
+    [string]$AppendTokens,
     [string]$RepoRoot = 'C:\Claude\vtk',
     [string]$Repo = 'meridun/vtk',
     [string]$ToolsDir = (Join-Path $env:USERPROFILE 'tools')
@@ -104,6 +120,70 @@ if ([string]::IsNullOrWhiteSpace($RunId)) {
     $RunId = 'dispatch-{0:yyyyMMdd-HHmm}-{1}' -f [DateTimeOffset]::UtcNow, (-join ((1..4) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) }))
 }
 $now = [DateTimeOffset]::UtcNow
+
+# --------------------------------------------------------------------------
+# Token-append mode (issue #79): append one CSV row per lane pass to
+# $ToolsDir\vtk-sdlc\tokens.csv and exit. Machine-local telemetry — never
+# committed, never uploaded (#34 posture). No lock, no maintenance, no GitHub
+# reads; the root gate above still applies. Header columns are the issue #79
+# spec verbatim.
+# --------------------------------------------------------------------------
+if ($PSBoundParameters.ContainsKey('AppendTokens')) {
+    $tokensCsv = Join-Path $ToolsDir 'vtk-sdlc\tokens.csv'
+
+    function ConvertTo-CsvField($Value) {
+        if ($null -eq $Value) { return '' }
+        $s = "$Value"
+        if ($s -match '[",\r\n]') { return '"' + ($s -replace '"', '""') + '"' }
+        return $s
+    }
+    function Get-RowValue($Row, [string]$Name) {
+        $p = $Row.PSObject.Properties[$Name]
+        if ($null -ne $p) { return $p.Value } else { return $null }
+    }
+
+    try {
+        $rows = ConvertFrom-Json -InputObject $AppendTokens -NoEnumerate -ErrorAction Stop
+        if ($rows -isnot [array]) { $rows = @($rows) }
+        if ($rows.Count -eq 0) { throw 'empty row array' }
+        foreach ($row in $rows) {
+            foreach ($field in @('lane', 'outcome')) {
+                if ([string]::IsNullOrWhiteSpace("$(Get-RowValue $row $field)")) {
+                    throw "row missing required field '$field'"
+                }
+            }
+        }
+    } catch {
+        [ordered]@{
+            runId    = $RunId
+            tokensCsv = $tokensCsv
+            appended = 0
+            error    = "invalid -AppendTokens payload: $($_.Exception.Message)"
+        } | ConvertTo-Json -Depth 4
+        exit 4
+    }
+
+    $null = New-Item -ItemType Directory -Path (Split-Path $tokensCsv) -Force
+    if (-not (Test-Path $tokensCsv)) {
+        Set-Content -Path $tokensCsv -Value 'timestamp,run-id,lane,issue#,outcome,tokens,tool_uses,duration_ms' -Encoding utf8
+    }
+    $stamp = '{0:o}' -f $now
+    $lines = @(foreach ($row in $rows) {
+            @(
+                $stamp
+                (ConvertTo-CsvField $RunId)
+                (ConvertTo-CsvField (Get-RowValue $row 'lane'))
+                (ConvertTo-CsvField (Get-RowValue $row 'issue'))
+                (ConvertTo-CsvField (Get-RowValue $row 'outcome'))
+                (ConvertTo-CsvField (Get-RowValue $row 'tokens'))
+                (ConvertTo-CsvField (Get-RowValue $row 'toolUses'))
+                (ConvertTo-CsvField (Get-RowValue $row 'durationMs'))
+            ) -join ','
+        })
+    Add-Content -Path $tokensCsv -Value $lines -Encoding utf8
+    [ordered]@{ runId = $RunId; tokensCsv = $tokensCsv; appended = $rows.Count } | ConvertTo-Json -Depth 4
+    exit 0
+}
 
 # --------------------------------------------------------------------------
 # Machine maintenance lock (dispatch.md Step -1). Directory-as-lock inside

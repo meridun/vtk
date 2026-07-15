@@ -87,7 +87,8 @@ merged-branch prune with the three-way squash-merge safety check. It never stash
 force-checkouts, rebases, or discards anything; contended or refused operations are skipped
 and surfaced in `notes`.
 
-Run it ONCE per cycle:
+Run it ONCE per cycle in maintenance mode (the token-append invocation under Digest below is
+a separate mode, not a second maintenance pass):
 
 ```
 pwsh -NoProfile -File C:\Claude\vtk\scripts\sdlc-maint.ps1 -RunId <run-id>
@@ -182,3 +183,18 @@ was missing/malformed and required prose fallback); queue depths after the cycle
 and holds by issue number; token cost per lane plus cycle total. The machine lock was already
 released by the maintenance script at the end of its maintenance phase — nothing is held after
 the digest.
+
+**Token CSV (#79):** persist the per-lane costs — after assembling the digest, invoke the
+maintenance script once in token-append mode:
+
+```
+pwsh -NoProfile -File C:\Claude\vtk\scripts\sdlc-maint.ps1 -RunId <run-id> -AppendTokens '<json array>'
+```
+
+One array element per lane worker spawned this cycle — idle passes included, they cost tokens
+too: `{"lane": "build", "issue": 79, "outcome": "ADVANCE", "tokens": 183000, "toolUses": 42,
+"durationMs": 614000}`. `issue` is null for IDLE; any metric you cannot observe stays null,
+never estimated. The script stamps the timestamp and run-id and appends to
+`~/tools/vtk-sdlc/tokens.csv` (machine-local telemetry, untracked, never uploaded). Exit 4 =
+payload rejected, CSV untouched — record it in the digest and move on; never retry-loop. No
+workers spawned → skip the call.
