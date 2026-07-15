@@ -21,7 +21,7 @@ public sealed class SmokeHarness : IDisposable
     public SmokeHarness()
     {
         Bin = Environment.GetEnvironmentVariable("VTK_SMOKE_BIN")
-            ?? Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Vtk.Cli", "bin", "smoke", "Vtk.Cli.exe");
+            ?? Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Vtk.Cli", "bin", "smoke", "vtk.exe");
         Bin = Path.GetFullPath(Bin);
         if (!File.Exists(Bin))
             throw new FileNotFoundException($"smoke binary not found: {Bin} (run `dotnet publish Vtk.Cli -c Release -o Vtk.Cli/bin/smoke` first, or set VTK_SMOKE_BIN)");
@@ -112,6 +112,90 @@ public sealed class SmokeHarness : IDisposable
 
     private static string Quote(string s) => s.Contains(' ') ? $"\"{s}\"" : s;
 
+    private string? _fakeBin;
+
+    /// <summary>
+    /// A scratch bin dir of fake external tools (eslint, gh, mocha, npx, npm,
+    /// dbmate, ls, grep, find), lazily materialized as .cmd shims around the
+    /// vtk-faketool binary the test project references. Prepended to the
+    /// child PATH by <see cref="RunFaked"/>, this is the C# analog of the Go
+    /// smoke suite's per-tool fakes compiled into a temp dir — vtk resolves
+    /// them through its normal PATH + PATHEXT lookup (.cmd via cmd.exe), so
+    /// the whole capture/filter/spool path is exercised end to end.
+    /// </summary>
+    public string FakeBinDir
+    {
+        get
+        {
+            if (_fakeBin != null) return _fakeBin;
+            var dll = Path.Combine(AppContext.BaseDirectory, "vtk-faketool.dll");
+            if (!File.Exists(dll))
+                throw new FileNotFoundException($"vtk-faketool.dll not found beside the tests: {dll}");
+            var dir = MakeTempDir();
+            foreach (var name in new[] { "eslint", "gh", "mocha", "npx", "npm", "dbmate", "ls", "grep", "find" })
+            {
+                File.WriteAllText(Path.Combine(dir, name + ".cmd"),
+                    $"@dotnet \"{dll}\" --as {name} %*\r\n");
+            }
+            _fakeBin = dir;
+            return dir;
+        }
+    }
+
+    /// <summary>
+    /// Runs the vtk binary with <see cref="FakeBinDir"/> first on PATH so
+    /// argv[0] resolves to a fake tool, plus optional VTK_FAKE_* env
+    /// overrides. Returns stdout, stderr, and exit code.
+    /// </summary>
+    public (string stdout, string stderr, int code) RunFaked(string dir, IDictionary<string, string>? env, params string[] args)
+    {
+        var psi = BasePsi(dir, args);
+        psi.EnvironmentVariables["PATH"] = FakeBinDir + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
+        if (env != null)
+            foreach (var (k, v) in env)
+                psi.EnvironmentVariables[k] = v;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
+        psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
+        using var proc = Process.Start(psi)!;
+        var stdout = proc.StandardOutput.ReadToEnd();
+        var stderr = proc.StandardError.ReadToEnd();
+        proc.WaitForExit();
+        return (stdout, stderr, proc.ExitCode);
+    }
+
+    /// <summary>
+    /// Runs a fake tool directly (no vtk) — the parity/savings baseline the
+    /// Go smoke's rawTool/rawEslint/rawGh helpers established. Returns
+    /// combined stdout+stderr and the exit code.
+    /// </summary>
+    public (string combined, int code) RunRawTool(IDictionary<string, string>? env, string tool, params string[] args)
+    {
+        var dll = Path.Combine(AppContext.BaseDirectory, "vtk-faketool.dll");
+        var psi = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
+        };
+        psi.ArgumentList.Add(dll);
+        psi.ArgumentList.Add("--as");
+        psi.ArgumentList.Add(tool);
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        if (env != null)
+            foreach (var (k, v) in env)
+                psi.EnvironmentVariables[k] = v;
+        using var proc = Process.Start(psi)!;
+        var stdout = proc.StandardOutput.ReadToEnd();
+        var stderr = proc.StandardError.ReadToEnd();
+        proc.WaitForExit();
+        return (stdout + stderr, proc.ExitCode);
+    }
+
     private ProcessStartInfo BasePsi(string dir, string[] args)
     {
         var psi = new ProcessStartInfo
@@ -138,8 +222,9 @@ public sealed class SmokeHarness : IDisposable
 
     public void Dispose()
     {
-        foreach (var d in new[] { Home, Repo, Other })
+        foreach (var d in new[] { Home, Repo, Other, _fakeBin })
         {
+            if (d == null) continue;
             try { Directory.Delete(d, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
