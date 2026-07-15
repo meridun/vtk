@@ -283,3 +283,137 @@ public class GainRollupsSmokeTests : IDisposable
         Assert.Equal("", stdout);
     }
 }
+
+/// <summary>
+/// Real-run smoke for the #61 ports: the declarative TOML filter engine (#40)
+/// exercised end-to-end via the embedded cargo def and a stub cargo.cmd on
+/// PATH, and the `vtk gaps --file-issues` surface (#34) on its hermetic
+/// paths (empty candidate set / arg errors — nothing here shells to gh).
+/// </summary>
+[Collection("Smoke")]
+public class TomlGapsSmokeTests : IDisposable
+{
+    private readonly SmokeHarness _h = new();
+    private readonly string _stubDir;
+
+    public TomlGapsSmokeTests()
+    {
+        // A stub cargo.cmd that replays canned cargo output: progress chatter
+        // plus a Finished line on success (exit 0), compile errors on --fail
+        // (exit 101). The chatter is large enough that stripping it clears
+        // the #52 savings bar, so the filtered run spools and emits OK <id>.
+        _stubDir = Path.Combine(Path.GetTempPath(), "vtk-smoke-stub-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(_stubDir);
+
+        var okLines = new List<string> { "   Compiling libc v0.2.169" };
+        for (var i = 0; i < 30; i++) okLines.Add($"   Compiling smoke-crate-{i} v0.1.{i}");
+        okLines.Add("    Checking myapp v0.1.0 (/home/u/myapp)");
+        okLines.Add("    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.21s");
+        File.WriteAllText(Path.Combine(_stubDir, "cargo-ok.txt"), string.Join("\r\n", okLines) + "\r\n");
+
+        File.WriteAllText(Path.Combine(_stubDir, "cargo-fail.txt"), string.Join("\r\n", new[]
+        {
+            "   Compiling myapp v0.1.0 (/home/u/myapp)",
+            "error[E0425]: cannot find value `x` in this scope",
+            "error: could not compile `myapp` (bin \"myapp\") due to 1 previous error",
+        }) + "\r\n");
+
+        File.WriteAllText(Path.Combine(_stubDir, "cargo.cmd"),
+            "@echo off\r\n" +
+            "if \"%2\"==\"--fail\" (\r\n" +
+            "  type \"%~dp0cargo-fail.txt\"\r\n" +
+            "  exit /b 101\r\n" +
+            ")\r\n" +
+            "type \"%~dp0cargo-ok.txt\"\r\n" +
+            "exit /b 0\r\n");
+    }
+
+    public void Dispose()
+    {
+        _h.Dispose();
+        try { Directory.Delete(_stubDir, recursive: true); } catch { /* best-effort cleanup */ }
+    }
+
+    private (string stdout, string stderr, int code) RunWithStub(params string[] args) =>
+        _h.RunEnv(_h.Repo, new Dictionary<string, string>
+        {
+            ["PATH"] = _stubDir + Path.PathSeparator + (Environment.GetEnvironmentVariable("PATH") ?? ""),
+        }, args);
+
+    [Fact]
+    public void CargoTomlFilterCompactsCleanBuild()
+    {
+        // Clean build (exit 0): the embedded cargo TOML def strips progress
+        // chatter via the registry's regex fallback path, keeps the Finished
+        // summary, spools the raw, and emits OK <id>.
+        var (stdout, _, code) = RunWithStub("cargo", "build");
+        Assert.Equal(0, code);
+        Assert.Contains("Finished `dev` profile", stdout);
+        Assert.DoesNotContain("Compiling", stdout);
+        var id = SmokeHarness.MustOkId(stdout);
+
+        // show recovers the raw output with provenance.
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("# cmd: cargo build", shown);
+        Assert.Contains("Compiling libc v0.2.169", shown);
+        Assert.Contains("Compiling smoke-crate-29", shown);
+
+        // A filtered family is coverage, not a gap.
+        var (gapsOut, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("cargo", gapsOut);
+    }
+
+    [Fact]
+    public void CargoFailurePassesThroughRawWithExitParity()
+    {
+        // Compile error (exit 101): 101 is outside the def's exit_codes {0},
+        // so the output passes through raw — progress chatter intact, no OK —
+        // and vtk returns the child's own exit code (invariant 1).
+        var (stdout, stderr, code) = RunWithStub("cargo", "build", "--fail");
+        Assert.Equal(101, code);
+        var combined = stdout + stderr;
+        Assert.Contains("Compiling myapp v0.1.0", combined);
+        Assert.Contains("error: could not compile `myapp`", combined);
+        Assert.DoesNotMatch(@"(?m)^OK [0-9a-f]{4}$", stdout);
+    }
+
+    [Fact]
+    public void GapsFileIssuesDryRunEmptyStoreFilesNothing()
+    {
+        // No gap families at all: --file-issues reports the empty candidate
+        // set and exits 0 before ever consulting gh (dry-run is the default).
+        var (stdout, _, code) = _h.Run(_h.Repo, "gaps", "--file-issues");
+        Assert.Equal(0, code);
+        Assert.Contains("no gap families over threshold", stdout);
+    }
+
+    [Fact]
+    public void GapsFileIssuesFloorsClampWithStderrNotes()
+    {
+        // Below-floor thresholds clamp up (anti-spam) with a note per flag,
+        // and the clamped values are what the report line echoes back.
+        var (stdout, stderr, code) = _h.Run(_h.Repo, "gaps", "--file-issues", "--min-bytes", "1", "--min-calls", "1");
+        Assert.Equal(0, code);
+        Assert.Contains("--min-bytes 1 below floor; using 4096", stderr);
+        Assert.Contains("--min-calls 1 below floor; using 2", stderr);
+        Assert.Contains("no gap families over threshold (min-bytes=4096, min-calls=2)", stdout);
+    }
+
+    [Fact]
+    public void GapsArgErrorsExit2()
+    {
+        var (_, err1, code1) = _h.Run(_h.Repo, "gaps", "--bogus");
+        Assert.Equal(2, code1);
+        Assert.Contains("unexpected argument", err1);
+
+        var (_, err2, code2) = _h.Run(_h.Repo, "gaps", "--yes");
+        Assert.Equal(2, code2);
+        Assert.Contains("require --file-issues", err2);
+
+        var (_, err3, code3) = _h.Run(_h.Repo, "gaps", "--file-issues", "--min-bytes");
+        Assert.Equal(2, code3);
+        Assert.Contains("--min-bytes requires a value", err3);
+    }
+}

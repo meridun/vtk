@@ -85,6 +85,23 @@ public sealed class SmokeHarness : IDisposable
     }
 
     /// <summary>
+    /// Like Run but with extra/overriding environment variables on the child
+    /// (e.g. prepending a stub directory to PATH so vtk resolves a fake tool).
+    /// </summary>
+    public (string stdout, string stderr, int code) RunEnv(string dir, IReadOnlyDictionary<string, string> env, params string[] args)
+    {
+        var psi = BasePsi(dir, args);
+        foreach (var (k, v) in env) psi.EnvironmentVariables[k] = v;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        using var proc = Process.Start(psi)!;
+        var stdout = proc.StandardOutput.ReadToEnd();
+        var stderr = proc.StandardError.ReadToEnd();
+        proc.WaitForExit();
+        return (stdout, stderr, proc.ExitCode);
+    }
+
+    /// <summary>
     /// Like Run but sends the child's stdout to the OS null device (NUL on
     /// Windows) — a char device, not a pipe. This is the shape that must not
     /// be mistaken for an interactive TTY.
