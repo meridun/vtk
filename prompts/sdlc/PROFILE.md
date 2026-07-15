@@ -13,9 +13,13 @@ Bindings per the agentic-sdlc spec (`agentic-sdlc/docs/Composability.md`).
   deconflict via per-issue claim comments, issue-scoped worktrees (`C:\Claude\vtk-wt`), a
   per-machine maintenance lock (`.git/sdlc-maint.lock`), and idempotent GitHub writes.
 - **VP5 quality bars:**
-  - build: `go build -o vtk.exe ./cmd/vtk` · targeted: `go test ./internal/<pkg>/...`
-  - full suite: `go test ./...` (+ `go test -race ./...`, needs `CGO_ENABLED=1`/MinGW gcc)
-  - smoke: `test/smoke/` · lint: `go vet ./...`
+  - build: `dotnet build dotnet/Vtk.sln` (0 errors, no new warnings) · targeted:
+    `dotnet test dotnet/Vtk.Tests --filter "FullyQualifiedName~Vtk.Tests.<Area>"`
+  - full suite: `dotnet test dotnet/Vtk.sln` (no race-detector equivalent in .NET — the spool's
+    concurrency claims are exercised by the smoke suite's concurrent-invocation tests)
+  - smoke: `dotnet/Vtk.Tests/Smoke/` xunit collection against the published binary
+    (`dotnet publish dotnet/Vtk.Cli -c Release -o dotnet/Vtk.Cli/bin/smoke`; `VTK_SMOKE_BIN`
+    overrides) · format: `dotnet format whitespace dotnet/Vtk.sln --verify-no-changes`
   - decision record: GitHub issues registry (no ADRs).
 - **Deterministic core:** none yet (label rituals in-prompt).
 - **Known deviations:** none declared.
