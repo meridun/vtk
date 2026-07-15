@@ -172,13 +172,16 @@ $issueSnapshot = @($issueSnapshot)
 
 $laneDepths = [ordered]@{}
 foreach ($lane in @('intake', 'queued', 'build', 'verify', 'audit', 'ship')) {
-    $laneDepths[$lane] = @($issueSnapshot | Where-Object { $_.labels.name -contains "stage:$lane" }).Count
+    # @(... | ForEach-Object name): StrictMode-safe when labels = @() (unlabeled
+    # issue) — bare `$_.labels.name` member enumeration throws and would silently
+    # drop the issue from the snapshot.
+    $laneDepths[$lane] = @($issueSnapshot | Where-Object { @($_.labels | ForEach-Object name) -contains "stage:$lane" }).Count
 }
-$needsHuman = @($issueSnapshot | Where-Object { $_.labels.name -contains 'sdlc:needs-human' } | ForEach-Object { $_.number })
-$holds = @($issueSnapshot | Where-Object { $_.labels.name -contains 'sdlc:hold' } | ForEach-Object { $_.number })
+$needsHuman = @($issueSnapshot | Where-Object { @($_.labels | ForEach-Object name) -contains 'sdlc:needs-human' } | ForEach-Object { $_.number })
+$holds = @($issueSnapshot | Where-Object { @($_.labels | ForEach-Object name) -contains 'sdlc:hold' } | ForEach-Object { $_.number })
 
 $wip = @()
-foreach ($issue in @($issueSnapshot | Where-Object { $_.labels.name -contains 'sdlc:wip' })) {
+foreach ($issue in @($issueSnapshot | Where-Object { @($_.labels | ForEach-Object name) -contains 'sdlc:wip' })) {
     $n = $issue.number
     $entry = [ordered]@{
         number         = $n
@@ -464,7 +467,7 @@ if ($machineLock.acquired) {
     machineLock = $machineLock
     issues      = [ordered]@{
         snapshot   = @($issueSnapshot | ForEach-Object {
-                [ordered]@{ number = $_.number; title = $_.title; labels = @($_.labels.name); createdAt = $_.createdAt; updatedAt = $_.updatedAt }
+                [ordered]@{ number = $_.number; title = $_.title; labels = @($_.labels | ForEach-Object name); createdAt = $_.createdAt; updatedAt = $_.updatedAt }
             })
         laneDepths = $laneDepths
         wip        = $wip
