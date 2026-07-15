@@ -14,9 +14,12 @@ The TOML long-tail and the subsystems are fresh parity gaps tracked in #41 and #
 registered in `Registry.cs`, with fixture-based tests (raw in → expected compact out + savings
 assertion) under `dotnet/Vtk.Tests/Filter/`. Captured fixtures under
 `dotnet/Vtk.Tests/Filter/testdata/` are exempt from git eol conversion (`.gitattributes -text`)
-so golden files stay byte-exact on every platform. A second, cheaper path — a ~20-line declarative
-TOML spec for families that are just *drop/keep/replace by regex* — is planned
-([#61](https://github.com/meridun/vtk/issues/61)).
+so golden files stay byte-exact on every platform. A second, cheaper path ships for families that
+are just *drop/keep/replace by regex* ([#61](https://github.com/meridun/vtk/issues/61)): a ~20-line
+declarative TOML spec under `dotnet/Vtk.Core/Filter/Toml/Defs/` (authoring guide in
+`Defs/README.md`), embedded at build. Defs carry their own inline `[[tests.*]]` fixtures, replayed
+by the test suite, and dispatch by regex only after both exact-key registry probes miss — a
+hand-written filter always wins its command.
 
 ## rtk parity targets
 
@@ -33,17 +36,17 @@ TOML spec for families that are just *drop/keep/replace by regex* — is planned
 | Files/search (rest) | `read`, `tree` | 60–75% | planned — both now shipped/validated upstream (rtk-ai/rtk) |
 | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned — `err`/`log`/`json`/`env` now shipped/validated upstream (rtk-ai/rtk); `summary`/`diff` planned |
 | Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned — `docker ps/images/logs` + `curl` now shipped/validated upstream (rtk-ai/rtk) |
-| Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. Dollarized rollups (#58): the summary gains an *approximate* $ line (bytes/4 token heuristic, checked-in per-model input price table updated by PR — no network), plus combinable `--daily` (per-UTC-day table with ~tokens/~USD), `--graph` (bar chart of daily saved bytes, last 30 logged days), `--history` (last 10 invocations); unknown flag → usage + exit 2 like `vtk show`. `gaps --file-issues` (turns recurring gap families into `stage:intake` `Filter: <family>` issues via `gh`, dry-run by default) is planned — [#61](https://github.com/meridun/vtk/issues/61) |
+| Meta | `show`, `discover`-equivalent (`gaps`), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. Dollarized rollups (#58): the summary gains an *approximate* $ line (bytes/4 token heuristic, checked-in per-model input price table updated by PR — no network), plus combinable `--daily` (per-UTC-day table with ~tokens/~USD), `--graph` (bar chart of daily saved bytes, last 30 logged days), `--history` (last 10 invocations); unknown flag → usage + exit 2 like `vtk show`. `gaps --file-issues` shipped ([#61](https://github.com/meridun/vtk/issues/61), porting #34): turns recurring gap families into `stage:intake` `Filter: <family>` issues via `gh` — dry-run by default (`--yes` to create), thresholds `--min-bytes`/`--min-calls` (defaults 50 KiB / 3 calls, clamped to floors 4096 B / 2), dedupes against open `Filter:` issues so re-runs never refile; issue bodies are metadata-only (family + call/byte counts). Explicit user-invoked `gh` shell-out per the #34 network ruling |
 | Meta | `install` | — | shipped (#49) — wires the git/gh/npm→vtk wrappers into a shell rc/profile (bash `~/.bashrc`, pwsh `$PROFILE.CurrentUserAllHosts`). Self-locating via the running executable's path, marker-delimited managed block (idempotent, byte-identical re-runs, exact `--uninstall`), `$CLAUDECODE`-guarded so it is inert outside Claude Code; `--print`/`--dry-run`/`--shell bash\|pwsh` |
 | Meta | `proxy` | — | planned — name reserved: invoking exits 2 with "not implemented yet" instead of exec fallthrough (#11) |
-| rtk TOML long-tail | `gcc`, `make`, `terraform`, `docker`, `systemctl`, linters, installers (rtk's TOML-driven engine) | — | planned — fresh upstream parity gap; vtk port tracked in #41 |
+| rtk TOML long-tail | `gcc`, `make`, `terraform`, `docker`, `systemctl`, linters, installers (rtk's TOML-driven engine) | — | planned — the TOML engine itself shipped via #61 (cargo def first); the long-tail defs are tracked in #41 |
 | rtk subsystems | `learn` (#43), `discover` (#44), `hooks` (#45), `analytics`/gain-economics (#46) | — | planned — upstream subsystems beyond filtering; vtk equivalents tracked in #43–#46. The log-based half of gain-economics (dollarized `--daily`/`--graph`/`--history` rollups) shipped via #58; the per-session view stays in #46, blocked on the shared session provider (#43/#44) |
 
 ## vtk expansions (candidates — promote/demote based on gap-log data)
 
 | Family | Commands | Rationale | Status |
 |---|---|---|---|
-| Language toolchains | `cargo`, `go`, `tsc`, `dotnet`, `mvn`/`gradle`, `pip`/`uv`, `pytest`, `jest`/`vitest` | rtk ships some of these; verify + fill gaps | planned — `cargo build/check/test/run/clippy` is the first target of the declarative TOML filter engine ([#61](https://github.com/meridun/vtk/issues/61)): strip per-crate progress lines, keep warnings/errors and the `Finished` summary |
+| Language toolchains | `cargo`, `go`, `tsc`, `dotnet`, `mvn`/`gradle`, `pip`/`uv`, `pytest`, `jest`/`vitest` | rtk ships some of these; verify + fill gaps | in-progress — `cargo build/check/test/run/clippy` shipped ([#61](https://github.com/meridun/vtk/issues/61)) as the first declarative TOML def (`Defs/cargo.toml`): strips per-crate progress lines, keeps warnings/errors and the `Finished` summary. Measured 12–94% on fixtures (progress-heavy inline fixture 66%, 33-line real-run smoke 94%, warning-heavy 12% — savings scale with the progress:diagnostic ratio); exit `{0}` filtered, compile errors (exit 101) stay raw. Rest planned |
 | Package managers | `pnpm`, `yarn`, `winget`, `choco`, `brew`, `apt` | install/upgrade output is huge and low-signal | planned |
 | Kubernetes/cloud | `kubectl`, `helm`, `terraform plan/apply`, `az`, `aws`, `gcloud` | plan/apply and describe output are token bombs | planned |
 | CI/CD | `gh run view --log`, `act` | log dumps dominate CI debugging sessions | planned |

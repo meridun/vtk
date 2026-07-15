@@ -54,12 +54,25 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   exit `0` only, so grep's no-match exit `1` stays raw with exit-code parity intact.
 - **dbmate filter** — `dbmate up/status/rollback` (#13): collapses the applied-migration spam,
   keeps pending migrations and counts.
+- **cargo filter + declarative TOML engine** — `cargo build/check/test/run/clippy` (#61): strips
+  per-crate progress chatter (`Compiling`/`Checking`/`Downloading` ...), keeps warnings, errors,
+  and the `Finished` summary. Measured 12–94% on fixtures (savings scale with progress chatter);
+  compile errors (exit 101) pass through raw. First filter shipped as data, not code: a ~20-line
+  TOML spec (`dotnet/Vtk.Core/Filter/Toml/Defs/cargo.toml`) with inline fixtures the test suite
+  replays, embedded at build and matched by regex only when no hand-written filter claims the
+  command — the cheap path for new regex-shaped filter families (authoring guide in
+  `Defs/README.md`).
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
   reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`); `vtk gaps`
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
+  `vtk gaps --file-issues` (#61) turns recurring gap families into `stage:intake` filter issues
+  via `gh`: dry-run by default (`--yes` to create), `--min-bytes`/`--min-calls` thresholds
+  (defaults 50 KiB / 3 calls, floors 4096 B / 2), and dedupe against open `Filter:` issues so
+  re-running never refiles. Issue bodies carry family + call/byte counts only — never output
+  content.
 
 - **Cumulative savings + `vtk gain`** — aggregates the invocation log into total raw vs emitted
   bytes, bytes saved and savings %, overall and per command family (ranked by bytes saved).
@@ -71,11 +84,6 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm` route through vtk without being
   prefixed. Marker-delimited and idempotent, with `--print`/`--dry-run`/`--uninstall`/`--shell`.
-
-Planned next ([#61](https://github.com/meridun/vtk/issues/61)): a **declarative TOML filter
-engine** (~20-line regex specs as the cheap path for new filter families, starting with cargo)
-and **`vtk gaps --file-issues`** (turn recurring gap families into `stage:intake` filter issues
-via `gh`).
 
 Further filter families are not yet implemented. The meta word `proxy` is reserved: invoking it
 prints `vtk: "proxy" is not implemented yet` and exits `2` instead of falling through to exec — so
@@ -92,6 +100,7 @@ vtk git status          # compact status; prints "OK <id>" when filtering clears
 vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
 vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
+vtk gaps --file-issues  # file recurring gap families as intake issues (dry-run; --yes to create)
 vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family,
                         # plus an approximate dollarized total (bytes/4 heuristic)
 vtk gain --daily        # per-UTC-day savings table (~tokens, ~USD per day)

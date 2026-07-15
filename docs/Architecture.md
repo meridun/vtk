@@ -103,8 +103,10 @@ vtk show 2e3f --grep pat  →   just the matching lines
 - **Registry** — maps command/subcommand patterns to filters. Filters are pure functions:
   raw output in, compacted output out. Filters are hand-written C# classes, one per tool family
   (git, gh, npm, ... in `dotnet/Vtk.Core/Filter/`). A second declarative-TOML filter source
-  (regex drop/keep/replace specs embedded at build, regex-fallback dispatch below exact-key
-  matches) is planned — [#61](https://github.com/meridun/vtk/issues/61).
+  sits alongside: regex drop/keep/replace specs in `Filter/Toml/Defs/`, embedded at build with
+  inline fixtures the test suite replays. Dispatch consults the TOML regexes only after both
+  exact-key probes miss (a hand-written filter always wins), and a defs load failure degrades
+  to the hand-written families — [#61](https://github.com/meridun/vtk/issues/61).
 - **Runner** — spawns the wrapped command, streams/captures output, propagates exit code and
   signals. The only component with process-spawning responsibility.
 - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte
