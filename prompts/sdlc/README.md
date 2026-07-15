@@ -84,11 +84,26 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
    silent. **Every outcome removes `sdlc:wip`** on the way out
    (`pwsh scripts/sdlc-release.ps1 <issue#>` — idempotent). Leave the worktree in place
    (dispatcher maintenance prunes worktrees for merged/dead branches).
-4. **STOP** — reply the lane's one-line result. One item per pass; never pick up a second.
+4. **STOP** — reply the lane's one-line result, then end the reply with a fenced **JSON result
+   block** — the machine-parseable contract the dispatcher consumes (prose stays for humans):
+
+   ```json
+   {"issue": 60, "outcome": "ADVANCE", "next_stage": "verify", "notes": "one-line summary"}
+   ```
+
+   - `outcome`: `ADVANCE` | `BOUNCE` | `PARK` | `CONTINUE` | `IDLE`.
+   - `next_stage`: the stage label the item sits in after the outcome (e.g. `"verify"` after a
+     build ADVANCE, `"build"` after a build CONTINUE or a bounce to build, unchanged lane for
+     PARK); `null` for IDLE.
+   - Idle pass: `{"issue": null, "outcome": "IDLE", "next_stage": null, "notes": ""}`.
+   - The block is always the **last** element of the reply, exactly one per reply.
+
+   One item per pass; never pick up a second.
    **Intake-only exception (#19):** the intake worker may loop up to **5 items** per pass —
    triage is cheap and stateless. Each item is claimed and released individually (one claim
    comment, one EMIT per item), so per-issue lock semantics are unchanged and the lane still
-   never has two workers.
+   never has two workers. Its single JSON result block holds an **array** of result objects,
+   one per item processed.
 
 ## vtk specifics (bind in every lane)
 

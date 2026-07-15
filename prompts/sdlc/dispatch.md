@@ -145,7 +145,8 @@ For each lane (intake, build, verify, audit, ship):
    Repository (local working directory): C:\Claude\vtk. Your run-id is `<run-id>-<lane>`. Read
    prompts/sdlc/README.md — its universal worker loop and invariants are binding. Then execute
    the lane prompt at prompts/sdlc/<lane>.md. If there is no eligible item, report idle. Return
-   your one-line result plus any PARK/BOUNCE specifics."
+   your one-line result plus any PARK/BOUNCE specifics, ending with the fenced JSON result
+   block per the README STOP contract."
 3. **Concurrency:** lane workers claim per-issue and work in issue-scoped worktrees, so they
    may run concurrently — spawn all non-empty lanes' workers in one batch and wait for all.
    Exception: run intake before the batch when its merge sweep has pending merges to process,
@@ -154,9 +155,12 @@ For each lane (intake, build, verify, audit, ship):
    live workers in the same lanes right now — that's expected: workers deconflict per issue
    (CLAIM step 3), and a worker that loses a claim race just moves to the next eligible item.
    A lost race is never an error.
-4. **Self-heal check (after each worker finishes):** parse the claimed issue # from the
-   worker's result, then `gh issue view <n> -R meridun/vtk --json labels` plus its latest `sdlc:claim`
-   comment. If it still carries `sdlc:wip` AND the claim's run-id belongs to this cycle
+4. **Self-heal check (after each worker finishes):** read the worker's fenced JSON result
+   block (README STOP contract: `{issue, outcome, next_stage, notes}`, or an array of those for
+   intake's multi-item pass) — it is the authoritative record of what was claimed and how it
+   ended. Block missing or malformed → fall back to parsing the prose one-liner and record the
+   contract violation for the digest. For each non-IDLE result: `gh issue view <n> -R meridun/vtk
+   --json labels` plus its latest `sdlc:claim` comment. If it still carries `sdlc:wip` AND the claim's run-id belongs to this cycle
    (`<run-id>-<lane>`): resume that worker ONCE via SendMessage — complete the EMIT step now.
    Still locked after the resume → remove `sdlc:wip`, add `sdlc:needs-human`, comment
    `sdlc-dispatch: worker stalled twice without emitting an outcome; parked for human review.`
@@ -167,7 +171,9 @@ For each lane (intake, build, verify, audit, ship):
 Finish with: machine-lock result (acquired / skipped — held by whom / stale-reaped); wip gate
 result (live locks left, stale locks reaped, reaps skipped on fresh claims); git + worktree
 maintenance (dev updated, binary published + flipped or kept, branches pruned/left, worktrees
-removed/left, conflicted PRs flagged, skipped ops, open-PR state); one line per lane; queue
-depths after the cycle; parked items and holds by issue number; token cost per lane plus cycle
-total. The machine lock was already released by the maintenance script at the end of its
-maintenance phase — nothing is held after the digest.
+removed/left, conflicted PRs flagged, skipped ops, open-PR state); one line per lane, derived
+from each worker's JSON result block (issue, outcome, next_stage — note any worker whose block
+was missing/malformed and required prose fallback); queue depths after the cycle; parked items
+and holds by issue number; token cost per lane plus cycle total. The machine lock was already
+released by the maintenance script at the end of its maintenance phase — nothing is held after
+the digest.
