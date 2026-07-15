@@ -41,6 +41,11 @@ outgrows a screen.)
   children (strip-only `winget`/`choco`/`reg query` via the TOML engine first, PowerShell-object
   reformatter later); PowerShell interception is owned by the `vtk hooks` work (#45), so the epic
   stays blocked until that path exists — [#47](https://github.com/meridun/vtk/issues/47)
+- The SDLC dispatcher has **no singleton**: concurrent dispatch runs (same or different
+  machines) deconflict via per-issue claims, a per-machine maintenance lock
+  (`.git/sdlc-maint.lock`), idempotent verify-before-write GitHub writes, and a versioned
+  binary deploy (junction flip at `~/tools/vtk`); the pinned `sdlc:dispatch-lock` issue is
+  retired — [#71](https://github.com/meridun/vtk/issues/71)
 
 ## Pipeline
 
