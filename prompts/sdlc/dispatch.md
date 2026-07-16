@@ -157,7 +157,10 @@ For each lane (intake, build, verify, audit, ship):
    may run concurrently — spawn all non-empty lanes' workers in one batch and wait for all.
    Exception: run intake before the batch when its merge sweep has pending merges to process,
    and run a lane serially after the batch if it only became non-empty via an ADVANCE this
-   cycle. Never spawn two workers for the same lane in one cycle. Other dispatch runs may have
+   cycle. Such follow-on spawns are intentionally uncapped — a hot item may cascade through
+   every remaining lane in one cycle (registry decision,
+   [#80](https://github.com/meridun/vtk/issues/80)). Never spawn two workers for the same lane
+   in one cycle. Other dispatch runs may have
    live workers in the same lanes right now — that's expected: workers deconflict per issue
    (CLAIM step 3), and a worker that loses a claim race just moves to the next eligible item.
    A lost race is never an error.
