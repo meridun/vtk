@@ -50,6 +50,10 @@ outgrows a screen.)
 - A dispatch cycle places **no cap** on follow-on lane spawns (option A): a lane that becomes
   non-empty via an ADVANCE runs again in the same cycle, favoring per-item throughput over
   bounded cycle cost — [#80](https://github.com/meridun/vtk/issues/80)
+- vtk expands beyond agent-agnostic filtering into **agent-aware session analysis** (`learn`
+  #43, `discover` #44, sharing one session provider; Claude Code JSONL first): the wrap path
+  stays agent-agnostic, analysis tooling may be agent-aware; GitHub Copilot equivalents only if
+  research confirms a readable session surface — [#43](https://github.com/meridun/vtk/issues/43)
 
 ## Pipeline
 
