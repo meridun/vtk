@@ -84,6 +84,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm` route through vtk without being
   prefixed. Marker-delimited and idempotent, with `--print`/`--dry-run`/`--uninstall`/`--shell`.
+- **Claude Code hook + `vtk hooks`** — installs a Claude Code `PreToolUse` rewrite hook that
+  routes plain `git`/`gh`/`npm` Bash tool calls through vtk at the tool-call layer, with an
+  integrity-verifiable install: `init` splices one managed entry into `~/.claude/settings.json`,
+  `verify` fails loudly on a missing, duplicated, or desynced install, and `rewrite` is the hook
+  payload itself. Anything it can't safely wrap passes through untouched.
 
 Further filter families are not yet implemented. The meta word `proxy` is reserved: invoking it
 prints `vtk: "proxy" is not implemented yet` and exits `2` instead of falling through to exec — so
@@ -109,6 +114,9 @@ vtk gain --history      # last 10 invocations with per-command savings (flags co
 vtk install             # wire git/gh/npm -> vtk into your shell rc/profile (bash + pwsh)
 vtk install --print     # print the wrapper block(s) without writing anything
 vtk install --uninstall # remove the managed block
+vtk hooks init          # install the Claude Code PreToolUse rewrite hook (~/.claude/settings.json)
+vtk hooks verify        # integrity-check the installed hook; exit 1 on missing/desync
+vtk hooks init --uninstall  # remove exactly the managed hook entry
 ```
 
 ### Shell integration (`vtk install`)
@@ -126,6 +134,29 @@ Documents redirection is handled). The block:
   moved binary updates in place, and `--uninstall` removes exactly the managed block.
 
 `--shell bash|pwsh` targets one shell; `--dry-run` reports actions without writing.
+
+### Claude Code hook (`vtk hooks`)
+
+Where `vtk install` wraps commands at the shell layer, `vtk hooks` does it at Claude Code's
+tool-call layer with an integrity-verifiable install. `vtk hooks init` splices a single managed
+`PreToolUse` entry (matcher `Bash`) into `~/.claude/settings.json`, pointing at this binary
+(self-locating, like `vtk install`). Re-runs are idempotent (byte-identical fixed point), a
+moved binary updates the entry in place, `--uninstall` removes exactly the managed entry, and
+everything else in the file is preserved — an unparseable settings file is never overwritten.
+`vtk hooks verify` exits nonzero when the hook is missing, duplicated, mis-matched, or points at
+a binary that is absent or is not the one running the check — the desync class of bug a
+hand-wired setup can't detect.
+
+The installed hook runs `vtk hooks rewrite` on each Bash tool call: a plain, top-level
+`git`/`gh`/`npm` command is rewritten (via `hookSpecificOutput.updatedInput`) to run through
+vtk. Everything else — pipes, redirects, chained or substituted commands, non-Bash tools,
+already-wrapped commands, malformed input, any internal error — produces no output and exit `0`,
+so the agent's command runs exactly as typed and compacted output never lands inside a pipeline.
+The hook never emits a `permissionDecision`: it can update a tool call's input but cannot
+approve or block it — the normal permission flow still applies.
+
+`--print` emits the hook command without touching any file; `--dry-run` reports the action
+without writing; `--settings <path>` targets a non-default settings file.
 
 ## Install
 
