@@ -139,10 +139,16 @@ public static class ProcessRunner
         {
             using var proc = Process.Start(psi) ?? throw new InvalidOperationException("process failed to start");
             proc.StandardInput.Close();
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
+            // Drain both pipes concurrently. Sequential ReadToEnd calls deadlock:
+            // a child that fills the ~4KB stderr buffer while we are still blocked
+            // on stdout stalls in its stderr write and never closes stdout (#94 —
+            // wedged every `vtk npm run e2e:local` via rolldown-vite's stderr
+            // warnings). Same pattern as RunPassthroughCounted's paired copies.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            Task.WaitAll(stdoutTask, stderrTask);
             proc.WaitForExit();
-            return new CapturedResult { ExitCode = proc.ExitCode, Stdout = stdout, Stderr = stderr };
+            return new CapturedResult { ExitCode = proc.ExitCode, Stdout = stdoutTask.Result, Stderr = stderrTask.Result };
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
