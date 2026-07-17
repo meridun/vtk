@@ -35,6 +35,35 @@ public class ProcessRunnerTests
         Assert.StartsWith("\"C:\\Program Files\\nodejs\\npm.cmd\"", inner);
     }
 
+    [Fact]
+    public void RunCaptured_LargeStderrBeforeStdoutCloses_DoesNotDeadlock()
+    {
+        // Regression for #94: sequential ReadToEnd(stdout) -> ReadToEnd(stderr)
+        // deadlocked once the child filled the ~4KB stderr pipe buffer while
+        // stdout was still open (rolldown-vite's ~10KB of stderr warnings wedged
+        // every captured `npm run e2e:local`). The .cmd child mirrors the real
+        // npm.cmd launch path (cmd.exe /s /c routing).
+        var script = Path.Combine(Path.GetTempPath(), $"vtk-noisy-{Guid.NewGuid():N}.cmd");
+        File.WriteAllText(script,
+            "@echo off\r\n" +
+            "for /L %%i in (1,1,4000) do echo stderr-filler-line-%%i-xxxxxxxxxxxxxxxxxxxxxxxx 1>&2\r\n" +
+            "echo STDOUT DONE\r\n");
+        try
+        {
+            var run = Task.Run(() => ProcessRunner.RunCaptured(new[] { script }));
+            Assert.True(run.Wait(TimeSpan.FromSeconds(60)), "RunCaptured deadlocked on large stderr");
+
+            var result = run.Result;
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("STDOUT DONE", result.Stdout);
+            Assert.True(result.Stderr.Length > 64 * 1024, $"expected >64KB stderr, got {result.Stderr.Length}");
+        }
+        finally
+        {
+            File.Delete(script);
+        }
+    }
+
     [Theory]
     [InlineData("run", "run")]                        // bare token: unchanged
     [InlineData("dup-check", "dup-check")]             // hyphen is not special
