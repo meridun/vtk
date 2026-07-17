@@ -31,7 +31,10 @@ stable/release and moves only by PR from `dev`. Full discipline in
 
 - Not a shell, not a command runner with its own semantics. Exit codes, signals, and side
   effects of the wrapped command are preserved exactly.
-- Not agent-specific. vtk is agent-agnostic; anything that reads stdout benefits.
+- Filtering is not agent-specific — the wrap path is agent-agnostic; anything that reads stdout
+  benefits. Analysis tooling (`learn`, `discover`) may be agent-aware, reading local session
+  data (Claude Code JSONL first) — see decision
+  [#43](https://github.com/meridun/vtk/issues/43).
 - No network calls of vtk's own on the wrap path, no telemetry leaving the machine. The wrapped
   command's network behavior is untouched; gap/gain data is local files only. Explicit,
   user-invoked maintenance subcommands (e.g. `gaps --file-issues`) may shell out to tools like
@@ -43,7 +46,7 @@ stable/release and moves only by PR from `dev`. Full discipline in
 |---|---|---|
 | Filter catalog | ~20 tool families | rtk parity + expansions (see ToolCoverage.md) |
 | Unfiltered commands | Silent passthrough | Passthrough + fallback log |
-| Gap analysis | `rtk discover` (post-hoc session scan) | `vtk gaps` (execution-time log) |
+| Gap analysis | `rtk discover` (post-hoc session scan) | `vtk gaps` (execution-time log), layered with a post-hoc `discover` pass ([#44](https://github.com/meridun/vtk/issues/44)) |
 | Savings stats | `rtk gain` | `vtk gain` (same idea) |
 | Raw output recovery | rerun the command | `vtk show <id>` from the spool |
 | Language | Rust | C# / .NET 9 ([#1](https://github.com/meridun/vtk/issues/1)) |
