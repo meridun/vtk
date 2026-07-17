@@ -1,17 +1,24 @@
-// `vtk hooks` — self-install/verify the Claude Code PreToolUse rewrite hook
-// (#45, Claude-Code-only MVP). Replaces the hand-wired .bashrc dogfooding
-// path with a first-class, verifiable install against a single canonical
-// binary:
+// `vtk hooks` — self-install/verify the agent pre-invocation rewrite hooks.
 //
+// Claude Code (#45, MVP):
 //   vtk hooks init     splice the hook into ~/.claude/settings.json
 //   vtk hooks verify   integrity/desync check of the installed hook
 //   vtk hooks rewrite  the hook payload: stdin tool-call JSON in,
 //                      updatedInput JSON (or nothing = passthrough) out
 //
+// GitHub Copilot CLI (#83, --copilot on each subcommand): same trio against
+// Copilot CLI's documented version-1 hook config (preToolUse command hooks,
+// stdout `modifiedArgs` rewrite; docs.github.com/en/copilot/reference/
+// hooks-reference). The install target is a wholly-vtk-owned managed file
+// `vtk.json` in the user-level hooks directory (~/.copilot/hooks, or
+// $COPILOT_HOME/hooks) — the file itself is the marker, so re-runs are a
+// fixed point and --uninstall deletes exactly that file.
+//
 // Same shape as `vtk install` (Install.cs, #49): self-locating via the
 // running executable's path, one managed entry identified by a marker (here
-// the command suffix " hooks rewrite" — the JSON analog of the rc-file
-// marker block), idempotent re-runs, exact --uninstall, honest "unchanged".
+// the command suffix " hooks rewrite [--copilot]" — the JSON analog of the
+// rc-file marker block), idempotent re-runs, exact --uninstall, honest
+// "unchanged".
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -29,14 +36,17 @@ public static class Hooks
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: vtk hooks <init|verify|rewrite> [--dry-run] [--uninstall] [--print] [--settings <path>]");
+            Console.Error.WriteLine("usage: vtk hooks <init|verify|rewrite> [--copilot] [--dry-run] [--uninstall] [--print] [--settings <path>] [--hooks-dir <path>]");
             return 2;
         }
+        var rest = args[1..];
+        var copilot = rest.Contains("--copilot");
+        if (copilot) rest = rest.Where(a => a != "--copilot").ToArray();
         return args[0] switch
         {
-            "init" => CmdInit(args[1..]),
-            "verify" => CmdVerify(args[1..]),
-            "rewrite" => CmdRewrite(),
+            "init" => copilot ? CmdCopilotInit(rest) : CmdInit(rest),
+            "verify" => copilot ? CmdCopilotVerify(rest) : CmdVerify(rest),
+            "rewrite" => CmdRewrite(copilot),
             _ => Unknown(args[0]),
         };
     }
@@ -419,23 +429,27 @@ public static class Hooks
     // ------------------------------------------------------------- rewrite
 
     /// <summary>
-    /// The installed hook's entry point: reads the PreToolUse tool-call JSON
-    /// from stdin and prints an updatedInput JSON that routes a plain
-    /// git/gh/npm command through this binary. Anything unsupported — other
-    /// tools, compound/piped/redirected commands, already-wrapped commands,
-    /// malformed input, any internal error — emits nothing and exits 0, so
-    /// the agent's command runs exactly as typed (passthrough is a feature).
-    /// No permissionDecision is ever emitted: the normal permission flow
-    /// applies to the updated input; the hook never approves or blocks.
+    /// The installed hook's entry point: reads the pre-tool-use tool-call
+    /// JSON from stdin and prints a rewrite JSON that routes a plain
+    /// git/gh/npm command through this binary — Claude Code updatedInput by
+    /// default, Copilot CLI modifiedArgs with --copilot. Anything
+    /// unsupported — other tools, compound/piped/redirected commands,
+    /// already-wrapped commands, malformed input, any internal error — emits
+    /// nothing and exits 0, so the agent's command runs exactly as typed
+    /// (passthrough is a feature). Exit 0 is load-bearing for --copilot:
+    /// Copilot CLI preToolUse command hooks are fail-closed, so a non-zero
+    /// exit would deny the agent's tool call outright. No permission
+    /// decision is ever emitted: the normal permission flow applies to the
+    /// updated input; the hook never approves or blocks.
     /// </summary>
-    private static int CmdRewrite()
+    private static int CmdRewrite(bool copilot)
     {
         try
         {
             var input = Console.In.ReadToEnd();
             var exe = Path.GetFullPath(Environment.ProcessPath
                 ?? throw new InvalidOperationException("process path unavailable"));
-            var output = RewriteToolCall(input, exe);
+            var output = copilot ? RewriteCopilotToolCall(input, exe) : RewriteToolCall(input, exe);
             if (output is not null) Console.Out.WriteLine(output);
         }
         catch
@@ -484,19 +498,28 @@ public static class Hooks
     /// <summary>Rewrites "git ..." to "'&lt;exe&gt;' git ..." when eligible; null means leave the command untouched.</summary>
     internal static string? RewriteCommand(string command, string exe)
     {
+        var trimmed = EligibleFamilyCommand(command);
+        if (trimmed is null) return null;
+        return BashQuote(HookExePath(exe)) + " " + trimmed;
+    }
+
+    /// <summary>
+    /// Conservative eligibility shared by every rewrite flavor: a single
+    /// simple top-level git/gh/npm command, or null. Rewriting `git log |
+    /// head` or `git diff > f` would put compacted output where the pipeline
+    /// expects raw bytes — altered semantics, so passthrough.
+    /// </summary>
+    internal static string? EligibleFamilyCommand(string command)
+    {
         var trimmed = command.Trim();
         if (trimmed == "") return null;
-
-        // Conservative eligibility: single simple command only. Rewriting
-        // `git log | head` or `git diff > f` would put compacted output where
-        // the pipeline expects raw bytes — altered semantics, so passthrough.
         if (trimmed.IndexOfAny(new[] { '|', '&', ';', '<', '>', '`', '$', '\n', '\r' }) >= 0) return null;
 
         var space = trimmed.IndexOf(' ');
         var first = space < 0 ? trimmed : trimmed[..space];
         if (!Families.Contains(first)) return null;
 
-        return BashQuote(HookExePath(exe)) + " " + trimmed;
+        return trimmed;
     }
 
     /// <summary>The binary path in the form the Bash tool's shell expects: MSYS on Windows (Git Bash), native elsewhere.</summary>
@@ -505,4 +528,390 @@ public static class Hooks
 
     /// <summary>Single-quotes a path for bash (embedded single quotes escaped the POSIX way).</summary>
     internal static string BashQuote(string s) => "'" + s.Replace("'", "'\\''") + "'";
+
+    // ---------------------------------------------------- copilot (#83)
+
+    /// <summary>Suffix that marks a Copilot CLI hook command as vtk-managed.</summary>
+    internal const string CopilotCommandMarker = " hooks rewrite --copilot";
+
+    /// <summary>toolName matcher for the managed entry: Copilot CLI's two shell tools.</summary>
+    internal const string CopilotMatcher = "bash|powershell";
+
+    /// <summary>Name of the wholly-vtk-owned managed file inside the hooks directory.</summary>
+    internal const string CopilotFileName = "vtk.json";
+
+    /// <summary>
+    /// Default Copilot CLI user-level hooks directory: $COPILOT_HOME/hooks
+    /// when COPILOT_HOME is set, else ~/.copilot/hooks (per the GitHub
+    /// Copilot hooks reference).
+    /// </summary>
+    private static string DefaultCopilotHooksDir()
+    {
+        var home = Environment.GetEnvironmentVariable("COPILOT_HOME");
+        if (!string.IsNullOrEmpty(home)) return Path.Combine(home, "hooks");
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrEmpty(profile)) throw new InvalidOperationException("cannot resolve home dir");
+        return Path.Combine(profile, ".copilot", "hooks");
+    }
+
+    /// <summary>Bash-side hook command ("&lt;exe&gt;" hooks rewrite --copilot). Double quotes survive sh.</summary>
+    internal static string RenderCopilotBashCommand(string exe) => $"\"{exe}\"{CopilotCommandMarker}";
+
+    /// <summary>PowerShell-side hook command. The call operator is required: a bare quoted path is a string expression, not a command.</summary>
+    internal static string RenderCopilotPowershellCommand(string exe) => $"& \"{exe}\"{CopilotCommandMarker}";
+
+    /// <summary>
+    /// The full managed-file content: Copilot CLI's documented version-1
+    /// config with exactly one preToolUse command entry matching the two
+    /// shell tools. Pure render — byte-identical for the same binary path,
+    /// which is what makes the file-level install idempotent.
+    /// </summary>
+    internal static string CopilotConfigJson(string exe)
+    {
+        var root = new JsonObject
+        {
+            ["version"] = 1,
+            ["hooks"] = new JsonObject
+            {
+                ["preToolUse"] = new JsonArray(new JsonObject
+                {
+                    ["type"] = "command",
+                    ["matcher"] = CopilotMatcher,
+                    ["bash"] = RenderCopilotBashCommand(exe),
+                    ["powershell"] = RenderCopilotPowershellCommand(exe),
+                }),
+            },
+        };
+        return Serialize(root);
+    }
+
+    private static int CmdCopilotInit(string[] args)
+    {
+        bool dryRun = false, uninstall = false, printOnly = false;
+        string dir = "";
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--dry-run": dryRun = true; break;
+                case "--uninstall": uninstall = true; break;
+                case "--print": printOnly = true; break;
+                case "--hooks-dir":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("vtk hooks init: --hooks-dir requires a path");
+                        return 2;
+                    }
+                    i++;
+                    dir = args[i];
+                    break;
+                default:
+                    Console.Error.WriteLine($"vtk hooks init: unexpected argument \"{args[i]}\"");
+                    return 2;
+            }
+        }
+
+        string exe;
+        try
+        {
+            exe = Path.GetFullPath(Environment.ProcessPath
+                ?? throw new InvalidOperationException("process path unavailable"));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"vtk hooks init: cannot locate own binary: {ex.Message}");
+            return 1;
+        }
+        var content = CopilotConfigJson(exe);
+
+        // --print is side-effect-free: emit the config for the user to wire
+        // by hand, touching no files.
+        if (printOnly)
+        {
+            Console.Out.Write(content);
+            return 0;
+        }
+
+        if (dir == "")
+        {
+            try { dir = DefaultCopilotHooksDir(); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"vtk hooks init: {ex.Message}");
+                return 1;
+            }
+        }
+        var file = Path.Combine(dir, CopilotFileName);
+
+        if (uninstall)
+        {
+            if (!File.Exists(file))
+            {
+                Console.Out.WriteLine($"copilot-cli: no hook present ({file})");
+                return 0;
+            }
+            if (dryRun)
+            {
+                Console.Out.WriteLine($"copilot-cli: removed (dry-run) ({file})");
+                return 0;
+            }
+            try { File.Delete(file); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"vtk hooks init: {ex.Message}");
+                return 1;
+            }
+            Console.Out.WriteLine($"copilot-cli: removed ({file})");
+            return 0;
+        }
+
+        var old = File.Exists(file) ? File.ReadAllText(file) : null;
+        if (old == content)
+        {
+            Console.Out.WriteLine($"copilot-cli: unchanged ({file})");
+            return 0;
+        }
+        var action = old is null ? "installed" : "updated";
+        if (dryRun)
+        {
+            Console.Out.WriteLine($"copilot-cli: {action} (dry-run) ({file})");
+            return 0;
+        }
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(file, content);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"vtk hooks init: {ex.Message}");
+            return 1;
+        }
+        Console.Out.WriteLine($"copilot-cli: {action} ({file})");
+        return 0;
+    }
+
+    private static int CmdCopilotVerify(string[] args)
+    {
+        string dir = "";
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--hooks-dir":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("vtk hooks verify: --hooks-dir requires a path");
+                        return 2;
+                    }
+                    i++;
+                    dir = args[i];
+                    break;
+                default:
+                    Console.Error.WriteLine($"vtk hooks verify: unexpected argument \"{args[i]}\"");
+                    return 2;
+            }
+        }
+
+        string exe;
+        try
+        {
+            exe = Path.GetFullPath(Environment.ProcessPath
+                ?? throw new InvalidOperationException("process path unavailable"));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"vtk hooks verify: cannot locate own binary: {ex.Message}");
+            return 1;
+        }
+        if (dir == "")
+        {
+            try { dir = DefaultCopilotHooksDir(); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"vtk hooks verify: {ex.Message}");
+                return 1;
+            }
+        }
+        var file = Path.Combine(dir, CopilotFileName);
+
+        if (!File.Exists(file))
+        {
+            Console.Error.WriteLine($"vtk hooks verify: FAIL: hook file not found ({file}) — run `vtk hooks init --copilot`");
+            return 1;
+        }
+        var problems = VerifyCopilotJson(File.ReadAllText(file), exe, File.Exists);
+        if (problems.Count == 0)
+        {
+            Console.Out.WriteLine($"copilot-cli: verified ({file} -> {exe})");
+            return 0;
+        }
+        foreach (var p in problems) Console.Error.WriteLine("vtk hooks verify: FAIL: " + p);
+        return 1;
+    }
+
+    /// <summary>
+    /// Integrity/desync checks over the managed Copilot hook file: version 1,
+    /// exactly one vtk-managed preToolUse entry, the expected matcher, both
+    /// shell commands present and parseable, the hook's binary on disk, and
+    /// that binary being THIS binary. fileExists is injected for
+    /// testability. Returns an empty list when verified.
+    /// </summary>
+    internal static List<string> VerifyCopilotJson(string json, string exe, Func<string, bool> fileExists)
+    {
+        var problems = new List<string>();
+        JsonObject root;
+        try { root = ParseRoot(json); }
+        catch (JsonException ex)
+        {
+            problems.Add($"hook file is not valid JSON: {ex.Message}");
+            return problems;
+        }
+
+        int? version = root["version"] is JsonValue v && v.TryGetValue<int>(out var vi) ? vi : null;
+        if (version != 1)
+        {
+            problems.Add($"hook file version is {(version?.ToString() ?? "missing or non-numeric")} (expected 1)");
+        }
+
+        var entries = new List<JsonObject>();
+        if (root["hooks"] is JsonObject hooks && hooks["preToolUse"] is JsonArray pre)
+        {
+            foreach (var e in pre)
+            {
+                if (e is JsonObject entry && IsVtkCopilotEntry(entry)) entries.Add(entry);
+            }
+        }
+        if (entries.Count == 0)
+        {
+            problems.Add("no vtk preToolUse hook entry — run `vtk hooks init --copilot`");
+            return problems;
+        }
+        if (entries.Count > 1)
+        {
+            problems.Add($"{entries.Count} vtk preToolUse hook entries found (expected 1) — run `vtk hooks init --copilot` to collapse them");
+        }
+
+        var entry0 = entries[0];
+        var matcher = Str(entry0["matcher"]) ?? "";
+        if (matcher != CopilotMatcher)
+        {
+            problems.Add($"hook matcher is \"{matcher}\" (expected \"{CopilotMatcher}\")");
+        }
+
+        var exes = new List<string>();
+        foreach (var field in new[] { "bash", "powershell" })
+        {
+            var cmd = Str(entry0[field]);
+            if (cmd is null)
+            {
+                problems.Add($"hook entry has no \"{field}\" command — run `vtk hooks init --copilot`");
+                continue;
+            }
+            var hookExe = ExtractCopilotExe(cmd);
+            if (hookExe == "")
+            {
+                problems.Add($"cannot parse binary path from \"{field}\" hook command: {cmd}");
+                continue;
+            }
+            exes.Add(hookExe);
+        }
+        foreach (var hookExe in exes.Distinct())
+        {
+            if (!fileExists(hookExe))
+            {
+                problems.Add($"hook binary missing: {hookExe}");
+            }
+            if (!PathsEqual(hookExe, exe))
+            {
+                problems.Add($"hook points at {hookExe} but this binary is {exe} (desync) — run `vtk hooks init --copilot` from the canonical binary");
+            }
+        }
+        return problems;
+    }
+
+    /// <summary>Lenient string read: the value when the node is a JSON string, else null (never throws).</summary>
+    private static string? Str(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+
+    /// <summary>Reports whether a preToolUse entry carries a vtk-managed rewrite command in any shell field.</summary>
+    private static bool IsVtkCopilotEntry(JsonObject entry)
+    {
+        foreach (var field in new[] { "bash", "powershell", "command" })
+        {
+            if (Str(entry[field]) is string cmd
+                && cmd.TrimEnd().EndsWith(CopilotCommandMarker, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Extracts the executable path from a rendered Copilot hook command (optionally "&amp; "-prefixed), quoted or bare.</summary>
+    internal static string ExtractCopilotExe(string cmd)
+    {
+        cmd = cmd.Trim();
+        if (cmd.StartsWith("& ", StringComparison.Ordinal)) cmd = cmd[2..].TrimStart();
+        if (!cmd.EndsWith(CopilotCommandMarker, StringComparison.Ordinal)) return "";
+        var exe = cmd[..^CopilotCommandMarker.Length].Trim();
+        if (exe.Length >= 2 && exe[0] == exe[^1] && (exe[0] == '"' || exe[0] == '\'')) exe = exe[1..^1];
+        return exe;
+    }
+
+    /// <summary>
+    /// Pure Copilot rewrite core: camelCase preToolUse input JSON + own
+    /// binary path in, `modifiedArgs` output JSON out, or null for "no
+    /// rewrite" (passthrough — Copilot CLI treats empty output as default
+    /// behavior). Only the two shell tools are rewritten, and only for a
+    /// single plain top-level git/gh/npm invocation. No permission decision
+    /// is ever emitted.
+    /// </summary>
+    internal static string? RewriteCopilotToolCall(string inputJson, string exe)
+    {
+        JsonObject? root;
+        try { root = JsonNode.Parse(inputJson) as JsonObject; }
+        catch (JsonException) { return null; }
+        if (root is null) return null;
+
+        if (Str(root["toolName"]) is not string toolName) return null;
+        if (root["toolArgs"] is not JsonObject ta) return null;
+        if (Str(ta["command"]) is not string command) return null;
+
+        var rewritten = RewriteCopilotCommand(toolName, command, exe);
+        if (rewritten is null) return null;
+
+        var modified = ta.DeepClone().AsObject();
+        modified["command"] = rewritten;
+        return new JsonObject { ["modifiedArgs"] = modified }.ToJsonString();
+    }
+
+    /// <summary>
+    /// Shell-aware rewrite for Copilot CLI's runtime tools: "bash" gets the
+    /// bash prefix (MSYS path on Windows), "powershell" gets the
+    /// call-operator prefix on the native path. null means leave the command
+    /// untouched.
+    /// </summary>
+    internal static string? RewriteCopilotCommand(string toolName, string command, string exe)
+    {
+        switch (toolName)
+        {
+            case "bash":
+                return RewriteCommand(command, exe);
+            case "powershell":
+                var trimmed = EligibleFamilyCommand(command);
+                if (trimmed is null) return null;
+                // PowerShell expression-mode triggers on top of the shared
+                // banned set: parens/braces/@ start subexpressions, script
+                // blocks, hashtables, and splatting — any of which would
+                // change how the prefixed command parses.
+                if (trimmed.IndexOfAny(new[] { '(', ')', '{', '}', '@' }) >= 0) return null;
+                return "& " + PsQuote(exe) + " " + trimmed;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>Single-quotes a path for PowerShell (literal string; embedded single quotes doubled).</summary>
+    internal static string PsQuote(string s) => "'" + s.Replace("'", "''") + "'";
 }
