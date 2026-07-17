@@ -84,11 +84,12 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm` route through vtk without being
   prefixed. Marker-delimited and idempotent, with `--print`/`--dry-run`/`--uninstall`/`--shell`.
-- **Claude Code hook + `vtk hooks`** — installs a Claude Code `PreToolUse` rewrite hook that
-  routes plain `git`/`gh`/`npm` Bash tool calls through vtk at the tool-call layer, with an
-  integrity-verifiable install: `init` splices one managed entry into `~/.claude/settings.json`,
-  `verify` fails loudly on a missing, duplicated, or desynced install, and `rewrite` is the hook
-  payload itself. Anything it can't safely wrap passes through untouched.
+- **Agent hooks + `vtk hooks`** — installs a pre-tool-call rewrite hook that routes plain
+  `git`/`gh`/`npm` shell tool calls through vtk at the agent's tool-call layer, with an
+  integrity-verifiable install: `init` writes the managed hook config (Claude Code
+  `~/.claude/settings.json` by default; GitHub Copilot CLI `~/.copilot/hooks/vtk.json` with
+  `--copilot`), `verify` fails loudly on a missing, duplicated, or desynced install, and
+  `rewrite` is the hook payload itself. Anything it can't safely wrap passes through untouched.
 
 Further filter families are not yet implemented. The meta word `proxy` is reserved: invoking it
 prints `vtk: "proxy" is not implemented yet` and exits `2` instead of falling through to exec — so
@@ -117,6 +118,8 @@ vtk install --uninstall # remove the managed block
 vtk hooks init          # install the Claude Code PreToolUse rewrite hook (~/.claude/settings.json)
 vtk hooks verify        # integrity-check the installed hook; exit 1 on missing/desync
 vtk hooks init --uninstall  # remove exactly the managed hook entry
+vtk hooks init --copilot    # install the GitHub Copilot CLI preToolUse hook (~/.copilot/hooks/vtk.json)
+vtk hooks verify --copilot  # integrity-check the Copilot hook file; exit 1 on missing/desync
 ```
 
 ### Shell integration (`vtk install`)
@@ -135,10 +138,13 @@ Documents redirection is handled). The block:
 
 `--shell bash|pwsh` targets one shell; `--dry-run` reports actions without writing.
 
-### Claude Code hook (`vtk hooks`)
+### Agent hooks (`vtk hooks`)
 
-Where `vtk install` wraps commands at the shell layer, `vtk hooks` does it at Claude Code's
-tool-call layer with an integrity-verifiable install. `vtk hooks init` splices a single managed
+Where `vtk install` wraps commands at the shell layer, `vtk hooks` does it at the agent's
+tool-call layer with an integrity-verifiable install. It supports two hosts: Claude Code
+(default) and GitHub Copilot CLI (`--copilot` on each subcommand).
+
+`vtk hooks init` splices a single managed
 `PreToolUse` entry (matcher `Bash`) into `~/.claude/settings.json`, pointing at this binary
 (self-locating, like `vtk install`). Re-runs are idempotent (byte-identical fixed point), a
 moved binary updates the entry in place, `--uninstall` removes exactly the managed entry, and
@@ -157,6 +163,26 @@ approve or block it — the normal permission flow still applies.
 
 `--print` emits the hook command without touching any file; `--dry-run` reports the action
 without writing; `--settings <path>` targets a non-default settings file.
+
+#### GitHub Copilot CLI (`--copilot`)
+
+`vtk hooks init --copilot` writes a wholly-vtk-owned hook file `vtk.json` into the Copilot CLI
+user hooks directory (`~/.copilot/hooks`, or `$COPILOT_HOME/hooks` when `COPILOT_HOME` is set;
+`--hooks-dir <path>` overrides). The file holds one version-1 `preToolUse` command hook
+(matcher `bash|powershell`) with shell-appropriate commands for both tools; the file itself is
+the marker, so re-runs are idempotent (`installed`/`updated`/`unchanged`) and `--uninstall`
+deletes exactly that file. `vtk hooks verify --copilot` checks the same desync classes as the
+Claude path. The rewrite payload speaks Copilot's native shape — `{toolName, toolArgs}` in,
+`{"modifiedArgs": …}` out — with the same conservative eligibility as the Claude hook, plus a
+stricter ban list for `powershell` tool calls (`(`, `)`, `{`, `}`, `@` disqualify, since those
+shift PowerShell into expression mode).
+
+One behavioral difference matters: Copilot CLI `preToolUse` hooks are **fail-closed** — if the
+hook process exits nonzero, Copilot *denies* the agent's tool call. vtk's rewrite always exits
+`0` (passthrough on anything unexpected), but if the installed `vtk.json` points at a vtk
+binary that has since moved or been deleted, Copilot will deny agent shell commands until you
+run `vtk hooks init --copilot` again (heals in place) or `vtk hooks init --copilot
+--uninstall`. `vtk hooks verify --copilot` detects exactly this desync.
 
 ## Install
 
