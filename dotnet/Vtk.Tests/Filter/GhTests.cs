@@ -38,6 +38,36 @@ public class GhTests
         Assert.True(savings >= minSavings, $"savings {savings:P0} below minimum {minSavings:P0}");
     }
 
+    // CI-log fold (#96): golden fixtures captured live from real public CI
+    // runs (fastify/fastify run 29506411975 for --log and --log-failed;
+    // expressjs/express run 29218121905 coverage job, trimmed head+tail, for
+    // the no-##[error] failure case). run_log holds three jobs, one failing
+    // with an ##[error] marker; run_log_failed is that failing job alone;
+    // run_log_failed_nomarker is a failed job whose log carries no marker
+    // (HTTP 504 death), exercising the last-lines tail guard.
+    [Theory]
+    [InlineData("run_log", 0.80)]
+    [InlineData("run_log_failed", 0.35)]
+    [InlineData("run_log_failed_nomarker", 0.85)]
+    public void RunLog_MatchesGoldenOutput(string name, double minSavings) =>
+        AssertGolden(name, Gh.Run, minSavings);
+
+    /// <summary>The Run dispatcher routes run-list tables to RunList, not the log fold.</summary>
+    [Fact]
+    public void Run_RunListShape_IsNotLogShaped()
+    {
+        var raw = File.ReadAllText(Path.Combine(FixtureDir, "run_list.raw.txt"));
+        Assert.False(Gh.TryRunLogFold(raw, out _));
+    }
+
+    /// <summary>A short or mixed-shape input never engages the log fold (ambiguous → pass through).</summary>
+    [Theory]
+    [InlineData("job\tstep\t2026-07-16T14:24:08.7583378Z only one row\n")]
+    [InlineData("✓ main CI · 1234567\nTriggered via push about 1 minute ago\n")]
+    [InlineData("")]
+    public void TryRunLogFold_RejectsNonLogInput(string raw) =>
+        Assert.False(Gh.TryRunLogFold(raw, out _));
+
     [Fact]
     public void JsonPayload_PassesThroughUnchanged()
     {
@@ -45,6 +75,7 @@ public class GhTests
         Assert.Equal(raw, Gh.IssueList(raw));
         Assert.Equal(raw, Gh.PrList(raw));
         Assert.Equal(raw, Gh.RunList(raw));
+        Assert.Equal(raw, Gh.Run(raw));
     }
 
     [Theory]
@@ -57,6 +88,7 @@ public class GhTests
         Assert.Equal(raw, Gh.IssueList(raw));
         Assert.Equal(raw, Gh.PrList(raw));
         Assert.Equal(raw, Gh.RunList(raw));
+        Assert.Equal(raw, Gh.Run(raw));
     }
 
     [Theory]

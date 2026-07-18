@@ -45,8 +45,15 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   full raw is recoverable via `vtk show`.
 - **gh filter family** — `gh issue list`, `gh pr list`, `gh run list`: table output compacts to
   one line per row (`#<n> <state> <title> (<age>)`; runs show `<conclusion> <title> · <workflow>`),
-  labels/branch/runID noise dropped. Measured savings 33–48% on fixtures. Filtered exit `0` only;
-  `view` shapes and any `--json` output pass through structurally intact.
+  labels/branch/runID noise dropped. Measured savings 33–48% on fixtures.
+  `gh run view --log` / `--log-failed` fold CI job logs (#96): passing job sections collapse to
+  `OK <job> (n lines)` with `##[warning]` lines kept, failing sections (`##[error]` / nonzero
+  step exit) stay inline with job/step/timestamp prefixes, and a failure-scoped log with no
+  explicit marker keeps its last 20 lines so the evidence survives. Measured 56–91% on fixtures;
+  full raw always recoverable via `vtk show`. `gh run` filters exit `{0,1}` — a failed run's log
+  is a report, not a crash, and non-log error output passes through raw via shape guards; other
+  gh commands filter exit `0` only. `view` summary shapes and any `--json` output pass through
+  structurally intact.
 - **files/search filter family** — `ls`, `grep`, `find`: list output column-packed and capped at
   40 entries with a `(+N more)` tail; `grep` match lines capped at 5 per file with per-file
   `(+N more)` tails. The full listing is always recoverable via `vtk show <id>`. Measured savings
@@ -65,7 +72,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
-  reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`); `vtk gaps`
+  reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`), and filtered
+  invocations record the engaged filter's registry name (e.g. `gh run`) as theirs, so the
+  invocation log names which filter handled each call; `vtk gaps`
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
   `vtk gaps --file-issues` (#61) turns recurring gap families into `stage:intake` filter issues

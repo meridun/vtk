@@ -1,0 +1,120 @@
+coverage	UNKNOWN STEP	﻿2026-07-13T01:48:06.7524902Z Current runner version: '2.335.1'
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7563518Z ##[group]Runner Image Provisioner
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7565139Z Hosted Compute Agent
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7566318Z Version: 20260624.560
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7567360Z Commit: 925d229a51159bc391ae97e54a2dd1fe20af789d
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7568682Z Build Date: 2026-06-24T18:26:47Z
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7569847Z Worker ID: {e74301cd-3407-4626-9897-0ed8cb0cd60f}
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7571242Z Azure Region: eastus
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7572164Z ##[endgroup]
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7574963Z ##[group]Operating System
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7576221Z Ubuntu
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7577136Z 24.04.4
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7578050Z LTS
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7578834Z ##[endgroup]
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7579778Z ##[group]Runner Image
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7581006Z Image: ubuntu-24.04
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7581982Z Version: 20260705.232.1
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7584149Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260705.232/images/ubuntu/Ubuntu2404-Readme.md
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7587133Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260705.232
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7588906Z ##[endgroup]
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7590939Z ##[group]GITHUB_TOKEN Permissions
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7593997Z Checks: read
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7595257Z Contents: read
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7596217Z Metadata: read
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7597255Z ##[endgroup]
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7600875Z Secret source: None
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.7602393Z Prepare workflow directory
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.8113861Z Prepare all required actions
+coverage	UNKNOWN STEP	2026-07-13T01:48:06.8174884Z Getting action download info
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.0852070Z Download action repository 'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0' (SHA:9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0)
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.2750522Z Download action repository 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' (SHA:3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c)
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.4412420Z Download action repository 'coverallsapp/github-action@5cbfd81b66ca5d10c19b062c04de0199c215fb6e' (SHA:5cbfd81b66ca5d10c19b062c04de0199c215fb6e)
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.6887422Z Complete job name: coverage
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.7701608Z ##[group]Run actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.7702721Z with:
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.7703188Z   persist-credentials: false
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.7703744Z   repository: expressjs/express
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.7708053Z   token: ***
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.7708513Z   ssh-strict: true
+coverage	UNKNOWN STEP	2026-07-13T01:48:07.7708968Z   ssh-user: git
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6394545Z [36;1m# Perform verification by comparing expected and actual checksums[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6395137Z [36;1mif [ "$expected_checksum" != "$actual_checksum" ]; then[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6395646Z [36;1m  echo "Checksum verification failed (Linux)."[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6396122Z [36;1m  echo "Expected: $expected_checksum"[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6396548Z [36;1m  echo "Actual: $actual_checksum"[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6396963Z [36;1m  [ "true" == "false" ] && exit 0[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6397365Z [36;1m  exit 1[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6397687Z [36;1mfi[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6398019Z [36;1m[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6398339Z [36;1mtar -xzf "${platform_filename}"[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6398729Z [36;1m[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6399038Z [36;1m# Check if the binary exists[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6399594Z [36;1mif [ ! -f ~/bin/coveralls ]; then[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6400109Z [36;1m  echo "Coveralls binary not found after extraction (Linux)."[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6400606Z [36;1m  [ "true" == "false" ] && exit 0[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6400989Z [36;1m  exit 1[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6401314Z [36;1mfi[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6401615Z [36;1m[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6401909Z [36;1m# Cleanup[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6402260Z [36;1mrm coveralls-checksums.txt[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6402663Z [36;1mecho ~/bin >> $GITHUB_PATH[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6434959Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6435437Z env:
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6435761Z   COVERAGE_REPORTER_VERSION: latest
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6436175Z   COVERAGE_REPORTER_PLATFORM: auto-detect
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.6436566Z ##[endgroup]
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.9647590Z Contents of coveralls-checksums.txt:
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.9660688Z 07a957742c6dd3f344d0dbf03e02997b7fb45125858b0face577a430ec256f0a  coveralls-linux
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.9661857Z 2c8a1fb352499e03f82a20e0681d91f5cc1d8e3c15cf4c229fba56f700e84e9d  coveralls-linux-aarch64
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.9662949Z 77d35ee96e9947095082a52de05eccf2b2bbc3f17d5324c88687bb5149b7b372  coveralls-linux-aarch64.tar.gz
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.9664015Z 07a957742c6dd3f344d0dbf03e02997b7fb45125858b0face577a430ec256f0a  coveralls-linux-x86_64
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.9665381Z f3c837413f66a6402953eee9ba3486366bd3de536100adb4a670bbd83c0382e0  coveralls-linux-x86_64.tar.gz
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.9666783Z f3c837413f66a6402953eee9ba3486366bd3de536100adb4a670bbd83c0382e0  coveralls-linux.tar.gz
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.9667995Z a7e365ae7759f42a9c1c1dde10d40af5f88a2305a19d2ed366314811bbe67a09  coveralls-windows.exe
+coverage	UNKNOWN STEP	2026-07-13T01:48:26.9669613Z 62889f0cd3ff31cb966bef872702e1ebf30c187378d78f5760a74eb7d520c1cc  coveralls-windows.zip
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0489666Z ##[group]Run # Check if coveralls binary exists
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0490227Z [36;1m# Check if coveralls binary exists[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0490754Z [36;1mif ! command -v coveralls &> /dev/null; then[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0491358Z [36;1m  echo "Coveralls binary not found. Skipping coverage report."[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0491917Z [36;1m  [ "true" == "false" ] && exit 0[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0492349Z [36;1m  exit 1[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0492681Z [36;1mfi[0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0493041Z [36;1mcoveralls report        ./lcov.info [0m
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0529753Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0530338Z env:
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0530700Z   COVERALLS_DEBUG: false
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0531136Z   COVERALLS_CARRYFORWARD_FLAGS: 
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0531586Z   COVERALLS_FLAG_NAME: 
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0531980Z   COVERALLS_PARALLEL: 
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0532413Z   COVERALLS_ENDPOINT: https://coveralls.io
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0532893Z   COVERALLS_GIT_BRANCH: 
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0533295Z   COVERALLS_GIT_COMMIT: 
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0536944Z   COVERALLS_REPO_TOKEN: ***
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0537402Z   COVERALLS_COMPARE_REF: 
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0537818Z   COVERALLS_COMPARE_SHA: 
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0538233Z   COVERALLS_SOURCE_HEADER: github-action
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0538710Z ##[endgroup]
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0626940Z  
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0628051Z ⠀⠀⠀⠀⠀⠀⣿
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0629018Z ⠀⠀⠀⠀⠀⣼⣿⣧⠀⠀⠀⠀⠀⠀⠀ ⣠⣶⣾⣿⡇⢀⣴⣾⣿⣷⣆ ⣿⣿⠀⣰⣿⡟⢸⣿⣿⣿⡇ ⣿⣿⣿⣷⣦⠀⠀⢠⣿⣿⣿⠀⠀⣿⣿⠁⠀⣼⣿⡇⠀⢀⣴⣾⣿⡷
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0630539Z ⠶⣶⣶⣶⣾⣿⣿⣿⣷⣶⣶⣶⠶  ⣸⣿⡟ ⠀⢠⣿⣿⠃⠈⣿⣿⠀⣿⣿⢠⣿⡿⠀⣿⣿⣧⣤⠀⢸⣿⡇⣠⣿⡿⠀⢠⣿⡟⣿⣿⠀⢸⣿⡿⠀⠀⣿⣿⠃⠀⢸⣿⣧⣄
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0631966Z ⠀⠀⠙⢻⣿⣿⣿⣿⣿⡟⠋⠁⠀⠀ ⣿⣿⡇⠀ ⢸⣿⣿⠀⣸⣿⡟⠀⣿⣿⣾⡿⠁ ⣿⣿⠛⠛⠀⣿⣿⢿⣿⣏⠀⢀⣿⣿⣁⣿⣿⠀⣾⣿⡇⠀⢸⣿⡿⠀⠀⡀⠙⣿⣿⡆
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0633477Z ⠀⠀⢠⣿⣿⣿⠿⣿⣿⣿⡄⠀⠀⠀ ⠙⢿⣿⣿⠇⠈⠿⣿⣿⡿⠋⠀⠀⢿⣿⡿⠁⠀⢸⣿⣿⣿⡇⢸⣿⣿⠀⣿⣿⣄⣾⣿⠛⠛⣿⣿⢠⣿⣿⣿ ⣼⣿⣿⣿ ⣿⣿⡿⠋⠀
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0634923Z ⠀⢀⣾⠟⠋⠀⠀⠀⠙⠻⣷⡀⠀⠀
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0635589Z  
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0636311Z   v0.6.17
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0636703Z 
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0637201Z 📄 Using coverage file: ./lcov.info
+coverage	UNKNOWN STEP	2026-07-13T01:48:27.0709178Z 🚀 Posting coverage data to https://coveralls.io/api/v1/jobs
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2206915Z HTTP error:
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2207588Z ---
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2208936Z Error: Gateway Timeout (504)
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2209732Z Message: <!DOCTYPE html>
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2210452Z <html lang="en">
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2210906Z 
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2211174Z   <head>
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2211716Z     <meta charset="utf-8" />
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2212833Z     <meta content="IE=Edge,chrome=1" http-equiv="X-UA-Compatible" />
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2220358Z     <title>Coveralls :: Oops, something went wrong (500)</title>
+coverage	UNKNOWN STEP	2026-07-13T01:49:27.2221040Z 
