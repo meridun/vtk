@@ -175,7 +175,7 @@ public static class Program
             // emit compact inline, no spool, no `OK`.
             Console.Out.Write(compact);
             if (compact != "" && !compact.EndsWith('\n')) Console.Out.WriteLine();
-            LogInvocation(st, strip.Inner, raw.Length, compact.Length, filtered: true, tty: false, "");
+            LogInvocation(st, strip.Inner, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
             return result.ExitCode;
         }
         // Spool the full raw (banner + body) so `vtk show` recovers everything.
@@ -194,7 +194,7 @@ public static class Program
             if (!compact.EndsWith('\n')) Console.Out.WriteLine();
         }
         Console.Out.WriteLine($"OK {id}");
-        LogInvocation(st, strip.Inner, raw.Length, compact.Length, filtered: true, tty: false, "");
+        LogInvocation(st, strip.Inner, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
         return result.ExitCode;
     }
 
@@ -302,7 +302,7 @@ public static class Program
             // Nothing elided: raw output, no ID.
             Console.Out.Write(result.Stdout);
             Console.Error.Write(result.Stderr);
-            LogInvocation(st, args, raw.Length, raw.Length, filtered: true, tty: false, "");
+            LogInvocation(st, args, raw.Length, raw.Length, filtered: true, tty: false, entry.Name);
             return result.ExitCode;
         }
 
@@ -313,7 +313,7 @@ public static class Program
             // recover-me round-trip was elided.
             Console.Out.Write(compact);
             if (compact != "" && !compact.EndsWith('\n')) Console.Out.WriteLine();
-            LogInvocation(st, args, raw.Length, compact.Length, filtered: true, tty: false, "");
+            LogInvocation(st, args, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
             return result.ExitCode;
         }
 
@@ -332,7 +332,7 @@ public static class Program
             if (!compact.EndsWith('\n')) Console.Out.WriteLine();
         }
         Console.Out.WriteLine($"OK {id}");
-        LogInvocation(st, args, raw.Length, compact.Length, filtered: true, tty: false, "");
+        LogInvocation(st, args, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
         return result.ExitCode;
     }
 
