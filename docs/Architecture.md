@@ -62,6 +62,11 @@ outgrows a screen.)
   `.toml` + fixtures each, TOML-engine line-strip only; output-reshaping filters are C# code,
   #42's lane), children spawned as gap-log evidence justifies rather than bulk-imported —
   [#41](https://github.com/meridun/vtk/issues/41)
+- `npm run <script>` with an **unrecognized inner tool** uses a **size-floored fold** (option C):
+  success output folds behind `OK <id>` only above a generous absolute byte floor (build picks
+  the exact floor, ~64KB order); below it — and on any failure — output stays inline, so terse
+  load-bearing scripts (e.g. `npm run sdlc`) pass through automatically with no exempt list —
+  [#93](https://github.com/meridun/vtk/issues/93)
 
 ## Pipeline
 
