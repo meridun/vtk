@@ -136,6 +136,13 @@ vtk show 2e3f --grep pat  →   just the matching lines
 - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte
   counts, filtered/passthrough, unfiltered reason, timestamp). Backs `vtk show`, `vtk gain`,
   and `vtk gaps` — one store, three queries.
+- **Session provider** (`Vtk.Core/Session/`) — locates and reads local agent session
+  transcripts (Claude Code JSONL under `~/.claude/projects/<munged-cwd>/`), yielding command
+  events (command, error output presence, ordering). Analysis-side only: the wrap path never
+  touches it (registry decision #43). Shared by `vtk learn` and the planned `discover` (#44)
+  and per-session gain (#46). Consumers like `learn` are read-only over transcripts — no
+  process spawning — and route any command text destined for disk through the spool
+  redaction pass.
 
 ## Key invariants
 
