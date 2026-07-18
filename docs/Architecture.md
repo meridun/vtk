@@ -134,8 +134,9 @@ vtk show 2e3f --grep pat  →   just the matching lines
   they are written as BOM-less UTF-8 regardless of the ambient console codepage; the raw
   passthrough path copies child bytes stream-to-stream, untouched.
 - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte
-  counts, filtered/passthrough, unfiltered reason, timestamp). Backs `vtk show`, `vtk gain`,
-  and `vtk gaps` — one store, three queries.
+  counts, filtered/passthrough, reason — the engaged filter's registry name when filtered, the
+  unfiltered cause otherwise — and timestamp). Backs `vtk show`, `vtk gain`, and `vtk gaps` —
+  one store, three queries.
 
 ## Key invariants
 
