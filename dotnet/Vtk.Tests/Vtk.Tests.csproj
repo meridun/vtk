@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <None Include="Filter\testdata\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Session\testdata\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
