@@ -58,6 +58,10 @@ outgrows a screen.)
   telemetry (vtk's divergence thesis holds); `discover` adds a post-hoc, rule-based analysis
   pass over session history (ranked opportunities, deduped against shipped filters), built with
   `learn` on the shared session provider — [#44](https://github.com/meridun/vtk/issues/44)
+- The rtk noise-strip long-tail is a **tracking umbrella** split into per-tool child issues (one
+  `.toml` + fixtures each, TOML-engine line-strip only; output-reshaping filters are C# code,
+  #42's lane), children spawned as gap-log evidence justifies rather than bulk-imported —
+  [#41](https://github.com/meridun/vtk/issues/41)
 
 ## Pipeline
 
