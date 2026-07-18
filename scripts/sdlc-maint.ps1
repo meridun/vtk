@@ -394,7 +394,9 @@ if ($machineLock.acquired) {
                     if ($add.Ok) { $buildTree = $scratch } else { $publish.result = "skipped (detached build worktree failed: $($add.Output -join ' '))" }
                 }
                 if ($buildTree) {
-                    & dotnet publish (Join-Path $buildTree 'dotnet\Vtk.Cli') -c Release -o $releaseDir 2>&1 | Out-Null
+                    # SourceRevisionId bakes "1.0.0+<shortsha>" into the assembly
+                    # informational version — the primary source for `vtk version` (#98).
+                    & dotnet publish (Join-Path $buildTree 'dotnet\Vtk.Cli') -c Release -o $releaseDir "-p:SourceRevisionId=$shortSha" 2>&1 | Out-Null
                     if ($LASTEXITCODE -eq 0) {
                         Set-Content -Path (Join-Path $releaseDir '.publish-ok') -Value ("{0} {1:o}" -f $RunId, [DateTimeOffset]::UtcNow)
                         $built = $true
