@@ -38,6 +38,7 @@ public static class Program
         {
             "eslint" => Eslint(stdout, stderr),
             "mocha" => Mocha(stdout, stderr, banner: null),
+            "cross-env" => CrossEnv(stdout, stderr, args),
             "npx" => Npx(stdout, stderr, args),
             "npm" => Npm(stdout, stderr, args),
             "gh" => Gh(stdout, stderr, args),
@@ -103,6 +104,34 @@ public static class Program
         "  22:11  error    Missing semicolon                     semi\n" +
         "\n✖ 12 problems (10 errors, 2 warnings)\n";
 
+    // ---- cross-env ---------------------------------------------------------
+    // `cross-env VAR=x [...] <cmd> [args...]`: applies the assignments to the
+    // process environment, then runs the inner fake in-process — mirroring
+    // real cross-env's exec of the trailing command untouched (#97). Because
+    // assignments are real env writes, VTK_FAKE_*_CODE can be set through
+    // cross-env itself, exactly like real traffic.
+    private static int CrossEnv(TextWriter stdout, TextWriter stderr, string[] args)
+    {
+        var i = 0;
+        while (i < args.Length && System.Text.RegularExpressions.Regex.IsMatch(args[i], "^[A-Za-z_][A-Za-z0-9_]*="))
+        {
+            var eq = args[i].IndexOf('=');
+            Environment.SetEnvironmentVariable(args[i][..eq], args[i][(eq + 1)..]);
+            i++;
+        }
+        if (i >= args.Length)
+        {
+            stderr.WriteLine("vtk-faketool cross-env: missing command");
+            return 64;
+        }
+        return args[i] switch
+        {
+            "mocha" => Mocha(stdout, stderr, banner: null),
+            "eslint" => Eslint(stdout, stderr),
+            _ => Unknown(stderr, args[i]),
+        };
+    }
+
     // ---- mocha / npx -------------------------------------------------------
     // VTK_FAKE_MOCHA_CODE (default 1) selects the exit code AND the payload:
     // 0 -> green run; 1 -> failing run (mocha's "tests failed", filterable);
@@ -117,11 +146,18 @@ public static class Program
     }
 
     // `npx <tool>`: the Go suite copied the fake mocha to npx(.exe) so that
-    // `npx mocha` resolved to it. Emulate the same: only mocha is wired.
+    // `npx mocha` resolved to it. Emulate the same, tolerating the
+    // transparent flags real npx traffic carries (#97): mocha and eslint are
+    // wired; anything else (including non-transparent flags like -p) is the
+    // unknown-inner error path.
     private static int Npx(TextWriter stdout, TextWriter stderr, string[] args)
     {
-        if (args.Length >= 1 && args[0] == "mocha")
+        var i = 0;
+        while (i < args.Length && args[i] is "--yes" or "-y" or "--no-install") i++;
+        if (i < args.Length && args[i] == "mocha")
             return Mocha(stdout, stderr, banner: null);
+        if (i < args.Length && args[i] == "eslint")
+            return Eslint(stdout, stderr);
         stderr.WriteLine("vtk-faketool npx: unknown inner tool");
         return 1;
     }
@@ -243,6 +279,9 @@ public static class Program
     //   nofil     -> plain output with no inner filter (banner-stripped
     //                passthrough, gap attributed to node; exit default 0)
     //   test      -> mocha spec run (exit/payload from VTK_FAKE_MOCHA_CODE)
+    //   itest     -> mocha spec run behind a cross-env banner line (#97, the
+    //                telemetry shape `> cross-env INTEGRATION=1 mocha ...`;
+    //                exit/payload from VTK_FAKE_MOCHA_CODE)
     //   db:status -> dbmate status report (exit 0)
     private static int Npm(TextWriter stdout, TextWriter stderr, string[] args)
     {
@@ -259,6 +298,8 @@ public static class Program
                 return EnvCode("VTK_FAKE_NPM_CODE", 0);
             case "test":
                 return Mocha(stdout, stderr, banner: "> demo@1.0.0 test\n> mocha --reporter spec\n\n");
+            case "itest":
+                return Mocha(stdout, stderr, banner: "> demo@1.0.0 itest\n> cross-env INTEGRATION=1 mocha --reporter spec\n\n");
             case "db:status":
                 stdout.Write("> demo@1.0.0 db:status\n> dbmate status\n\n");
                 stdout.Write(DbmateStatusOut);
