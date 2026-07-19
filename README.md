@@ -35,6 +35,14 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   to the inner tool's family — `vtk gaps` points at the real tool, not npm. The full raw
   output, banner included, stays recoverable via `vtk show`. Measured 44–58% on fixtures;
   savings compound with the inner filter's on large reports.
+- **launcher-prefix unwrap** (#97) — filter matching sees through transparent launcher prefixes:
+  `cross-env VAR=x <cmd>`, `npx <cmd>` (with `--yes`/`-y`/`--no-install`), and bare leading
+  `VAR=x` tokens, stacked in any combination, unwrap to the inner command before filter lookup —
+  so `cross-env INTEGRATION=1 mocha ...` (invoked directly or expanded inside an `npm run`
+  script) engages the mocha filter instead of passing through unfiltered. Gap/gain telemetry is
+  attributed to the inner tool too, so `cross-env` never shows up as its own family. The executed
+  command line is never altered, and non-transparent shapes (`npx -p pkg <cmd>`) still pass
+  through unchanged, gap-logged.
 - **mocha filter** — `mocha`, `npx mocha` (spec reporter): folds passing/pending/suite spec-tree
   lines away and keeps the summary (`N passing`/`M failing`/`K pending`) plus every failure-detail
   block (name + assertion + stack) verbatim — the signal an agent needs. Measured 23–94% on

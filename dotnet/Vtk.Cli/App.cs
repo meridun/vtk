@@ -73,7 +73,12 @@ public static class Program
         }
         st.Sweep(Store.DefaultTTL, DateTime.UtcNow);
 
-        var found = Registry.Default().TryLookup(args, out var entry);
+        // Transparent launcher prefixes (cross-env, npx, bare VAR=x) are
+        // unwrapped for filter matching and telemetry attribution only (#97):
+        // the executed command line stays `args` on every path, so command
+        // semantics and exit-code parity are untouched.
+        var match = Prefix.Unwrap(args);
+        var found = Registry.Default().TryLookup(match, out var entry);
 
         // Interactive invocations bypass filtering entirely: interposing a
         // pipe would break the wrapped command's own TTY detection. A
@@ -83,7 +88,7 @@ public static class Program
         if (IsTTY())
         {
             var reason = found ? Store.ReasonTTYBypass : Store.ReasonNoFilter;
-            return Passthrough(st, args, true, reason);
+            return Passthrough(st, args, true, reason, match);
         }
 
         // `npm run <script>` is a dispatch layer, not a leaf command: npm
@@ -91,16 +96,16 @@ public static class Program
         // (eslint, mocha, ...). Strip the banner and delegate the body to
         // the inner tool's filter, with gap attribution to that inner tool
         // — not to npm.
-        if (IsNpmRun(args))
+        if (IsNpmRun(match))
         {
-            return RunNpm(st, args);
+            return RunNpm(st, args, match);
         }
 
         if (!found)
         {
-            return Passthrough(st, args, false, Store.ReasonNoFilter);
+            return Passthrough(st, args, false, Store.ReasonNoFilter, match);
         }
-        return RunFiltered(st, entry, args);
+        return RunFiltered(st, entry, args, match);
     }
 
     /// <summary>
@@ -119,9 +124,12 @@ public static class Program
     /// branch), a panicking inner filter degrades to raw, and the spooled
     /// bytes are the full raw output (banner included) so `vtk show`
     /// recovers everything that was elided. Gap and stats attribution use
-    /// the inner argv, so `vtk gaps` points at the real tool rather than npm.
+    /// the inner argv — prefix-unwrapped (#97), since npm scripts routinely
+    /// expand to `cross-env VAR=x <tool> ...` — so `vtk gaps` points at the
+    /// real tool rather than npm or its launcher. `match` is the unwrapped
+    /// outer argv, used only when no npm banner is recognized.
     /// </summary>
-    private static int RunNpm(Store st, string[] args)
+    private static int RunNpm(Store st, string[] args, string[] match)
     {
         var result = ProcessRunner.RunCaptured(args);
         var raw = result.Combined;
@@ -139,9 +147,10 @@ public static class Program
         {
             // Not a recognizable npm banner: treat as an ordinary uncovered
             // command, gap-logged under the npm family.
-            return EmitRawAttr(args, Store.ReasonNoFilter);
+            return EmitRawAttr(match, Store.ReasonNoFilter);
         }
 
+        strip = strip with { Inner = Prefix.Unwrap(strip.Inner) };
         var found = Registry.Default().TryLookup(strip.Inner, out var entry);
         if (!found)
         {
@@ -255,13 +264,18 @@ public static class Program
         return code;
     }
 
-    /// <summary>Runs the command with output untouched. Unless the output is a TTY, bytes are counted so the gap entry is measurable.</summary>
-    private static int Passthrough(Store? st, string[] args, bool tty, string reason)
+    /// <summary>
+    /// Runs the command with output untouched. Unless the output is a TTY,
+    /// bytes are counted so the gap entry is measurable. <paramref name="logArgs"/>
+    /// (when given) is the prefix-unwrapped argv used for gap attribution
+    /// (#97); execution always uses <paramref name="args"/>.
+    /// </summary>
+    private static int Passthrough(Store? st, string[] args, bool tty, string reason, string[]? logArgs = null)
     {
         var code = ProcessRunner.RunPassthroughCounted(args, tty, out var n);
         if (st is not null)
         {
-            LogInvocation(st, args, n, n, filtered: false, tty, reason);
+            LogInvocation(st, logArgs ?? args, n, n, filtered: false, tty, reason);
         }
         return code;
     }
@@ -270,9 +284,11 @@ public static class Program
     /// Captures output, applies the filter, spools the raw bytes when content
     /// was elided, and emits "OK &lt;id&gt;". Any failure on this path degrades
     /// to raw passthrough — never to lost output (invariant 2). Exit-code
-    /// parity holds on every branch (invariant 1).
+    /// parity holds on every branch (invariant 1). <paramref name="match"/> is
+    /// the prefix-unwrapped argv (#97) used for stats/gap attribution;
+    /// execution and spool provenance keep the original <paramref name="args"/>.
     /// </summary>
-    private static int RunFiltered(Store st, Entry entry, string[] args)
+    private static int RunFiltered(Store st, Entry entry, string[] args, string[] match)
     {
         var result = ProcessRunner.RunCaptured(args);
         var raw = result.Combined;
@@ -281,7 +297,7 @@ public static class Program
         {
             Console.Out.Write(result.Stdout);
             Console.Error.Write(result.Stderr);
-            LogInvocation(st, args, raw.Length, raw.Length, filtered: false, tty: false, reason);
+            LogInvocation(st, match, raw.Length, raw.Length, filtered: false, tty: false, reason);
             return result.ExitCode;
         }
 
@@ -295,7 +311,7 @@ public static class Program
 
         if (!TryApplyFilter(entry.Fn, raw, out var compact))
         {
-            Console.Error.WriteLine($"vtk: filter for \"{args[0]}\" panicked; raw passthrough (see vtk gaps)");
+            Console.Error.WriteLine($"vtk: filter for \"{match[0]}\" panicked; raw passthrough (see vtk gaps)");
             return EmitRaw(Store.ReasonFilterPanic);
         }
 
@@ -304,7 +320,7 @@ public static class Program
             // Nothing elided: raw output, no ID.
             Console.Out.Write(result.Stdout);
             Console.Error.Write(result.Stderr);
-            LogInvocation(st, args, raw.Length, raw.Length, filtered: true, tty: false, entry.Name);
+            LogInvocation(st, match, raw.Length, raw.Length, filtered: true, tty: false, entry.Name);
             return result.ExitCode;
         }
 
@@ -315,7 +331,7 @@ public static class Program
             // recover-me round-trip was elided.
             Console.Out.Write(compact);
             if (compact != "" && !compact.EndsWith('\n')) Console.Out.WriteLine();
-            LogInvocation(st, args, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
+            LogInvocation(st, match, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
             return result.ExitCode;
         }
 
@@ -334,7 +350,7 @@ public static class Program
             if (!compact.EndsWith('\n')) Console.Out.WriteLine();
         }
         Console.Out.WriteLine($"OK {id}");
-        LogInvocation(st, args, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
+        LogInvocation(st, match, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
         return result.ExitCode;
     }
 
