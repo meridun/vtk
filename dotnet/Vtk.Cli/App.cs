@@ -38,7 +38,7 @@ public static class Program
 
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps [--file-issues [--yes] [--min-bytes N] [--min-calls N]] | vtk gain [--daily] [--graph] [--history] | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print] | vtk hooks <init|verify|rewrite> | vtk version");
+            Console.Error.WriteLine("usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps [--file-issues [--yes] [--min-bytes N] [--min-calls N]] | vtk gain [--daily] [--graph] [--history] | vtk learn [--min-confidence X] [--min-occurrences N] [--sessions <dir>] [--out <file>] [--dry-run] | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print] | vtk hooks <init|verify|rewrite> | vtk version");
             return 2;
         }
 
@@ -47,6 +47,7 @@ public static class Program
             case "show": return CmdShow(args[1..]);
             case "gaps": return CmdGaps(args[1..]);
             case "gain": return CmdGain(args[1..]);
+            case "learn": return Learn.Run(args[1..]);
             case "install": return Install.Run(args[1..]);
             case "hooks": return Hooks.Run(args[1..]);
             case "version":

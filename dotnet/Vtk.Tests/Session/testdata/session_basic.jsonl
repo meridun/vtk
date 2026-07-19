@@ -1,0 +1,9 @@
+{"type":"summary","summary":"Session about git","leafUuid":"x"}
+{"parentUuid":null,"type":"assistant","uuid":"a1","timestamp":"2026-07-01T10:00:00Z","message":{"role":"assistant","content":[{"type":"text","text":"Checking status."},{"type":"tool_use","id":"toolu_01","name":"Bash","input":{"command":"git satus","description":"Show working tree status"}}]}}
+{"parentUuid":"a1","type":"user","uuid":"u1","timestamp":"2026-07-01T10:00:01Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","is_error":true,"content":"git: 'satus' is not a git command. See 'git --help'.\n\nThe most similar command is\n\tstatus"}]}}
+{"parentUuid":"u1","type":"assistant","uuid":"a2","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_02","name":"Read","input":{"file_path":"C:\\x\\y.txt"}}]}}
+{"parentUuid":"a2","type":"user","uuid":"u2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_02","content":[{"type":"text","text":"file contents"}]}]}}
+{"parentUuid":"u2","type":"assistant","uuid":"a3","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_03","name":"Bash","input":{"command":"git status"}}]}}
+{"parentUuid":"a3","type":"user","uuid":"u3","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_03","content":[{"type":"text","text":"On branch dev"},{"type":"text","text":"nothing to commit, working tree clean"}]}]}}
+not json at all {{{
+{"parentUuid":"u3","type":"assistant","uuid":"a4","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_04","name":"Bash","input":{"command":"echo dangling"}}]}}

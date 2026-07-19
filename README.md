@@ -101,6 +101,16 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm` route through vtk without being
   prefixed. Marker-delimited and idempotent, with `--print`/`--dry-run`/`--uninstall`/`--shell`.
+- **Session mining + `vtk learn`** — mines Claude Code session transcripts (JSONL) for
+  commands that failed and were then corrected (same base command, error output first, clean
+  run within the lookahead window), classifies the error (`UnknownFlag`, `CommandNotFound`,
+  `WrongSyntax`, `WrongPath`, `MissingArg`, `PermissionDenied`, `Other`), dedupes pairs into
+  confidence-scored rules, and writes `.claude/rules/cli-corrections.md` so the agent stops
+  repeating the mistake. Read-only analysis over local transcripts — no process spawning, no
+  network; commands pass the spool credential-redaction pass before landing in the rules file.
+  `--min-confidence`/`--min-occurrences` thresholds, `--sessions`/`--out` overrides, `--dry-run`
+  prints instead of writing. First consumer of the shared session provider that `discover` (#44)
+  and per-session gain (#46) will reuse.
 - **Agent hooks + `vtk hooks`** — installs a pre-tool-call rewrite hook that routes plain
   `git`/`gh`/`npm` shell tool calls through vtk at the agent's tool-call layer, with an
   integrity-verifiable install: `init` writes the managed hook config (Claude Code
@@ -133,6 +143,9 @@ vtk gain                # cumulative savings: raw vs emitted bytes, overall and 
 vtk gain --daily        # per-UTC-day savings table (~tokens, ~USD per day)
 vtk gain --graph        # bar chart of daily saved bytes, last 30 logged days
 vtk gain --history      # last 10 invocations with per-command savings (flags combine)
+vtk learn               # mine session JSONL for fail->succeed corrections ->
+                        # .claude/rules/cli-corrections.md
+vtk learn --dry-run     # print the rules file without writing it
 vtk install             # wire git/gh/npm -> vtk into your shell rc/profile (bash + pwsh)
 vtk install --print     # print the wrapper block(s) without writing anything
 vtk install --uninstall # remove the managed block

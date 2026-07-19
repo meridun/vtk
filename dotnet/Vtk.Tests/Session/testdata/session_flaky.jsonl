@@ -1,0 +1,8 @@
+{"type":"assistant","uuid":"b1","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_11","name":"Bash","input":{"command":"npm run lint --ext .ts"}}]}}
+{"type":"user","uuid":"b2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_11","is_error":true,"content":"npm error unknown option '--ext'"}]}}
+{"type":"assistant","uuid":"b3","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_12","name":"Bash","input":{"command":"npm run lint -- --ext .ts"}}]}}
+{"type":"user","uuid":"b4","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_12","content":"lint clean"}]}}
+{"type":"assistant","uuid":"b5","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_13","name":"Bash","input":{"command":"dotnet test"}}]}}
+{"type":"user","uuid":"b6","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_13","is_error":true,"content":"transient runner crash"}]}}
+{"type":"assistant","uuid":"b7","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_14","name":"Bash","input":{"command":"dotnet test"}}]}}
+{"type":"user","uuid":"b8","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_14","content":"Passed! - 100 tests"}]}}
