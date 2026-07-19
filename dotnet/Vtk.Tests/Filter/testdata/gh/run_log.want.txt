@@ -1,0 +1,251 @@
+OK quality-check / Check Licenses (237 lines)
+FAIL quality-check / Lint Code (247 lines)
+Current runner version: '2.335.1'
+##[group]Runner Image Provisioner
+Hosted Compute Agent
+Version: 20260707.563
+Commit: 02667638d2b423fbc733a8e32a88b44996a3ba6e
+Build Date: 2026-07-07T19:33:50Z
+Worker ID: {19cf524c-342c-4d47-9b58-4eca44808afa}
+Azure Region: westus
+##[endgroup]
+##[group]Operating System
+Ubuntu
+24.04.4
+LTS
+##[endgroup]
+##[group]Runner Image
+Image: ubuntu-24.04
+Version: 20260714.240.1
+Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260714.240/images/ubuntu/Ubuntu2404-Readme.md
+Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260714.240
+##[endgroup]
+##[group]GITHUB_TOKEN Permissions
+Contents: read
+Metadata: read
+##[endgroup]
+Secret source: Dependabot
+Prepare workflow directory
+Prepare all required actions
+Getting action download info
+Download action repository 'actions/checkout@v6' (SHA:df4cb1c069e1874edd31b4311f1884172cec0e10)
+Download action repository 'actions/setup-node@v6' (SHA:249970729cb0ef3589644e2896645e5dc5ba9c38)
+Uses: fastify/workflows/.github/workflows/nested-quality.yml@refs/tags/v6 (2073dc8e1f9e172bf42daa3843c9dbd31af1e8cb)
+##[group] Inputs
+  license-check: true
+  license-check-allowed-additional: 
+  lint: true
+##[endgroup]
+Complete job name: quality-check / Lint Code
+##[group]Run actions/checkout@v6
+with:
+  persist-credentials: false
+  repository: fastify/fastify
+  token: ***
+  ssh-strict: true
+  ssh-user: git
+  clean: true
+  sparse-checkout-cone-mode: true
+  fetch-depth: 1
+  fetch-tags: false
+  show-progress: true
+  lfs: false
+  submodules: false
+  set-safe-directory: true
+##[endgroup]
+Syncing repository: fastify/fastify
+##[group]Getting Git version info
+Working directory is '/home/runner/work/fastify/fastify'
+[command]/usr/bin/git version
+git version 2.54.0
+##[endgroup]
+Temporarily overriding HOME='/home/runner/work/_temp/092728c7-d8a0-4e86-ad11-c9141c005f85' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+[command]/usr/bin/git config --global --add safe.directory /home/runner/work/fastify/fastify
+Deleting the contents of '/home/runner/work/fastify/fastify'
+##[group]Determining repository object format
+##[endgroup]
+##[group]Initializing the repository
+[command]/usr/bin/git init /home/runner/work/fastify/fastify
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+Initialized empty Git repository in /home/runner/work/fastify/fastify/.git/
+[command]/usr/bin/git remote add origin https://github.com/fastify/fastify
+##[endgroup]
+##[group]Disabling automatic garbage collection
+[command]/usr/bin/git config --local gc.auto 0
+##[endgroup]
+##[group]Setting up auth
+Removing SSH command configuration
+[command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Removing HTTP extra header
+[command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Removing includeIf entries pointing to credentials config files
+[command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+[command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+[command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+[command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/fastify/fastify/.git.path /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/fastify/fastify/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+##[endgroup]
+##[group]Fetching the repository
+[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +8cbc4f32e8ab21472594179afbc8bbd03bbb1aeb:refs/remotes/pull/6851/merge
+From https://github.com/fastify/fastify
+ * [new ref]         8cbc4f32e8ab21472594179afbc8bbd03bbb1aeb -> pull/6851/merge
+##[endgroup]
+##[group]Determining the checkout info
+##[endgroup]
+[command]/usr/bin/git sparse-checkout disable
+[command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+##[group]Checking out the ref
+[command]/usr/bin/git checkout --progress --force refs/remotes/pull/6851/merge
+Note: switching to 'refs/remotes/pull/6851/merge'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at 8cbc4f3 Merge cba5828d0450a40cc34e4bebe7e029690e1ab1f8 into 6e680c3e8150071be96cba6b30e1d74487559b54
+##[endgroup]
+[command]/usr/bin/git log -1 --format=%H
+8cbc4f32e8ab21472594179afbc8bbd03bbb1aeb
+##[group]Removing auth
+Removing SSH command configuration
+[command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Removing HTTP extra header
+[command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Removing includeIf entries pointing to credentials config files
+[command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+includeif.gitdir:/home/runner/work/fastify/fastify/.git.path
+includeif.gitdir:/home/runner/work/fastify/fastify/.git/worktrees/*.path
+includeif.gitdir:/github/workspace/.git.path
+includeif.gitdir:/github/workspace/.git/worktrees/*.path
+[command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/fastify/fastify/.git.path
+/home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/fastify/fastify/.git.path /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/fastify/fastify/.git/worktrees/*.path
+/home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/fastify/fastify/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+/github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+/github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+[command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Removing credentials config '/home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config'
+##[endgroup]
+##[group]Run actions/setup-node@v6
+with:
+  check-latest: true
+  node-version: lts/*
+  token: ***
+  package-manager-cache: true
+##[endgroup]
+Attempt to resolve LTS alias from manifest...
+Attempt to resolve the latest version from manifest...
+Resolved as '24.18.0'
+Found in cache @ /opt/hostedtoolcache/node/24.18.0/x64
+##[group]Environment details
+node: v24.18.0
+npm: 11.16.0
+yarn: 1.22.22
+##[endgroup]
+##[group]Run npm i --ignore-scripts
+npm i --ignore-scripts
+shell: /usr/bin/bash -e {0}
+##[endgroup]
+npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+
+added 654 packages, and audited 655 packages in 19s
+
+269 packages are looking for funding
+  run `npm fund` for details
+
+10 vulnerabilities (2 low, 3 moderate, 3 high, 2 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues possible (including breaking changes), run:
+  npm audit fix --force
+
+Some issues need review, and may require choosing
+a different dependency.
+
+Run `npm audit` for details.
+##[group]Run npm run lint
+npm run lint
+shell: /usr/bin/bash -e {0}
+##[endgroup]
+
+> fastify@5.10.0 lint
+> npm run lint:eslint
+
+
+> fastify@5.10.0 lint:eslint
+> eslint
+
+
+Oops! Something went wrong! :(
+
+ESLint: 9.39.5
+
+TypeError: Cannot read properties of undefined (reading 'Intrinsic')
+    at Object.<anonymous> (/home/runner/work/fastify/fastify/node_modules/ts-api-utils/lib/index.cjs:787:57)
+    at Module._compile (node:internal/modules/cjs/loader:1871:14)
+    at Object..js (node:internal/modules/cjs/loader:2002:10)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1617:12)
+    at require (node:internal/modules/helpers:153:16)
+    at Object.<anonymous> (/home/runner/work/fastify/fastify/node_modules/neostandard/node_modules/@typescript-eslint/typescript-estree/dist/convert-comments.js:37:30)
+    at Module._compile (node:internal/modules/cjs/loader:1871:14)
+##[error]Process completed with exit code 2.
+Post job cleanup.
+[command]/usr/bin/git version
+git version 2.54.0
+Temporarily overriding HOME='/home/runner/work/_temp/58521369-fdb1-4f11-9f83-0edb6fbe9f28' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+[command]/usr/bin/git config --global --add safe.directory /home/runner/work/fastify/fastify
+Removing SSH command configuration
+[command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Removing HTTP extra header
+[command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Removing includeIf entries pointing to credentials config files
+[command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+[command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Cleaning up orphan processes
+OK quality-check / Dependency Review (200 lines)
+  ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/dependency-review-action@05fe4576374b728f0c523d6a13d64c25081e0803. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

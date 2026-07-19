@@ -90,5 +90,34 @@ public class RegistryTests
         Assert.NotNull(entry.Fn);
         Assert.True(entry.Filters(0) && !entry.Filters(101),
             "cargo should filter exit 0 only (compile errors exit 101 stay raw)");
+        Assert.False(string.IsNullOrEmpty(entry.Name), "TOML entries carry their def name for telemetry");
+    }
+
+    /// <summary>
+    /// Entries carry their registry identity so telemetry can name the filter
+    /// that engaged (#96): exact-key entries use the key, regex entries
+    /// default to the pattern.
+    /// </summary>
+    [Fact]
+    public void Entry_NameCarriesRegistryIdentity()
+    {
+        var r = new Registry();
+        r.Register("git status", _ => "");
+        r.RegisterRegex(new Regex(@"^cargo\b"), _ => "");
+
+        Assert.True(r.TryLookup(new[] { "git", "status" }, out var byKey));
+        Assert.Equal("git status", byKey.Name);
+        Assert.True(r.TryLookup(new[] { "cargo", "build" }, out var byRegex));
+        Assert.Equal(@"^cargo\b", byRegex.Name);
+    }
+
+    /// <summary>`gh run` dispatches both run-list tables and CI job logs (#96), on exit 0 and 1 (`--exit-status` forms).</summary>
+    [Fact]
+    public void Default_GhRun_AllowsExitZeroAndOne()
+    {
+        var r = Registry.Default();
+        Assert.True(r.TryLookup(new[] { "gh", "run" }, out var entry));
+        Assert.Equal("gh run", entry.Name);
+        Assert.True(entry.Filters(0) && entry.Filters(1) && !entry.Filters(2));
     }
 }

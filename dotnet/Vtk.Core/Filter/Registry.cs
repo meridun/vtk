@@ -23,6 +23,15 @@ public sealed class Entry
     public required FilterFunc Fn { get; init; }
     public required IReadOnlySet<int> ExitCodes { get; init; }
 
+    /// <summary>
+    /// The filter's registry identity — the exact key ("gh run") or the
+    /// declarative filter's name. Telemetry records it as the invocation
+    /// reason when the filter engages (#96), so `filtered=true` entries name
+    /// the filter that ran. A static identifier, never output content
+    /// (invariant 3).
+    /// </summary>
+    public string Name { get; init; } = "";
+
     /// <summary>Reports whether this entry is allowed to run for the given child exit code.</summary>
     public bool Filters(int code) => ExitCodes.Contains(code);
 }
@@ -45,7 +54,7 @@ public sealed class Registry
     public void RegisterCodes(string key, FilterFunc fn, params int[] codes)
     {
         if (codes.Length == 0) codes = new[] { 0 };
-        _entries[key] = new Entry { Fn = fn, ExitCodes = new HashSet<int>(codes) };
+        _entries[key] = new Entry { Name = key, Fn = fn, ExitCodes = new HashSet<int>(codes) };
     }
 
     /// <summary>
@@ -54,10 +63,14 @@ public sealed class Registry
     /// means exit 0 only. Regex entries are the declarative-filter path and
     /// are checked only after the exact-key map misses.
     /// </summary>
-    public void RegisterRegex(Regex re, FilterFunc fn, params int[] codes)
+    public void RegisterRegex(Regex re, FilterFunc fn, params int[] codes) =>
+        RegisterRegexNamed(re.ToString(), re, fn, codes);
+
+    /// <summary>RegisterRegex with an explicit filter name for telemetry (declarative TOML filters carry their def name).</summary>
+    public void RegisterRegexNamed(string name, Regex re, FilterFunc fn, params int[] codes)
     {
         if (codes.Length == 0) codes = new[] { 0 };
-        _regexes.Add((re, new Entry { Fn = fn, ExitCodes = new HashSet<int>(codes) }));
+        _regexes.Add((re, new Entry { Name = name, Fn = fn, ExitCodes = new HashSet<int>(codes) }));
     }
 
     /// <summary>
@@ -120,7 +133,13 @@ public sealed class Registry
         // forms hit the same keys but pass through structurally intact.
         r.Register("gh issue", Gh.IssueList);
         r.Register("gh pr", Gh.PrList);
-        r.Register("gh run", Gh.RunList);
+        // `gh run` dispatches by content shape: run-list tables and CI job
+        // logs (`run view --log` / `--log-failed`, #96). Exit 1 is in the
+        // allowlist for the report-style `--exit-status` forms, which
+        // propagate a failed run's conclusion while emitting exactly the log
+        // worth folding; nonzero API/usage errors have no log/table shape
+        // and pass through via the shape guards.
+        r.RegisterCodes("gh run", Gh.Run, 0, 1);
         // files/search family: clean-run-only (grep exit 1 = no matches = no
         // output worth compacting; find/ls nonzero exits keep raw error output).
         r.Register("ls", Files.Ls);
@@ -146,7 +165,7 @@ public sealed class Registry
         {
             foreach (var d in TomlFilter.Load())
             {
-                r.RegisterRegex(d.Match, d.Fn, d.ExitCodes);
+                r.RegisterRegexNamed(d.Name, d.Match, d.Fn, d.ExitCodes);
             }
         }
         catch

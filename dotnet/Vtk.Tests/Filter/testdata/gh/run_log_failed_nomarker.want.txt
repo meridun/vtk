@@ -1,0 +1,22 @@
+OK coverage (120 lines)
+
+last 20 log lines:
+⠶⣶⣶⣶⣾⣿⣿⣿⣷⣶⣶⣶⠶  ⣸⣿⡟ ⠀⢠⣿⣿⠃⠈⣿⣿⠀⣿⣿⢠⣿⡿⠀⣿⣿⣧⣤⠀⢸⣿⡇⣠⣿⡿⠀⢠⣿⡟⣿⣿⠀⢸⣿⡿⠀⠀⣿⣿⠃⠀⢸⣿⣧⣄
+⠀⠀⠙⢻⣿⣿⣿⣿⣿⡟⠋⠁⠀⠀ ⣿⣿⡇⠀ ⢸⣿⣿⠀⣸⣿⡟⠀⣿⣿⣾⡿⠁ ⣿⣿⠛⠛⠀⣿⣿⢿⣿⣏⠀⢀⣿⣿⣁⣿⣿⠀⣾⣿⡇⠀⢸⣿⡿⠀⠀⡀⠙⣿⣿⡆
+⠀⠀⢠⣿⣿⣿⠿⣿⣿⣿⡄⠀⠀⠀ ⠙⢿⣿⣿⠇⠈⠿⣿⣿⡿⠋⠀⠀⢿⣿⡿⠁⠀⢸⣿⣿⣿⡇⢸⣿⣿⠀⣿⣿⣄⣾⣿⠛⠛⣿⣿⢠⣿⣿⣿ ⣼⣿⣿⣿ ⣿⣿⡿⠋⠀
+⠀⢀⣾⠟⠋⠀⠀⠀⠙⠻⣷⡀⠀⠀
+ 
+  v0.6.17
+
+📄 Using coverage file: ./lcov.info
+🚀 Posting coverage data to https://coveralls.io/api/v1/jobs
+HTTP error:
+---
+Error: Gateway Timeout (504)
+Message: <!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta content="IE=Edge,chrome=1" http-equiv="X-UA-Compatible" />
+    <title>Coveralls :: Oops, something went wrong (500)</title>

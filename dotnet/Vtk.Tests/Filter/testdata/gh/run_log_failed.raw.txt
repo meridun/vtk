@@ -1,0 +1,247 @@
+quality-check / Lint Code	UNKNOWN STEP	﻿2026-07-16T14:24:08.8191752Z Current runner version: '2.335.1'
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8227772Z ##[group]Runner Image Provisioner
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8229362Z Hosted Compute Agent
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8230410Z Version: 20260707.563
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8231862Z Commit: 02667638d2b423fbc733a8e32a88b44996a3ba6e
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8233341Z Build Date: 2026-07-07T19:33:50Z
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8234611Z Worker ID: {19cf524c-342c-4d47-9b58-4eca44808afa}
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8235922Z Azure Region: westus
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8237141Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8239521Z ##[group]Operating System
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8240715Z Ubuntu
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8241882Z 24.04.4
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8242748Z LTS
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8243914Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8244934Z ##[group]Runner Image
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8245994Z Image: ubuntu-24.04
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8247172Z Version: 20260714.240.1
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8249399Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260714.240/images/ubuntu/Ubuntu2404-Readme.md
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8252574Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260714.240
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8254300Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8256332Z ##[group]GITHUB_TOKEN Permissions
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8259292Z Contents: read
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8260400Z Metadata: read
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8261677Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8264912Z Secret source: Dependabot
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8266176Z Prepare workflow directory
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.8980812Z Prepare all required actions
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:08.9018664Z Getting action download info
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:09.2633253Z Download action repository 'actions/checkout@v6' (SHA:df4cb1c069e1874edd31b4311f1884172cec0e10)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:09.5872112Z Download action repository 'actions/setup-node@v6' (SHA:249970729cb0ef3589644e2896645e5dc5ba9c38)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.2957869Z Uses: fastify/workflows/.github/workflows/nested-quality.yml@refs/tags/v6 (2073dc8e1f9e172bf42daa3843c9dbd31af1e8cb)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.2962968Z ##[group] Inputs
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.2963962Z   license-check: true
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.2964557Z   license-check-allowed-additional: 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.2965179Z   lint: true
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.2965649Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.2966172Z Complete job name: quality-check / Lint Code
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3732560Z ##[group]Run actions/checkout@v6
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3733825Z with:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3734350Z   persist-credentials: false
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3734932Z   repository: fastify/fastify
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3738930Z   token: ***
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3739414Z   ssh-strict: true
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3739902Z   ssh-user: git
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3740369Z   clean: true
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3740867Z   sparse-checkout-cone-mode: true
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3741775Z   fetch-depth: 1
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3742419Z   fetch-tags: false
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3742915Z   show-progress: true
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3743403Z   lfs: false
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3743867Z   submodules: false
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3744360Z   set-safe-directory: true
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.3745271Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4775316Z Syncing repository: fastify/fastify
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4777213Z ##[group]Getting Git version info
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4778083Z Working directory is '/home/runner/work/fastify/fastify'
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4779241Z [command]/usr/bin/git version
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4834268Z git version 2.54.0
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4890025Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4905878Z Temporarily overriding HOME='/home/runner/work/_temp/092728c7-d8a0-4e86-ad11-c9141c005f85' before making global git config changes
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4908838Z Adding repository directory to the temporary git global config as a safe directory
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4911771Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fastify/fastify
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4958760Z Deleting the contents of '/home/runner/work/fastify/fastify'
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4963721Z ##[group]Determining repository object format
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4965995Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4967905Z ##[group]Initializing the repository
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.4972150Z [command]/usr/bin/git init /home/runner/work/fastify/fastify
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5080322Z hint: Using 'master' as the name for the initial branch. This default branch name
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5082603Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5085018Z hint: to use in all of your new repositories, which will suppress this warning,
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5086879Z hint: call:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5088014Z hint:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5089257Z hint: 	git config --global init.defaultBranch <name>
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5090666Z hint:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5092245Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5094464Z hint: 'development'. The just-created branch can be renamed via this command:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5096176Z hint:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5097143Z hint: 	git branch -m <name>
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5098234Z hint:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5099699Z hint: Disable this message with "git config set advice.defaultBranchName false"
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5102017Z Initialized empty Git repository in /home/runner/work/fastify/fastify/.git/
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5105506Z [command]/usr/bin/git remote add origin https://github.com/fastify/fastify
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5142520Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5144071Z ##[group]Disabling automatic garbage collection
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5146526Z [command]/usr/bin/git config --local gc.auto 0
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5175416Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5177487Z ##[group]Setting up auth
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5178603Z Removing SSH command configuration
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5183872Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5218003Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5544527Z Removing HTTP extra header
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5550330Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5581827Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5789721Z Removing includeIf entries pointing to credentials config files
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5795586Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.5825644Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.6042106Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.6076567Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/fastify/fastify/.git.path /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.6105687Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/fastify/fastify/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.6139170Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.6167886Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.6193507Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.6194328Z ##[group]Fetching the repository
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:10.6202366Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +8cbc4f32e8ab21472594179afbc8bbd03bbb1aeb:refs/remotes/pull/6851/merge
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.2885898Z From https://github.com/fastify/fastify
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.2887870Z  * [new ref]         8cbc4f32e8ab21472594179afbc8bbd03bbb1aeb -> pull/6851/merge
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.2925286Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.2927029Z ##[group]Determining the checkout info
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.2928798Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.2933181Z [command]/usr/bin/git sparse-checkout disable
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.2977507Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3006132Z ##[group]Checking out the ref
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3009681Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/6851/merge
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3289648Z Note: switching to 'refs/remotes/pull/6851/merge'.
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3290691Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3291667Z You are in 'detached HEAD' state. You can look around, make experimental
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3293672Z changes and commit them, and you can discard any commits you make in this
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3294946Z state without impacting any branches by switching back to a branch.
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3295699Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3296252Z If you want to create a new branch to retain commits you create, you may
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3298244Z do so (now or later) by using -c with the switch command. Example:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3299285Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3299723Z   git switch -c <new-branch-name>
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3300442Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3301031Z Or undo this operation with:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3301903Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3302367Z   git switch -
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3302864Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3303416Z Turn off this advice by setting config variable advice.detachedHead to false
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3304219Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3305152Z HEAD is now at 8cbc4f3 Merge cba5828d0450a40cc34e4bebe7e029690e1ab1f8 into 6e680c3e8150071be96cba6b30e1d74487559b54
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3307707Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3335059Z [command]/usr/bin/git log -1 --format=%H
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3357491Z 8cbc4f32e8ab21472594179afbc8bbd03bbb1aeb
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3368047Z ##[group]Removing auth
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3371361Z Removing SSH command configuration
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3373465Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3403091Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3612965Z Removing HTTP extra header
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3616405Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3652383Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3860904Z Removing includeIf entries pointing to credentials config files
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3864347Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3890106Z includeif.gitdir:/home/runner/work/fastify/fastify/.git.path
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3892277Z includeif.gitdir:/home/runner/work/fastify/fastify/.git/worktrees/*.path
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3894053Z includeif.gitdir:/github/workspace/.git.path
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3895496Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3900933Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/fastify/fastify/.git.path
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3923754Z /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3933679Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/fastify/fastify/.git.path /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3964509Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/fastify/fastify/.git/worktrees/*.path
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3984334Z /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.3992734Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/fastify/fastify/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4022053Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4042563Z /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4050953Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4082739Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4103175Z /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4116919Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4146875Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4357006Z Removing credentials config '/home/runner/work/_temp/git-credentials-1dfd88db-e811-479d-8437-d469faa2c886.config'
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4365078Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4690288Z ##[group]Run actions/setup-node@v6
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4690863Z with:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4691272Z   check-latest: true
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4692056Z   node-version: lts/*
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4695777Z   token: ***
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4696227Z   package-manager-cache: true
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.4696732Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:11.6014815Z Attempt to resolve LTS alias from manifest...
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.4192571Z Attempt to resolve the latest version from manifest...
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.4245488Z Resolved as '24.18.0'
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.4258068Z Found in cache @ /opt/hostedtoolcache/node/24.18.0/x64
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.4261674Z ##[group]Environment details
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.8253253Z node: v24.18.0
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.8254305Z npm: 11.16.0
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.8255127Z yarn: 1.22.22
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.8256159Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.8415477Z ##[group]Run npm i --ignore-scripts
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.8415905Z [36;1mnpm i --ignore-scripts[0m
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.8506133Z shell: /usr/bin/bash -e {0}
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:12.8506429Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:27.8091951Z npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:28.1006556Z npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6315092Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6315939Z added 654 packages, and audited 655 packages in 19s
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6316783Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6317097Z 269 packages are looking for funding
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6342280Z   run `npm fund` for details
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6389200Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6390115Z 10 vulnerabilities (2 low, 3 moderate, 3 high, 2 critical)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6390712Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6391172Z To address issues that do not require attention, run:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6392132Z   npm audit fix
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6392415Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6392983Z To address all issues possible (including breaking changes), run:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6393792Z   npm audit fix --force
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6394116Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6394463Z Some issues need review, and may require choosing
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6395361Z a different dependency.
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6395570Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.6395734Z Run `npm audit` for details.
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.7049756Z ##[group]Run npm run lint
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.7050075Z [36;1mnpm run lint[0m
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.7106038Z shell: /usr/bin/bash -e {0}
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.7106304Z ##[endgroup]
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.8095244Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.8095771Z > fastify@5.10.0 lint
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.8096415Z > npm run lint:eslint
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.8096698Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.9065456Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.9065976Z > fastify@5.10.0 lint:eslint
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.9066509Z > eslint
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:31.9066731Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8036335Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8037037Z Oops! Something went wrong! :(
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8037422Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8037597Z ESLint: 9.39.5
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8037828Z 
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8038367Z TypeError: Cannot read properties of undefined (reading 'Intrinsic')
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8039627Z     at Object.<anonymous> (/home/runner/work/fastify/fastify/node_modules/ts-api-utils/lib/index.cjs:787:57)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8040663Z     at Module._compile (node:internal/modules/cjs/loader:1871:14)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8041381Z     at Object..js (node:internal/modules/cjs/loader:2002:10)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8042351Z     at Module.load (node:internal/modules/cjs/loader:1594:32)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8043074Z     at Module._load (node:internal/modules/cjs/loader:1396:12)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8043820Z     at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8044621Z     at Module.require (node:internal/modules/cjs/loader:1617:12)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8045270Z     at require (node:internal/modules/helpers:153:16)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8046653Z     at Object.<anonymous> (/home/runner/work/fastify/fastify/node_modules/neostandard/node_modules/@typescript-eslint/typescript-estree/dist/convert-comments.js:37:30)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.8048050Z     at Module._compile (node:internal/modules/cjs/loader:1871:14)
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.9735706Z ##[error]Process completed with exit code 2.
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:32.9869384Z Post job cleanup.
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.0688523Z [command]/usr/bin/git version
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.0724719Z git version 2.54.0
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.0766722Z Temporarily overriding HOME='/home/runner/work/_temp/58521369-fdb1-4f11-9f83-0edb6fbe9f28' before making global git config changes
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.0767640Z Adding repository directory to the temporary git global config as a safe directory
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.0771752Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fastify/fastify
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.0801240Z Removing SSH command configuration
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.0807732Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.0865821Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.1079166Z Removing HTTP extra header
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.1084310Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.1114918Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.1320578Z Removing includeIf entries pointing to credentials config files
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.1326775Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.1355876Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+quality-check / Lint Code	UNKNOWN STEP	2026-07-16T14:24:33.1690193Z Cleaning up orphan processes
