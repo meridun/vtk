@@ -245,6 +245,47 @@ public class ReservedMetaSmokeTests : IDisposable
 }
 
 /// <summary>
+/// Real-run smoke for the #98 version subcommand: both reserved spellings
+/// resolve in-process through the real binary (never exec passthrough),
+/// print a single "vtk &lt;sha&gt;" line, and leave no spool/gap-log trace.
+/// </summary>
+[Collection("Smoke")]
+public class VersionSmokeTests : IDisposable
+{
+    private readonly SmokeHarness _h = new();
+
+    public void Dispose() => _h.Dispose();
+
+    [Theory]
+    [InlineData("version")]
+    [InlineData("--version")]
+    public void ReservedSpellingsPrintShaAndLeaveNoTrace(string spelling)
+    {
+        var (stdout, stderr, code) = _h.Run(_h.Repo, spelling);
+        Assert.Equal(0, code);
+        Assert.Equal("", stderr);
+        // Published binaries carry a "+<sha>" informational-version stamp
+        // (SourceLink full sha by default; sdlc-maint shortens it), so the
+        // real binary always resolves a sha rather than the unknown branch.
+        Assert.Matches(@"^vtk [0-9a-f]{7,40}\n$", stdout);
+
+        // No exec, no spool open, no gap log — the wrap path is untouched.
+        Assert.False(File.Exists(Path.Combine(_h.Home, "vtk", "invocations.jsonl")));
+        if (Directory.Exists(_h.SpoolDir))
+            Assert.Empty(Directory.GetFileSystemEntries(_h.SpoolDir));
+    }
+
+    [Fact]
+    public void UnexpectedArgumentExits2WithUsage()
+    {
+        var (stdout, stderr, code) = _h.Run(_h.Repo, "version", "extra");
+        Assert.Equal(2, code);
+        Assert.Contains("usage: vtk version", stderr);
+        Assert.Equal("", stdout);
+    }
+}
+
+/// <summary>
 /// Real-run smoke for the #58 gain rollups: dollarized summary plus the
 /// --daily / --graph / --history flavors through the real binary.
 /// </summary>
