@@ -36,8 +36,8 @@ outgrows a screen.)
 - `vtk gain` dollarization prices from a **local checked-in model→$ table** (updated by PR; no
   runtime fetch — no-network non-goal stands) using a **bytes/4 token heuristic**; log-based
   rollups (`--graph/--history/--daily`) split to
-  [#58](https://github.com/meridun/vtk/issues/58), per-session view stays in #46 blocked on the
-  shared session provider (#43/#44) — [#46](https://github.com/meridun/vtk/issues/46)
+  [#58](https://github.com/meridun/vtk/issues/58), per-session view (`--session`) kept in #46,
+  gated on the shared session provider (#43/#44) — [#46](https://github.com/meridun/vtk/issues/46)
 - Windows-native coverage is a **tracking epic**, not one filter: split into per-tool build
   children (strip-only `winget`/`choco`/`reg query` via the TOML engine first, PowerShell-object
   reformatter later); PowerShell interception is owned by the `vtk hooks` work (#45), so the epic
@@ -140,8 +140,9 @@ vtk show 2e3f --grep pat  →   just the matching lines
 - **Session provider** (`Vtk.Core/Session/`) — locates and reads local agent session
   transcripts (Claude Code JSONL under `~/.claude/projects/<munged-cwd>/`), yielding command
   events (command, error output presence, ordering). Analysis-side only: the wrap path never
-  touches it (registry decision #43). Shared by `vtk learn` and the planned `discover` (#44)
-  and per-session gain (#46). Consumers like `learn` are read-only over transcripts — no
+  touches it (registry decision #43). Shared by `vtk learn`, per-session gain
+  (`vtk gain --session`, #46 — which reads only top-level transcript timestamps), and the
+  planned `discover` (#44). Consumers like `learn` are read-only over transcripts — no
   process spawning — and route any command text destined for disk through the spool
   redaction pass.
 
