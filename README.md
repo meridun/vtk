@@ -110,7 +110,19 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   network; commands pass the spool credential-redaction pass before landing in the rules file.
   `--min-confidence`/`--min-occurrences` thresholds, `--sessions`/`--out` overrides, `--dry-run`
   prints instead of writing. First consumer of the shared session provider that `discover` (#44)
-  and per-session gain (#46) will reuse.
+  reuses and per-session gain (#46) will reuse.
+- **Missed-optimization report + `vtk discover`** — rule-based analysis pass over the same
+  session transcripts (#44), layered on `gaps`: where `gaps` counts raw bytes at execution
+  time, `discover` reasons post-hoc about specific command shapes. Each mined command segment
+  (compound commands split, launcher prefixes unwrapped, `vtk`-wrapped and failed invocations
+  skipped) is classified **unwrapped** — a shipped vtk filter covers the shape, run it via vtk
+  to bank the savings — or **candidate** — it matches a seeded rule for a known-compressible
+  shape (`dotnet build/test`, `go build/test`, `npm install/ci`, `pip install`, `docker build`,
+  `terraform plan/apply`, `make`, `winget`/`choco install`) with no filter yet. Coverage is
+  probed against the live filter registry before rules, so a shape stops reporting as a
+  candidate the moment its filter ships. Ranked by observed output volume; `--sessions <dir>`
+  and `--top <N>` flags. Read-only like `learn`: no process spawning, no network, no disk
+  writes — the report goes to stdout only.
 - **Agent hooks + `vtk hooks`** — installs a pre-tool-call rewrite hook that routes plain
   `git`/`gh`/`npm` shell tool calls through vtk at the agent's tool-call layer, with an
   integrity-verifiable install: `init` writes the managed hook config (Claude Code
@@ -146,6 +158,9 @@ vtk gain --history      # last 10 invocations with per-command savings (flags co
 vtk learn               # mine session JSONL for fail->succeed corrections ->
                         # .claude/rules/cli-corrections.md
 vtk learn --dry-run     # print the rules file without writing it
+vtk discover            # ranked missed-optimization report from session history
+                        # (unwrapped = filter exists, use vtk; candidate = filter evidence)
+vtk discover --top 5    # limit the table to the top 5 opportunities
 vtk install             # wire git/gh/npm -> vtk into your shell rc/profile (bash + pwsh)
 vtk install --print     # print the wrapper block(s) without writing anything
 vtk install --uninstall # remove the managed block
