@@ -99,6 +99,62 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public void BySession_AttributesByWindow_SkipsUncountableAndUnmatched()
+    {
+        var s1 = new DateTime(2026, 7, 10, 10, 0, 0, DateTimeKind.Utc);
+        var s1End = s1.AddHours(1);
+        var s2 = new DateTime(2026, 7, 10, 12, 0, 0, DateTimeKind.Utc);
+        var s2End = s2.AddHours(1);
+        var windows = new[] { ("aaaa1111", s1, s1End), ("bbbb2222", s2, s2End) };
+
+        // inside s1
+        _store.LogInvocation(new Invocation { Time = s1.AddMinutes(5), Cmd = "git status", RawBytes = 1000, OutBytes = 100, Filtered = true });
+        _store.LogInvocation(new Invocation { Time = s1.AddMinutes(10), Cmd = "git log", RawBytes = 500, OutBytes = 200, Filtered = true });
+        // inside s2
+        _store.LogInvocation(new Invocation { Time = s2.AddMinutes(5), Cmd = "ls", RawBytes = 300, OutBytes = 300, Reason = Store.ReasonNoFilter });
+        // outside every window — excluded from the view
+        _store.LogInvocation(new Invocation { Time = s1End.AddMinutes(30), Cmd = "git diff", RawBytes = 700, OutBytes = 70, Filtered = true });
+        // inside s1 but uncountable (tty bypass) — excluded
+        _store.LogInvocation(new Invocation { Time = s1.AddMinutes(6), Cmd = "vim", RawBytes = 9999, OutBytes = 9999, TTY = true, Reason = Store.ReasonTTYBypass });
+
+        var sessions = _store.BySession(windows);
+
+        Assert.Equal(2, sessions.Count);
+        Assert.Equal("aaaa1111", sessions[0].Id); // oldest start first
+        Assert.Equal(2, sessions[0].Calls);
+        Assert.Equal(1500, sessions[0].RawBytes);
+        Assert.Equal(1200, sessions[0].Saved);
+        Assert.Equal("bbbb2222", sessions[1].Id);
+        Assert.Equal(1, sessions[1].Calls);
+        Assert.Equal(0, sessions[1].Saved);
+    }
+
+    [Fact]
+    public void BySession_OverlappingWindows_LatestStartWins()
+    {
+        var s1 = new DateTime(2026, 7, 10, 10, 0, 0, DateTimeKind.Utc);
+        var s2 = new DateTime(2026, 7, 10, 10, 30, 0, DateTimeKind.Utc); // starts inside s1
+        var windows = new[] { ("aaaa1111", s1, s1.AddHours(2)), ("bbbb2222", s2, s2.AddHours(2)) };
+
+        _store.LogInvocation(new Invocation { Time = s2.AddMinutes(1), Cmd = "git status", RawBytes = 100, OutBytes = 10, Filtered = true });
+
+        var sessions = _store.BySession(windows);
+
+        // Attributed once, to the most-recently-started session; the
+        // zero-call session is omitted entirely.
+        Assert.Single(sessions);
+        Assert.Equal("bbbb2222", sessions[0].Id);
+        Assert.Equal(90, sessions[0].Saved);
+    }
+
+    [Fact]
+    public void BySession_NoWindows_ReturnsEmpty()
+    {
+        _store.LogInvocation(new Invocation { Cmd = "git status", RawBytes = 100, OutBytes = 10, Filtered = true });
+        Assert.Empty(_store.BySession(Array.Empty<(string, DateTime, DateTime)>()));
+    }
+
+    [Fact]
     public void Recent_ReturnsLastNCountableInLogOrder()
     {
         for (var i = 0; i < 5; i++)

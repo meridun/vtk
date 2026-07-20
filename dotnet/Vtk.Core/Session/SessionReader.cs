@@ -1,6 +1,7 @@
 // Parses Claude Code session JSONL into ordered Bash command events.
 // Analysis input, not the wrap path: malformed lines and unknown shapes are
 // skipped silently rather than failing the run.
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -68,6 +69,37 @@ public static class SessionReader
             }
         }
         return events;
+    }
+
+    /// <summary>
+    /// Scans a transcript's top-level <c>timestamp</c> fields and returns the
+    /// session's UTC time window (first, last), or null when no line carries a
+    /// parseable timestamp. Malformed lines are skipped silently, same
+    /// tolerance as <see cref="ReadCommands"/>. Backs the per-session gain
+    /// view (#46): only timestamps are read — never output content.
+    /// </summary>
+    public static (DateTime Start, DateTime End)? ReadWindow(IEnumerable<string> lines)
+    {
+        DateTime? start = null, end = null;
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(line); }
+            catch (JsonException) { continue; }
+            using (doc)
+            {
+                if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
+                if (!doc.RootElement.TryGetProperty("timestamp", out var ts) ||
+                    ts.ValueKind != JsonValueKind.String) continue;
+                if (!DateTime.TryParse(ts.GetString(), CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var t))
+                    continue;
+                if (start is null || t < start) start = t;
+                if (end is null || t > end) end = t;
+            }
+        }
+        return start is null || end is null ? null : (start.Value, end.Value);
     }
 
     /// <summary>

@@ -67,6 +67,52 @@ public class SessionReaderTests
     {
         Assert.Equal(expected, SessionReader.ReadCommands(lines).Count);
     }
+
+    [Fact]
+    public void ReadWindow_BasicFixture_ReturnsFirstAndLastTimestamp()
+    {
+        var window = SessionReader.ReadWindow(
+            File.ReadLines(Path.Combine(FixtureDir, "session_basic.jsonl")));
+
+        Assert.NotNull(window);
+        Assert.Equal(new DateTime(2026, 7, 1, 10, 0, 0, DateTimeKind.Utc), window.Value.Start);
+        Assert.Equal(new DateTime(2026, 7, 1, 10, 0, 1, DateTimeKind.Utc), window.Value.End);
+    }
+
+    [Fact]
+    public void ReadWindow_UnorderedTimestamps_StillReturnsMinMax()
+    {
+        var window = SessionReader.ReadWindow(new[]
+        {
+            "{\"timestamp\":\"2026-07-01T10:05:00.250Z\",\"type\":\"assistant\"}",
+            "not json {{{",
+            "{\"timestamp\":\"2026-07-01T10:00:00Z\",\"type\":\"user\"}",
+            "{\"type\":\"summary\",\"summary\":\"no timestamp\"}",
+            "{\"timestamp\":42}",
+        });
+
+        Assert.NotNull(window);
+        Assert.Equal(new DateTime(2026, 7, 1, 10, 0, 0, DateTimeKind.Utc), window.Value.Start);
+        Assert.Equal(new DateTime(2026, 7, 1, 10, 5, 0, 250, DateTimeKind.Utc), window.Value.End);
+    }
+
+    public static IEnumerable<object[]> WindowNoiseCases()
+    {
+        // lines with no usable timestamp anywhere -> null window
+        yield return new object[] { Array.Empty<string>() };
+        yield return new object[] { new[] { "" } };
+        yield return new object[] { new[] { "not json" } };
+        yield return new object[] { new[] { "42" } };
+        yield return new object[] { new[] { "{\"type\":\"summary\"}" } };
+        yield return new object[] { new[] { "{\"timestamp\":\"not a date\"}" } };
+    }
+
+    [Theory]
+    [MemberData(nameof(WindowNoiseCases))]
+    public void ReadWindow_NoTimestamps_ReturnsNull(string[] lines)
+    {
+        Assert.Null(SessionReader.ReadWindow(lines));
+    }
 }
 
 /// <summary>Session locator tests: project-path munging and file listing.</summary>
