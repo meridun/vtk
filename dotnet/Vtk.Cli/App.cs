@@ -146,8 +146,29 @@ public static class Program
         var strip = Npm.StripBanner(raw);
         if (!strip.Ok)
         {
-            // Not a recognizable npm banner: treat as an ordinary uncovered
-            // command, gap-logged under the npm family.
+            // No recognizable npm banner. Modern npm (>= 11) emits the banner
+            // only on a TTY, so under capture the inner tool is
+            // undiscoverable (#93) — the size-floored fold (registry option
+            // C) is all that applies. Success only; any failure stays inline
+            // raw, gap-logged under the npm family as before.
+            if (result.ExitCode == 0)
+            {
+                if (raw.Length >= Npm.FoldFloorBytes)
+                {
+                    if (TryNpmFold(st, args, match, raw, raw))
+                        return result.ExitCode;
+                    return EmitRawAttr(match, Store.ReasonSpoolFail);
+                }
+                // Below the floor: byte-identical per-stream passthrough,
+                // logged as an intentional near-passthrough (filtered=true,
+                // fold identity) so terse load-bearing scripts (`npm run
+                // sdlc`) stop inflating the gap table without ever being
+                // silently unlogged (#93 tier 2).
+                Console.Out.Write(result.Stdout);
+                Console.Error.Write(result.Stderr);
+                LogInvocation(st, match, raw.Length, raw.Length, filtered: true, tty: false, Npm.FoldName);
+                return result.ExitCode;
+            }
             return EmitRawAttr(match, Store.ReasonNoFilter);
         }
 
@@ -219,6 +240,13 @@ public static class Program
     /// </summary>
     private static int EmitNpmBody(Store st, string[] inner, string raw, string body, int code)
     {
+        // Unrecognized inner tool with a successful, floor-clearing body:
+        // the size-floored fold (#93, option C) beats banner-only stripping.
+        // A fold failure falls through to the pre-fold behavior below (which
+        // itself degrades to raw on spool failure — never lost output).
+        if (code == 0 && body.Length >= Npm.FoldFloorBytes && TryNpmFold(st, inner, inner, raw, body))
+            return code;
+
         if (body.Length >= raw.Length)
         {
             // No saving from stripping the banner: emit the raw and gap-log
@@ -263,6 +291,39 @@ public static class Program
         // gap for the inner tool, recorded with the bytes the body saved.
         LogInvocation(st, inner, raw.Length, body.Length, filtered: false, tty: false, Store.ReasonNoFilter);
         return code;
+    }
+
+    /// <summary>
+    /// The above-floor half of the #93 size-floored fold: spools the full
+    /// raw (banner included when present) and emits the body's short summary
+    /// tail plus `OK &lt;id&gt;`, logging filtered=true under the fold's static
+    /// identity. Callers gate on child exit 0 and <see cref="Npm.FoldFloorBytes"/>.
+    /// The 64KB floor strictly dominates the #52 savings bar, so a fold
+    /// never fires a false recover-me signal. Returns false — emitting
+    /// nothing — when the tail computation throws or the spool write fails,
+    /// so the caller can degrade to raw (invariant 2: recovery must exist
+    /// before anything is elided).
+    /// </summary>
+    private static bool TryNpmFold(Store st, string[] spoolArgv, string[] logArgv, string raw, string body)
+    {
+        if (!TryApplyFilter(Npm.FoldTail, body, out var tail)) return false;
+        string id;
+        try
+        {
+            id = st.Write(spoolArgv, raw, DateTime.UtcNow);
+        }
+        catch
+        {
+            return false;
+        }
+        if (tail != "")
+        {
+            Console.Out.Write(tail);
+            if (!tail.EndsWith('\n')) Console.Out.WriteLine();
+        }
+        Console.Out.WriteLine($"OK {id}");
+        LogInvocation(st, logArgv, raw.Length, tail.Length, filtered: true, tty: false, Npm.FoldName);
+        return true;
     }
 
     /// <summary>
