@@ -323,6 +323,71 @@ public class GainRollupsSmokeTests : IDisposable
         Assert.Contains("usage: vtk gain", stderr);
         Assert.Equal("", stdout);
     }
+
+    [Fact]
+    public void SessionFlagAttributesInvocationsToTranscriptWindow()
+    {
+        // One countable invocation logged now.
+        File.WriteAllText(Path.Combine(_h.Repo, "file1.txt"), "line 1 content\ndirty\n");
+        var (_, _, wrapCode) = _h.Run(_h.Repo, "git", "status");
+        Assert.Equal(0, wrapCode);
+
+        // A transcript whose timestamp window contains "now": the invocation
+        // must be attributed to it and rendered dollarized (#46).
+        var sessions = Path.Combine(Path.GetTempPath(), "vtk-smoke-sess-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(sessions);
+        try
+        {
+            var start = DateTime.UtcNow.AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+            var end = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+            File.WriteAllLines(Path.Combine(sessions, "aaaa1111-2222-3333-4444-555566667777.jsonl"), new[]
+            {
+                $"{{\"timestamp\":\"{start}\",\"type\":\"user\"}}",
+                "not json {{{",
+                $"{{\"timestamp\":\"{end}\",\"type\":\"assistant\"}}",
+            });
+
+            var (outp, _, code) = _h.Run(_h.Repo, "gain", "--session", "--sessions", sessions);
+            Assert.Equal(0, code);
+            Assert.Contains("savings per session", outp);
+            Assert.Contains("SESSION", outp);   // table header rendered
+            Assert.Contains("aaaa1111", outp);  // short id = file-stem prefix
+            Assert.Contains("~USD", outp);      // dollarized column
+
+            // A window that excludes the invocation: view renders the
+            // no-attribution note instead of a table, still exit 0.
+            File.WriteAllLines(Path.Combine(sessions, "aaaa1111-2222-3333-4444-555566667777.jsonl"), new[]
+            {
+                "{\"timestamp\":\"2001-01-01T00:00:00Z\",\"type\":\"user\"}",
+                "{\"timestamp\":\"2001-01-01T01:00:00Z\",\"type\":\"assistant\"}",
+            });
+            var (missOut, _, missCode) = _h.Run(_h.Repo, "gain", "--session", "--sessions", sessions);
+            Assert.Equal(0, missCode);
+            Assert.Contains("no logged invocations fall inside a session window", missOut);
+        }
+        finally
+        {
+            try { Directory.Delete(sessions, recursive: true); } catch { /* best-effort */ }
+        }
+    }
+
+    [Fact]
+    public void SessionFlagMissingDirNotesAndExitsZero()
+    {
+        File.WriteAllText(Path.Combine(_h.Repo, "file1.txt"), "line 1 content\ndirty\n");
+        var (_, _, wrapCode) = _h.Run(_h.Repo, "git", "status");
+        Assert.Equal(0, wrapCode);
+
+        var missing = Path.Combine(Path.GetTempPath(), "vtk-smoke-nosess-" + Path.GetRandomFileName());
+        var (outp, _, code) = _h.Run(_h.Repo, "gain", "--session", "--sessions", missing);
+        Assert.Equal(0, code); // a savings report, not an environment failure
+        Assert.Contains("no session transcripts in", outp);
+
+        // Plain `gain` stays free of session output.
+        var (plain, _, plainCode) = _h.Run(_h.Repo, "gain");
+        Assert.Equal(0, plainCode);
+        Assert.DoesNotContain("savings per session", plain);
+    }
 }
 
 /// <summary>
