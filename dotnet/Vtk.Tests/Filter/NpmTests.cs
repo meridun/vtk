@@ -59,4 +59,55 @@ public class NpmTests
     {
         Assert.False(Npm.StripBanner("> pkg@1.0.0 script\n> \nbody\n").Ok);
     }
+
+    // ---- FoldTail (#93, size-floored fold) ---------------------------------
+
+    [Fact]
+    public void FoldTail_RealNpm11NoBannerCapture_MatchesGolden()
+    {
+        // Captured from real `npm run <script> > file` under npm 11.16.0:
+        // modern npm emits its banner only on a TTY, so the strip must not
+        // claim the output and the fold tail is the generic summary slice.
+        var raw = File.ReadAllText(Path.Combine(FixtureDir, "no_banner_real.raw.txt"));
+        Assert.False(Npm.StripBanner(raw).Ok);
+        var want = File.ReadAllText(Path.Combine(FixtureDir, "no_banner_real.want.txt"));
+        Assert.Equal(want, Npm.FoldTail(raw));
+    }
+
+    [Fact]
+    public void FoldTail_KeepsAtMostFiveTrailingLines()
+    {
+        var body = string.Join("\n", Enumerable.Range(1, 8).Select(i => $"line {i}")) + "\n";
+        Assert.Equal("line 4\nline 5\nline 6\nline 7\nline 8", Npm.FoldTail(body));
+    }
+
+    [Fact]
+    public void FoldTail_DropsTrailingBlankLines()
+    {
+        Assert.Equal("alpha\nbeta", Npm.FoldTail("alpha\nbeta\n\n   \n\n"));
+    }
+
+    [Fact]
+    public void FoldTail_ByteCapTrimsToFittingLines()
+    {
+        // 200-char lines: the last two fit (200 + 1 + 200 = 401 <= 512), a
+        // third would overflow (602 > 512).
+        var wide = new string('x', 200);
+        var body = string.Join("\n", Enumerable.Repeat(wide, 5)) + "\n";
+        Assert.Equal(wide + "\n" + wide, Npm.FoldTail(body));
+    }
+
+    [Fact]
+    public void FoldTail_OversizedFinalLine_YieldsEmpty()
+    {
+        Assert.Equal("", Npm.FoldTail(new string('y', Npm.FoldTailMaxBytes + 1) + "\n"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("\n\n\n")]
+    public void FoldTail_BlankBody_YieldsEmpty(string body)
+    {
+        Assert.Equal("", Npm.FoldTail(body));
+    }
 }

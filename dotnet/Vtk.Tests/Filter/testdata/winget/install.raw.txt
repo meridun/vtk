@@ -1,0 +1,9 @@
+Found jq [jqlang.jq] Version 1.8.2
+This application is licensed to you by its owner.
+Microsoft is not responsible for, nor does it grant any licenses to, third-party packages.
+Downloading https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-windows-amd64.exe
+Successfully verified installer hash
+Starting package install...
+Path environment variable modified; restart your shell to use the new value.
+Command line alias added: "jq"
+Successfully installed
