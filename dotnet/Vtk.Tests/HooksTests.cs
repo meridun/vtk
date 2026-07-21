@@ -218,6 +218,9 @@ public class HooksTests
     [InlineData("git status")]
     [InlineData("gh pr list --limit 5")]
     [InlineData("npm test")]
+    [InlineData("winget list")]
+    [InlineData("choco list --local-only")]
+    [InlineData("reg query HKCU\\Environment")]
     [InlineData("  git log --oneline -5  ")] // surrounding whitespace trimmed
     public void RewriteToolCall_WrapsPlainFamilyCommands(string command)
     {
@@ -246,6 +249,7 @@ public class HooksTests
     [InlineData("vtk git status")] // already wrapped
     [InlineData("'/c/tools/vtk/vtk.exe' git status")] // already wrapped, full path
     [InlineData("gitk")] // prefix, not the git family
+    [InlineData("regedit")] // prefix, not the reg family
     [InlineData("")]
     public void RewriteToolCall_PassesThroughIneligibleCommands(string command)
     {
@@ -400,6 +404,9 @@ public class HooksTests
     [InlineData("git status")]
     [InlineData("gh pr list --limit 5")]
     [InlineData("npm test")]
+    [InlineData("winget list")]
+    [InlineData("choco list --local-only")]
+    [InlineData("reg query HKCU\\Environment")]
     [InlineData("  git log --oneline -5  ")] // surrounding whitespace trimmed
     public void RewriteCopilotToolCall_Bash_WrapsPlainFamilyCommands(string command)
     {
@@ -420,6 +427,9 @@ public class HooksTests
     [InlineData("git status")]
     [InlineData("gh pr list --limit 5")]
     [InlineData("npm test")]
+    [InlineData("winget list")]
+    [InlineData("choco list --local-only")]
+    [InlineData("reg query HKCU\\Environment")]
     public void RewriteCopilotToolCall_Powershell_WrapsWithCallOperator(string command)
     {
         var got = Hooks.RewriteCopilotToolCall(CopilotInput("powershell", command), Exe);

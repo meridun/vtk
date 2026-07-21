@@ -1,6 +1,7 @@
 // `vtk install` — wire the token-killer wrappers into a shell rc/profile so
-// git/gh/npm route through vtk inside Claude Code sessions without the agent
-// having to prefix every command. The wrappers are guarded on $CLAUDECODE, so
+// the intercepted tool families (git/gh/npm/winget/choco/reg — same set as
+// Hooks.Families) route through vtk inside Claude Code sessions without the
+// agent having to prefix every command. The wrappers are guarded on $CLAUDECODE, so
 // the block is inert in normal interactive shells, and point at THIS
 // binary's own path, so install is self-locating. The managed region is
 // delimited by markers so re-running is idempotent (same binary path →
@@ -221,6 +222,9 @@ public static class Install
         "  git() { vtk git \"$@\"; }",
         "  gh()  { vtk gh \"$@\"; }",
         "  npm() { vtk npm \"$@\"; }",
+        "  winget() { vtk winget \"$@\"; }",
+        "  choco()  { vtk choco \"$@\"; }",
+        "  reg()    { vtk reg \"$@\"; }",
         "fi",
         MarkerEnd,
     });
@@ -237,6 +241,9 @@ public static class Install
             $"    function git {{ & {q} git @args }}",
             $"    function gh  {{ & {q} gh  @args }}",
             $"    function npm {{ & {q} npm @args }}",
+            $"    function winget {{ & {q} winget @args }}",
+            $"    function choco  {{ & {q} choco  @args }}",
+            $"    function reg    {{ & {q} reg    @args }}",
             "}",
             MarkerEnd,
         });

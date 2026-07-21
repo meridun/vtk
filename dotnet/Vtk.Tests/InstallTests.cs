@@ -85,6 +85,25 @@ public class InstallTests
         Assert.Contains("$env:CLAUDECODE", block);
     }
 
+    // The wrapper family set must stay in sync across Hooks.Families, the
+    // bash block, and the pwsh block (#104).
+    [Theory]
+    [InlineData("git")]
+    [InlineData("gh")]
+    [InlineData("npm")]
+    [InlineData("winget")]
+    [InlineData("choco")]
+    [InlineData("reg")]
+    public void RenderBlocks_WrapEveryInterceptedFamily(string family)
+    {
+        var bash = Install.RenderBash("/c/tools/vtk/vtk.exe");
+        Assert.Contains($"{family}() {{ vtk {family} \"$@\"; }}", bash.Replace("  ", " ").Replace("  ", " "));
+
+        var pwsh = Install.RenderPwsh(@"C:\tools\vtk\vtk.exe");
+        Assert.Contains($"function {family} {{ & 'C:\\tools\\vtk\\vtk.exe' {family} @args }}",
+            pwsh.Replace("  ", " ").Replace("  ", " "));
+    }
+
     [Fact]
     public void ApplyTarget_WritesAndUninstalls()
     {
