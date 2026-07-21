@@ -1,0 +1,67 @@
+using Xunit;
+
+namespace Vtk.Tests.Smoke;
+
+/// <summary>
+/// Real-binary smoke for `vtk discover` (#44): exercises the published
+/// vtk.exe against a scratch sessions directory of fixture transcripts —
+/// ranked report with unwrapped/candidate classes, --top, and the exit-code
+/// convention (0 success, 1 environment, 2 usage).
+/// </summary>
+[Collection("Smoke")]
+public class DiscoverSmokeTests : IDisposable
+{
+    private static readonly string FixtureDir = Path.Combine(
+        AppContext.BaseDirectory, "Session", "testdata");
+
+    private readonly SmokeHarness _h = new();
+    private readonly string _sessions;
+
+    public DiscoverSmokeTests()
+    {
+        _sessions = Path.Combine(_h.Repo, "sessions");
+        Directory.CreateDirectory(_sessions);
+    }
+
+    public void Dispose() => _h.Dispose();
+
+    private void CopyFixture(string name, string asName) =>
+        File.Copy(Path.Combine(FixtureDir, name), Path.Combine(_sessions, asName));
+
+    [Fact]
+    public void DiscoverWorkflow()
+    {
+        CopyFixture("session_discover.jsonl", "a.jsonl");
+
+        // ranked report: shipped-filter coverage dedupes to `unwrapped`,
+        // rule matches without a filter surface as `candidate`.
+        var (rptOut, _, rptCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions);
+        Assert.Equal(0, rptCode);
+        Assert.Contains("from 5 commands across 1 sessions", rptOut);
+        Assert.Contains("unwrapped", rptOut);
+        Assert.Contains("git status", rptOut);
+        Assert.Contains("candidate", rptOut);
+        Assert.Contains("dotnet-test", rptOut);
+        // vtk-wrapped `git log` and the failed `dotnet build` produce no rows.
+        Assert.DoesNotContain("git log", rptOut);
+        Assert.DoesNotContain("dotnet-build", rptOut);
+
+        // --top limits the table without changing the summary counts;
+        // dotnet-test's observed output outranks git status's, so it survives.
+        var (topOut, _, topCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions, "--top", "1");
+        Assert.Equal(0, topCode);
+        Assert.Contains("from 5 commands across 1 sessions", topOut);
+        Assert.Contains("dotnet-test", topOut);
+        Assert.DoesNotContain("git status", topOut);
+
+        // missing sessions dir is an environment failure: exit 1
+        var (_, envErr, envCode) = _h.Run(_h.Repo, "discover", "--sessions", Path.Combine(_h.Repo, "nope"));
+        Assert.Equal(1, envCode);
+        Assert.Contains("no session transcripts", envErr);
+
+        // unknown flag is a usage failure: exit 2
+        var (_, useErr, useCode) = _h.Run(_h.Repo, "discover", "--bogus");
+        Assert.Equal(2, useCode);
+        Assert.Contains("usage: vtk discover", useErr);
+    }
+}

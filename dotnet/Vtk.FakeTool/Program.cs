@@ -283,6 +283,12 @@ public static class Program
     //                telemetry shape `> cross-env INTEGRATION=1 mocha ...`;
     //                exit/payload from VTK_FAKE_MOCHA_CODE)
     //   db:status -> dbmate status report (exit 0)
+    //   bigraw    -> NO banner (npm >= 11 suppresses it off-TTY, #93) and a
+    //                large (>64KB) plain payload: the size-floored fold shape
+    //                (exit from VTK_FAKE_NPM_CODE, default 0)
+    //   quiet     -> NO banner and a terse status payload (`npm run sdlc`
+    //                shape): must stay a byte-identical inline passthrough
+    //                (exit from VTK_FAKE_NPM_CODE, default 0)
     private static int Npm(TextWriter stdout, TextWriter stderr, string[] args)
     {
         var script = args.Length >= 2 && args[0] == "run" ? args[1] : "";
@@ -295,6 +301,16 @@ public static class Program
             case "nofil":
                 stdout.Write("> demo@1.0.0 nofil\n> node scripts/x.mjs --check\n\n");
                 stdout.Write("config is in sync (12 files checked)\n");
+                return EnvCode("VTK_FAKE_NPM_CODE", 0);
+            case "bigraw":
+                // Banner-less bulk: ~90KB of per-item progress lines with a
+                // summary block at the end (the tail a fold keeps inline).
+                for (var i = 1; i <= 1500; i++)
+                    stdout.Write($"processed item {i:0000} of 1500: synthesized payload row with filler columns\n");
+                stdout.Write("\nall items processed\ndone: 1500 items in 4.2s\n");
+                return EnvCode("VTK_FAKE_NPM_CODE", 0);
+            case "quiet":
+                stdout.Write("sdlc: verify 60 -> ADVANCE (audit)\nsdlc: 1 lane processed\n");
                 return EnvCode("VTK_FAKE_NPM_CODE", 0);
             case "test":
                 return Mocha(stdout, stderr, banner: "> demo@1.0.0 test\n> mocha --reporter spec\n\n");
