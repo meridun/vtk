@@ -1,0 +1,47 @@
+Chocolatey detected you are not running from an elevated command shell
+ (cmd/powershell).
+
+ You may experience errors - many functions/packages
+ require admin rights. Only advanced users should run choco w/out an
+ elevated shell. When you open the command shell, you should ensure
+ that you do so with "Run as Administrator" selected. If you are
+ attempting to use Chocolatey in a non-administrator setting, you
+ must select a different location other than the default install
+ location. See
+ https://docs.chocolatey.org/en-us/choco/setup#non-administrative-install
+ for details.
+
+For the question below, you have 20 seconds to make a selection.
+
+ Do you want to continue?([Y]es/[N]o): 
+Timeout or your choice of '' is not a valid selection.
+_ Chocolatey:ChocolateyInstallCommand - Noop Mode _
+Chocolatey would have used NuGet to install packages (if they are not already installed):
+jq
+
+jq v1.8.1 [Approved] - Likely broken for FOSS users (due to download location changes)
+Would have run 'chocolateyinstall.ps1':
+$ErrorActionPreference = 'Stop'
+$toolsDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
+
+$fileFullPath = Join-Path $toolsDir "$packageName.exe"
+$url = 'https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-windows-i386.exe'
+$checksumType = "sha256"
+$checksum = '414ec99417830178bd2f6e77fc78b34de3b12fc6b6c3229f07038c5811307124'
+$url64 = 'https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-windows-amd64.exe'
+$checksumType64 = "sha256"
+$checksum64 = '23cb60a1354eed6bcc8d9b9735e8c7b388cd1fdcb75726b93bc299ef22dd9334'
+
+$packageArgs = @{
+    PackageName    = $env:ChocolateyPackageName
+    FileFullPath   = $fileFullPath
+    Url            = $url
+    ChecksumType   = $checksumType
+    Checksum       = $checksum
+    Url64bit       = $url64
+    ChecksumType64 = $checksumType64
+    Checksum64     = $checksum64
+}
+
+Get-ChocolateyWebFile @packageArgs
+
