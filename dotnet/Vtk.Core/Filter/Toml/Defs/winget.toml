@@ -1,0 +1,84 @@
+# winget install/upgrade/uninstall/download — strip license-agreement
+# boilerplate, download/verification chatter, and progress-bar/spinner frames;
+# keep "Found <pkg> Version <v>", result lines (Successfully installed /
+# uninstalled, alias + PATH notices), upgrade tables, and everything else
+# (#105, child of epic #47).
+#
+# Capture note: winget v1.29 suppresses spinner/progress rendering when stdout
+# is redirected (vtk captures the child via pipes), so real captures are
+# boilerplate + result lines. The bar/backspace patterns are kept for older
+# winget versions that spill `█▒` frames and backspace spinners into
+# redirected output; \r-separated redraw frames share one \n-line, so a
+# per-line match drops the whole frame sequence.
+#
+# exit_codes defaults to {0}: a failed install/upgrade exits non-zero and
+# passes through raw (failures always emit raw — Architecture.md invariant 1).
+
+name = "winget"
+match_command = '^winget (install|upgrade|uninstall|download)\b'
+
+strip_lines_matching = [
+  '^This application is licensed to you by its owner\.',
+  '^Microsoft is not responsible for, nor does it grant any licenses to, third-party packages\.',
+  '^\s*Downloading ',
+  '^Successfully verified installer hash',
+  '^Starting package (install|uninstall)\.\.\.',
+  '[█▒]',
+  '\x08',
+]
+
+# Real capture: `winget install --id jqlang.jq`, winget v1.29.280 (LF form
+# here; the CRLF byte-exact original is the WingetTomlTests golden fixture).
+[[tests.install]]
+input = """
+Found jq [jqlang.jq] Version 1.8.2
+This application is licensed to you by its owner.
+Microsoft is not responsible for, nor does it grant any licenses to, third-party packages.
+Downloading https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-windows-amd64.exe
+Successfully verified installer hash
+Starting package install...
+Path environment variable modified; restart your shell to use the new value.
+Command line alias added: "jq"
+Successfully installed
+"""
+expected = """
+Found jq [jqlang.jq] Version 1.8.2
+Path environment variable modified; restart your shell to use the new value.
+Command line alias added: "jq"
+Successfully installed
+"""
+
+# Real capture (trimmed rows): `winget upgrade --include-unknown` — a listing
+# has nothing to strip and must pass through unchanged.
+[[tests.upgrade_table_passthrough]]
+input = """
+Name              Id                 Version Available Source
+-------------------------------------------------------------
+Git               Git.Git            2.45.2  2.55.0.3  winget
+GitHub CLI        GitHub.cli         2.86.0  2.96.0    winget
+Python Launcher   Python.Launcher    3.12.3  3.13.5    winget
+28 upgrades available.
+"""
+expected = """
+Name              Id                 Version Available Source
+-------------------------------------------------------------
+Git               Git.Git            2.45.2  2.55.0.3  winget
+GitHub CLI        GitHub.cli         2.86.0  2.96.0    winget
+Python Launcher   Python.Launcher    3.12.3  3.13.5    winget
+28 upgrades available.
+"""
+
+# Regression case for the defensive progress patterns — constructed from
+# winget's known bar/spinner rendering (not observed in v1.29 redirected
+# captures; see header note).
+[[tests.progress_spam]]
+input = """
+Found jq [jqlang.jq] Version 1.8.2
+  -\b\\\b|\b/\b
+  ██████████████████████████████  5.00 MB / 5.00 MB
+Successfully installed
+"""
+expected = """
+Found jq [jqlang.jq] Version 1.8.2
+Successfully installed
+"""
