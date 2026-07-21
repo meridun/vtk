@@ -99,8 +99,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   `--graph` (bar chart of daily saved bytes over the last 30 logged days), `--history` (the last
   10 invocations with per-command savings).
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
-  block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm` route through vtk without being
-  prefixed. Marker-delimited and idempotent, with `--print`/`--dry-run`/`--uninstall`/`--shell`.
+  block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm`/`winget`/`choco`/`reg` route
+  through vtk without being prefixed. Marker-delimited and idempotent, with
+  `--print`/`--dry-run`/`--uninstall`/`--shell`.
 - **Session mining + `vtk learn`** — mines Claude Code session transcripts (JSONL) for
   commands that failed and were then corrected (same base command, error output first, clean
   run within the lookahead window), classifies the error (`UnknownFlag`, `CommandNotFound`,
@@ -112,7 +113,8 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   prints instead of writing. First consumer of the shared session provider that `discover` (#44)
   and per-session gain (#46) will reuse.
 - **Agent hooks + `vtk hooks`** — installs a pre-tool-call rewrite hook that routes plain
-  `git`/`gh`/`npm` shell tool calls through vtk at the agent's tool-call layer, with an
+  `git`/`gh`/`npm`/`winget`/`choco`/`reg` shell tool calls through vtk at the agent's
+  tool-call layer, with an
   integrity-verifiable install: `init` writes the managed hook config (Claude Code
   `~/.claude/settings.json` by default; GitHub Copilot CLI `~/.copilot/hooks/vtk.json` with
   `--copilot`), `verify` fails loudly on a missing, duplicated, or desynced install, and
@@ -146,7 +148,8 @@ vtk gain --history      # last 10 invocations with per-command savings (flags co
 vtk learn               # mine session JSONL for fail->succeed corrections ->
                         # .claude/rules/cli-corrections.md
 vtk learn --dry-run     # print the rules file without writing it
-vtk install             # wire git/gh/npm -> vtk into your shell rc/profile (bash + pwsh)
+vtk install             # wire git/gh/npm/winget/choco/reg -> vtk into your shell
+                        # rc/profile (bash + pwsh)
 vtk install --print     # print the wrapper block(s) without writing anything
 vtk install --uninstall # remove the managed block
 vtk hooks init          # install the Claude Code PreToolUse rewrite hook (~/.claude/settings.json)
@@ -159,7 +162,8 @@ vtk version             # running build's commit: "vtk <sha>" (vtk --version als
 
 ### Shell integration (`vtk install`)
 
-`vtk <cmd>` filters when you prefix it, but to filter *every* `git`/`gh`/`npm` call without
+`vtk <cmd>` filters when you prefix it, but to route *every* call in the intercepted families
+(`git`, `gh`, `npm`, `winget`, `choco`, `reg`) through vtk without
 prefixing, `vtk install` splices wrapper functions into your shell startup file — `~/.bashrc`
 for bash, `$PROFILE.CurrentUserAllHosts` for PowerShell (resolved via pwsh, so OneDrive
 Documents redirection is handled). The block:
@@ -189,7 +193,8 @@ a binary that is absent or is not the one running the check — the desync class
 hand-wired setup can't detect.
 
 The installed hook runs `vtk hooks rewrite` on each Bash tool call: a plain, top-level
-`git`/`gh`/`npm` command is rewritten (via `hookSpecificOutput.updatedInput`) to run through
+command in an intercepted family (`git`/`gh`/`npm`/`winget`/`choco`/`reg`) is rewritten (via
+`hookSpecificOutput.updatedInput`) to run through
 vtk. Everything else — pipes, redirects, chained or substituted commands, non-Bash tools,
 already-wrapped commands, malformed input, any internal error — produces no output and exit `0`,
 so the agent's command runs exactly as typed and compacted output never lands inside a pipeline.
