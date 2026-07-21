@@ -83,6 +83,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   replays, embedded at build and matched by regex only when no hand-written filter claims the
   command — the cheap path for new regex-shaped filter families (authoring guide in
   `Defs/README.md`).
+- **winget filter** — `winget install/upgrade/uninstall/download` (#105, TOML def): strips the
+  license-agreement boilerplate, `Downloading`/hash-verification/`Starting package ...` chatter,
+  and progress-bar/spinner frames; keeps `Found <pkg> Version <v>`, result/alias/PATH lines, and
+  upgrade tables (a listing passes through unchanged). Measured 64% on a real install capture;
+  failed installs (non-zero exit) pass through raw with exit-code parity intact.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
