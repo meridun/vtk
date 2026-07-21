@@ -523,3 +523,107 @@ public class TomlGapsSmokeTests : IDisposable
         Assert.Contains("--min-bytes requires a value", err3);
     }
 }
+
+public class WingetSmokeTests : IDisposable
+{
+    private readonly SmokeHarness _h = new();
+    private readonly string _stubDir;
+
+    public WingetSmokeTests()
+    {
+        // A stub winget.cmd replaying the real `winget install --id jqlang.jq`
+        // capture (v1.29.280, CRLF; same capture as the Filter/testdata/winget
+        // golden pair). The sentinel id vtk.smoke.fail replays a real
+        // no-match failure with winget's exit code 20. Verified against real
+        // winget on 2026-07-20 (#105): install strips license/Downloading/
+        // hash/Starting and fires OK; a failing install passes through raw
+        // with exit 20 parity.
+        _stubDir = Path.Combine(Path.GetTempPath(), "vtk-smoke-stub-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(_stubDir);
+
+        File.WriteAllText(Path.Combine(_stubDir, "winget-ok.txt"), string.Join("\r\n", new[]
+        {
+            "Found jq [jqlang.jq] Version 1.8.2",
+            "This application is licensed to you by its owner.",
+            "Microsoft is not responsible for, nor does it grant any licenses to, third-party packages.",
+            "Downloading https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-windows-amd64.exe",
+            "Successfully verified installer hash",
+            "Starting package install...",
+            "Path environment variable modified; restart your shell to use the new value.",
+            "Command line alias added: \"jq\"",
+            "Successfully installed",
+        }) + "\r\n");
+
+        File.WriteAllText(Path.Combine(_stubDir, "winget.cmd"),
+            "@echo off\r\n" +
+            "if \"%3\"==\"vtk.smoke.fail\" (\r\n" +
+            "  echo No package found matching input criteria.\r\n" +
+            "  exit /b 20\r\n" +
+            ")\r\n" +
+            "type \"%~dp0winget-ok.txt\"\r\n" +
+            "exit /b 0\r\n");
+    }
+
+    public void Dispose()
+    {
+        _h.Dispose();
+        try { Directory.Delete(_stubDir, recursive: true); } catch { /* best-effort cleanup */ }
+    }
+
+    private (string stdout, string stderr, int code) RunWithStub(params string[] args) =>
+        _h.RunEnv(_h.Repo, new Dictionary<string, string>
+        {
+            ["PATH"] = _stubDir + Path.PathSeparator + (Environment.GetEnvironmentVariable("PATH") ?? ""),
+        }, args);
+
+    [Fact]
+    public void WingetInstallStripsSpamAndSpools()
+    {
+        // Successful install (exit 0): license boilerplate, Downloading, hash
+        // verification, and Starting-package chatter stripped; Found/result
+        // lines kept; savings (300 of 470 bytes) clear the #52 bar, so the
+        // raw spools and OK <id> fires.
+        var (stdout, _, code) = RunWithStub("winget", "install", "--id", "jqlang.jq");
+        Assert.Equal(0, code);
+        Assert.Contains("Found jq [jqlang.jq] Version 1.8.2", stdout);
+        Assert.Contains("Successfully installed", stdout);
+        Assert.Contains("Command line alias added", stdout);
+        Assert.DoesNotContain("licensed to you by its owner", stdout);
+        Assert.DoesNotContain("Downloading", stdout);
+        Assert.DoesNotContain("Successfully verified installer hash", stdout);
+        Assert.DoesNotContain("Starting package install", stdout);
+        var id = SmokeHarness.MustOkId(stdout);
+
+        // show recovers the full raw with provenance (nothing lost).
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("# cmd: winget install --id jqlang.jq", shown);
+        Assert.Contains("This application is licensed to you by its owner.", shown);
+        Assert.Contains("Starting package install...", shown);
+    }
+
+    [Fact]
+    public void WingetFailurePassesThroughRawWithExitParity()
+    {
+        // No-match failure (exit 20): outside the def's exit_codes {0}, so the
+        // output passes through raw with no OK and vtk returns winget's own
+        // exit code (invariant 1).
+        var (stdout, stderr, code) = RunWithStub("winget", "install", "--id", "vtk.smoke.fail");
+        Assert.Equal(20, code);
+        Assert.Contains("No package found matching input criteria.", stdout + stderr);
+        Assert.DoesNotMatch(@"(?m)^OK [0-9a-f]{4}$", stdout);
+    }
+
+    [Fact]
+    public void WingetListDoesNotMatchAndPassesThrough()
+    {
+        // `winget list` is outside the def's verb set (install|upgrade|
+        // uninstall|download): no filter runs, so even strippable lines pass
+        // through untouched.
+        var (stdout, _, code) = RunWithStub("winget", "list");
+        Assert.Equal(0, code);
+        Assert.Contains("This application is licensed to you by its owner.", stdout);
+        Assert.Contains("Downloading", stdout);
+        Assert.DoesNotMatch(@"(?m)^OK [0-9a-f]{4}$", stdout);
+    }
+}

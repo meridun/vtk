@@ -31,10 +31,16 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 - **npm run dispatch** — `npm run <script>`: strips the two-line npm banner
   (`> pkg@ver script` + expanded command line), detects the inner tool from the expanded line,
   and delegates the remaining output to that tool's filter (`npm run lint` → eslint). When the
-  inner tool has no filter, the banner-stripped body passes through and the gap is attributed
-  to the inner tool's family — `vtk gaps` points at the real tool, not npm. The full raw
-  output, banner included, stays recoverable via `vtk show`. Measured 44–58% on fixtures;
-  savings compound with the inner filter's on large reports.
+  inner tool has no filter, a size-floored fold applies (#93): successful (exit 0) output of
+  64 KiB or more collapses to a short summary tail (last few lines) plus an `OK <id>` recovery
+  line — including the no-banner shape modern npm emits under pipe capture, where the inner
+  tool can't be detected at all. Below the floor, output passes through byte-identical (so
+  terse, load-bearing scripts like `npm run sdlc` are never touched), and failures are never
+  folded — nonzero exits keep their full output inline. Unfolded gaps are attributed to the
+  inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
+  npm. The full raw output, banner included, stays recoverable via `vtk show`. Measured 44–58%
+  on banner-strip/delegation fixtures and ≈99.8% on a 122 KB folded run; savings compound with
+  the inner filter's on large reports.
 - **launcher-prefix unwrap** (#97) — filter matching sees through transparent launcher prefixes:
   `cross-env VAR=x <cmd>`, `npx <cmd>` (with `--yes`/`-y`/`--no-install`), and bare leading
   `VAR=x` tokens, stacked in any combination, unwrap to the inner command before filter lookup —
@@ -77,6 +83,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   replays, embedded at build and matched by regex only when no hand-written filter claims the
   command — the cheap path for new regex-shaped filter families (authoring guide in
   `Defs/README.md`).
+- **winget filter** — `winget install/upgrade/uninstall/download` (#105, TOML def): strips the
+  license-agreement boilerplate, `Downloading`/hash-verification/`Starting package ...` chatter,
+  and progress-bar/spinner frames; keeps `Found <pkg> Version <v>`, result/alias/PATH lines, and
+  upgrade tables (a listing passes through unchanged). Measured 64% on a real install capture;
+  failed installs (non-zero exit) pass through raw with exit-code parity intact.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
@@ -113,8 +124,20 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   repeating the mistake. Read-only analysis over local transcripts — no process spawning, no
   network; commands pass the spool credential-redaction pass before landing in the rules file.
   `--min-confidence`/`--min-occurrences` thresholds, `--sessions`/`--out` overrides, `--dry-run`
-  prints instead of writing. First consumer of the shared session provider, also behind
-  per-session gain (`vtk gain --session`, #46) and the planned `discover` (#44).
+  prints instead of writing. First consumer of the shared session provider that `discover`
+  (#44) and per-session gain (`vtk gain --session`, #46) reuse.
+- **Missed-optimization report + `vtk discover`** — rule-based analysis pass over the same
+  session transcripts (#44), layered on `gaps`: where `gaps` counts raw bytes at execution
+  time, `discover` reasons post-hoc about specific command shapes. Each mined command segment
+  (compound commands split, launcher prefixes unwrapped, `vtk`-wrapped and failed invocations
+  skipped) is classified **unwrapped** — a shipped vtk filter covers the shape, run it via vtk
+  to bank the savings — or **candidate** — it matches a seeded rule for a known-compressible
+  shape (`dotnet build/test`, `go build/test`, `npm install/ci`, `pip install`, `docker build`,
+  `terraform plan/apply`, `make`, `winget`/`choco install`) with no filter yet. Coverage is
+  probed against the live filter registry before rules, so a shape stops reporting as a
+  candidate the moment its filter ships. Ranked by observed output volume; `--sessions <dir>`
+  and `--top <N>` flags. Read-only like `learn`: no process spawning, no network, no disk
+  writes — the report goes to stdout only.
 - **Agent hooks + `vtk hooks`** — installs a pre-tool-call rewrite hook that routes plain
   `git`/`gh`/`npm` shell tool calls through vtk at the agent's tool-call layer, with an
   integrity-verifiable install: `init` writes the managed hook config (Claude Code
@@ -151,6 +174,9 @@ vtk gain --session      # savings per Claude Code session (timestamps only; --se
 vtk learn               # mine session JSONL for fail->succeed corrections ->
                         # .claude/rules/cli-corrections.md
 vtk learn --dry-run     # print the rules file without writing it
+vtk discover            # ranked missed-optimization report from session history
+                        # (unwrapped = filter exists, use vtk; candidate = filter evidence)
+vtk discover --top 5    # limit the table to the top 5 opportunities
 vtk install             # wire git/gh/npm -> vtk into your shell rc/profile (bash + pwsh)
 vtk install --print     # print the wrapper block(s) without writing anything
 vtk install --uninstall # remove the managed block

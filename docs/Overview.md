@@ -46,7 +46,7 @@ stable/release and moves only by PR from `dev`. Full discipline in
 |---|---|---|
 | Filter catalog | ~20 tool families | rtk parity + expansions (see ToolCoverage.md) |
 | Unfiltered commands | Silent passthrough | Passthrough + fallback log |
-| Gap analysis | `rtk discover` (post-hoc session scan) | `vtk gaps` (execution-time log), layered with a post-hoc `discover` pass ([#44](https://github.com/meridun/vtk/issues/44)) |
+| Gap analysis | `rtk discover` (post-hoc session scan) | `vtk gaps` (execution-time log) layered with `vtk discover` (post-hoc rule-based session scan, [#44](https://github.com/meridun/vtk/issues/44)) |
 | Savings stats | `rtk gain` | `vtk gain` (same idea) |
 | Raw output recovery | rerun the command | `vtk show <id>` from the spool |
 | Language | Rust | C# / .NET 9 ([#1](https://github.com/meridun/vtk/issues/1)) |

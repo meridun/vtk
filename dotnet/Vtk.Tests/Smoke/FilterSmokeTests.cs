@@ -311,6 +311,89 @@ public class NpmDispatchSmokeTests : IDisposable
     }
 }
 
+/// <summary>
+/// #93 size-floored fold (registry option C): banner-less `npm run` (the
+/// npm >= 11 off-TTY shape) folds big success output behind `OK &lt;id&gt;` with a
+/// short summary tail inline, keeps terse output byte-identical, and never
+/// folds failures.
+/// </summary>
+[Collection("Smoke")]
+public class NpmFoldSmokeTests : IDisposable
+{
+    private readonly SmokeHarness _h = new();
+    public void Dispose() => _h.Dispose();
+
+    private static Dictionary<string, string> Code(int n) => new() { ["VTK_FAKE_NPM_CODE"] = n.ToString() };
+
+    [Fact]
+    public void BigBannerlessSuccessFoldsToTailPlusOkWithRecovery()
+    {
+        var (raw, rawCode) = _h.RunRawTool(null, "npm", "run", "bigraw");
+        Assert.Equal(0, rawCode);
+        Assert.True(raw.Length >= 64 * 1024, $"fixture below the fold floor: {raw.Length} bytes");
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, null, "npm", "run", "bigraw");
+        Assert.Equal(rawCode, code); // parity
+        var id = SmokeHarness.MustOkId(outp);
+        // Bulk folded away; the trailing summary stays inline.
+        Assert.Contains("done: 1500 items in 4.2s", outp);
+        Assert.DoesNotContain("processed item 0001", outp);
+        Assert.True(outp.Length < 700, $"fold output not compact ({outp.Length} bytes):\n{outp}\nstderr: {err}");
+
+        // The full raw is recoverable via the spool.
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("processed item 0001", shown);
+
+        // Telemetry: fold identity, filtered=true, no output content
+        // (invariant 3), and no npm gap-table entry.
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"npm-run-fold\"", log);
+        Assert.Contains("\"filtered\":true", log);
+        Assert.DoesNotContain("processed item", log);
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("npm", gaps);
+    }
+
+    [Fact]
+    public void TerseBannerlessSuccessStaysVerbatimAndOffGapTable()
+    {
+        var (raw, rawCode) = _h.RunRawTool(null, "npm", "run", "quiet");
+        Assert.Equal(0, rawCode);
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, null, "npm", "run", "quiet");
+        Assert.Equal(rawCode, code); // parity
+        SmokeAssert.NoOk(outp + err);
+        // Below the floor: byte-identical passthrough (the `npm run sdlc`
+        // load-bearing-output guarantee), logged as an intentional
+        // near-passthrough so it leaves the gap table.
+        Assert.Equal(raw, outp + err);
+        Assert.Contains("\"reason\":\"npm-run-fold\"", _h.InvocationLog());
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("npm", gaps);
+    }
+
+    [Fact]
+    public void BigBannerlessFailureStaysRawWithParity()
+    {
+        var (raw, rawCode) = _h.RunRawTool(Code(3), "npm", "run", "bigraw");
+        Assert.Equal(3, rawCode);
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, Code(3), "npm", "run", "bigraw");
+        Assert.Equal(rawCode, code); // parity
+        SmokeAssert.NoOk(outp + err);
+        // Failures are never folded (invariant 2 / registry #93): full raw
+        // survives and the call remains a genuine npm-family gap.
+        Assert.Equal(raw, outp + err);
+        Assert.Contains("\"reason\":\"no-filter\"", _h.InvocationLog());
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.Contains("npm", gaps);
+    }
+}
+
 /// <summary>Port of test/smoke/dbmate_smoke_test.go: the dbmate filter family, direct and via the npm-run dispatch.</summary>
 [Collection("Smoke")]
 public class DbmateSmokeTests : IDisposable
