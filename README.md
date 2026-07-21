@@ -31,10 +31,16 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 - **npm run dispatch** — `npm run <script>`: strips the two-line npm banner
   (`> pkg@ver script` + expanded command line), detects the inner tool from the expanded line,
   and delegates the remaining output to that tool's filter (`npm run lint` → eslint). When the
-  inner tool has no filter, the banner-stripped body passes through and the gap is attributed
-  to the inner tool's family — `vtk gaps` points at the real tool, not npm. The full raw
-  output, banner included, stays recoverable via `vtk show`. Measured 44–58% on fixtures;
-  savings compound with the inner filter's on large reports.
+  inner tool has no filter, a size-floored fold applies (#93): successful (exit 0) output of
+  64 KiB or more collapses to a short summary tail (last few lines) plus an `OK <id>` recovery
+  line — including the no-banner shape modern npm emits under pipe capture, where the inner
+  tool can't be detected at all. Below the floor, output passes through byte-identical (so
+  terse, load-bearing scripts like `npm run sdlc` are never touched), and failures are never
+  folded — nonzero exits keep their full output inline. Unfolded gaps are attributed to the
+  inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
+  npm. The full raw output, banner included, stays recoverable via `vtk show`. Measured 44–58%
+  on banner-strip/delegation fixtures and ≈99.8% on a 122 KB folded run; savings compound with
+  the inner filter's on large reports.
 - **launcher-prefix unwrap** (#97) — filter matching sees through transparent launcher prefixes:
   `cross-env VAR=x <cmd>`, `npx <cmd>` (with `--yes`/`-y`/`--no-install`), and bare leading
   `VAR=x` tokens, stacked in any combination, unwrap to the inner command before filter lookup —

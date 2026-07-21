@@ -1,0 +1,4 @@
+=== Test Object Cleanup Script ===
+Mode: DRY RUN (no changes will be made)
+
+✓ No test objects found in database. Database is clean.
