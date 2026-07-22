@@ -88,6 +88,12 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   and progress-bar/spinner frames; keeps `Found <pkg> Version <v>`, result/alias/PATH lines, and
   upgrade tables (a listing passes through unchanged). Measured 64% on a real install capture;
   failed installs (non-zero exit) pass through raw with exit-code parity intact.
+- **choco filter** — `choco install/upgrade/uninstall/outdated` (#106, TOML def): strips the
+  `Chocolatey v...` banner, `Progress:` redraw frames, `Downloading`/hash-verification chatter,
+  and license-acceptance boilerplate; keeps package results, versions, warnings, errors, and
+  summaries. Read-only verbs (`search`, `list`) never engage the filter. Measured 10–19% on
+  real-capture fixtures; failed installs (non-zero exit) pass through raw with exit-code parity
+  intact.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a

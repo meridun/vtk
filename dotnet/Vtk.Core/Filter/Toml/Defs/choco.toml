@@ -1,0 +1,130 @@
+# choco install/upgrade/uninstall/outdated — strip the version banner,
+# download/progress spam, and validation/hash chatter; keep package results,
+# versions, warnings, and errors (#106, child of epic #47).
+#
+# Capture note: captured on choco v2.3.0 from a non-admin shell (no writable
+# choco dirs, so a real elevated install is not reproducible on the capture
+# host). `choco outdated` and `choco install jq -y --noop` are real exit-0
+# runs — the noop still performs the real package download, so the
+# `\rProgress: Downloading ... 27%..100%` redraw frames and the
+# "Downloading package from source" line are genuine bytes. Progress frames
+# are \r-separated and share one \n-line, so `^\r?Progress: ` drops the whole
+# frame sequence (same precedent as winget.toml). The elevated-install
+# transcript fixture below is constructed from choco's documented output for
+# the `Download of ... completed.` / `Hashes match.` / license-acceptance
+# patterns not reproducible non-admin.
+#
+# exit_codes defaults to {0}: a failed install/upgrade exits non-zero and
+# passes through raw (failures always emit raw — Architecture.md invariant 1).
+
+name = "choco"
+match_command = '^choco (install|upgrade|uninstall|outdated)\b'
+
+strip_lines_matching = [
+  '^Chocolatey v\d',
+  '^\r?Progress: ',
+  '^\s*Downloading ',
+  "^\\s*from 'http",
+  '^Download of .* completed\.',
+  '^Hashes match\.',
+  '^By installing, you accept licenses',
+  '^ Output is package name \| current version \| available version \| pinned\?',
+]
+
+# Real capture (trimmed rows): `choco outdated`, choco v2.3.0 (LF form here;
+# the CRLF byte-exact original is the ChocoTomlTests golden fixture).
+[[tests.outdated]]
+input = '''
+Chocolatey v2.3.0
+Outdated Packages
+ Output is package name | current version | available version | pinned?
+
+chocolatey|2.3.0|2.7.3|false
+python|3.12.3|3.14.6|false
+vcredist140|14.40.33810|14.51.36247|false
+
+Chocolatey has determined 8 package(s) are outdated.
+'''
+expected = '''
+Outdated Packages
+
+chocolatey|2.3.0|2.7.3|false
+python|3.12.3|3.14.6|false
+vcredist140|14.40.33810|14.51.36247|false
+
+Chocolatey has determined 8 package(s) are outdated.
+'''
+
+# Real capture (trimmed — the noop script dump is elided): `choco install jq
+# -y --noop`, choco v2.3.0. The Progress frames line begins with a bare \r
+# and carries \r-separated redraw frames.
+[[tests.install_noop]]
+input = """
+Chocolatey v2.3.0
+_ Chocolatey:ChocolateyInstallCommand - Noop Mode _
+Chocolatey would have used NuGet to install packages (if they are not already installed):
+jq
+Downloading package from source 'https://community.chocolatey.org/api/v2/'
+\rProgress: Downloading jq 1.8.1... 27%\rProgress: Downloading jq 1.8.1... 79%\rProgress: Downloading jq 1.8.1... 100%
+
+jq v1.8.1 [Approved] - Likely broken for FOSS users (due to download location changes)
+"""
+expected = """
+_ Chocolatey:ChocolateyInstallCommand - Noop Mode _
+Chocolatey would have used NuGet to install packages (if they are not already installed):
+jq
+
+jq v1.8.1 [Approved] - Likely broken for FOSS users (due to download location changes)
+"""
+
+# Constructed elevated-install transcript (see header note) — covers the
+# license-acceptance, download-detail, and hash-chatter patterns; results,
+# shim notice, install location, and summary are kept.
+[[tests.admin_install]]
+input = '''
+Chocolatey v2.3.0
+Installing the following packages:
+jq
+By installing, you accept licenses for the packages.
+Progress: Downloading jq 1.8.1... 100%
+
+jq v1.8.1 [Approved]
+jq package files install completed. Performing other installation steps.
+Downloading jq 64 bit
+  from 'https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-windows-amd64.exe'
+Download of jq-windows-amd64.exe (1.71 MB) completed.
+Hashes match.
+ShimGen has successfully created a shim for jq.exe
+ The install of jq was successful.
+  Software installed to 'C:\ProgramData\chocolatey\lib\jq\tools'
+
+Chocolatey installed 1/1 packages.
+ See the log for details (C:\ProgramData\chocolatey\logs\chocolatey.log).
+'''
+expected = '''
+Installing the following packages:
+jq
+
+jq v1.8.1 [Approved]
+jq package files install completed. Performing other installation steps.
+ShimGen has successfully created a shim for jq.exe
+ The install of jq was successful.
+  Software installed to 'C:\ProgramData\chocolatey\lib\jq\tools'
+
+Chocolatey installed 1/1 packages.
+ See the log for details (C:\ProgramData\chocolatey\logs\chocolatey.log).
+'''
+
+# Real capture (trimmed rows): `choco outdated --limit-output` suppresses the
+# banner and legend — nothing matches, so the output passes through unchanged.
+[[tests.limit_output_passthrough]]
+input = '''
+chocolatey|2.3.0|2.7.3|false
+python|3.12.3|3.14.6|false
+visualstudio-installer|2.0.3|2.0.7|false
+'''
+expected = '''
+chocolatey|2.3.0|2.7.3|false
+python|3.12.3|3.14.6|false
+visualstudio-installer|2.0.3|2.0.7|false
+'''
