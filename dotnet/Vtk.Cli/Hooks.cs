@@ -30,7 +30,7 @@ public static class Hooks
     internal const string CommandMarker = " hooks rewrite";
 
     /// <summary>Tool families the rewrite hook wraps — same set as the Install.cs shell wrappers.</summary>
-    private static readonly HashSet<string> Families = new(StringComparer.Ordinal) { "git", "gh", "npm" };
+    private static readonly HashSet<string> Families = new(StringComparer.Ordinal) { "git", "gh", "npm", "winget", "choco", "reg" };
 
     public static int Run(string[] args)
     {
@@ -431,7 +431,7 @@ public static class Hooks
     /// <summary>
     /// The installed hook's entry point: reads the pre-tool-use tool-call
     /// JSON from stdin and prints a rewrite JSON that routes a plain
-    /// git/gh/npm command through this binary — Claude Code updatedInput by
+    /// intercepted-family command (Families) through this binary — Claude Code updatedInput by
     /// default, Copilot CLI modifiedArgs with --copilot. Anything
     /// unsupported — other tools, compound/piped/redirected commands,
     /// already-wrapped commands, malformed input, any internal error — emits
@@ -462,7 +462,7 @@ public static class Hooks
     /// <summary>
     /// Pure rewrite core: hook input JSON + own binary path in, hook output
     /// JSON out, or null for "no rewrite" (passthrough). Rewrites only a
-    /// single plain top-level git/gh/npm invocation: any shell metacharacter
+    /// single plain top-level intercepted-family invocation: any shell metacharacter
     /// that would change data flow around the wrapper (pipes, redirects,
     /// chaining, substitution) disqualifies the command, because vtk
     /// compacting inside a pipe or redirect would alter what the rest of the
@@ -505,7 +505,7 @@ public static class Hooks
 
     /// <summary>
     /// Conservative eligibility shared by every rewrite flavor: a single
-    /// simple top-level git/gh/npm command, or null. Rewriting `git log |
+    /// simple top-level command in Families, or null. Rewriting `git log |
     /// head` or `git diff > f` would put compacted output where the pipeline
     /// expects raw bytes — altered semantics, so passthrough.
     /// </summary>
@@ -864,7 +864,7 @@ public static class Hooks
     /// binary path in, `modifiedArgs` output JSON out, or null for "no
     /// rewrite" (passthrough — Copilot CLI treats empty output as default
     /// behavior). Only the two shell tools are rewritten, and only for a
-    /// single plain top-level git/gh/npm invocation. No permission decision
+    /// single plain top-level intercepted-family invocation. No permission decision
     /// is ever emitted.
     /// </summary>
     internal static string? RewriteCopilotToolCall(string inputJson, string exe)

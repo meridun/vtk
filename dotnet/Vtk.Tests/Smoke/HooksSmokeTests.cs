@@ -143,7 +143,7 @@ public class HooksSmokeTests : IDisposable
     [Fact]
     public void RewriteWrapsPlainFamilyCommands()
     {
-        foreach (var cmd in new[] { "git status", "gh pr list", "npm test" })
+        foreach (var cmd in new[] { "git status", "gh pr list", "npm test", "winget list", "choco list --local-only", "reg query HKCU\\Environment" })
         {
             var input = new JsonObject
             {
