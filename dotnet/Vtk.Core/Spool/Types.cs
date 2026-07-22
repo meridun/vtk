@@ -63,3 +63,19 @@ public sealed class DailyGain
     public long OutBytes { get; set; }
     public long Saved => RawBytes - OutBytes;
 }
+
+/// <summary>
+/// Savings attributed to one agent session's time window. Backs
+/// `vtk gain --session` (#46). Carries the session id and window bounds
+/// only — never transcript content (invariant 3).
+/// </summary>
+public sealed class SessionGain
+{
+    public string Id { get; init; } = "";
+    public DateTime Start { get; init; }
+    public DateTime End { get; init; }
+    public int Calls { get; set; }
+    public long RawBytes { get; set; }
+    public long OutBytes { get; set; }
+    public long Saved => RawBytes - OutBytes;
+}

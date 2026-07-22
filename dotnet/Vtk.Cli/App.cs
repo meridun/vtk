@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Vtk.Core.Analytics;
 using Vtk.Core.Filter;
 using Vtk.Core.Runner;
+using Vtk.Core.Session;
 using Vtk.Core.Spool;
 
 namespace Vtk.Cli;
@@ -38,7 +39,7 @@ public static class Program
 
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps [--file-issues [--yes] [--min-bytes N] [--min-calls N]] | vtk gain [--daily] [--graph] [--history] | vtk learn [--min-confidence X] [--min-occurrences N] [--sessions <dir>] [--out <file>] [--dry-run] | vtk discover [--sessions <dir>] [--top N] | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print] | vtk hooks <init|verify|rewrite> | vtk version");
+            Console.Error.WriteLine("usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps [--file-issues [--yes] [--min-bytes N] [--min-calls N]] | vtk gain [--daily] [--graph] [--history] [--session [--sessions <dir>]] | vtk learn [--min-confidence X] [--min-occurrences N] [--sessions <dir>] [--out <file>] [--dry-run] | vtk discover [--sessions <dir>] [--top N] | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print] | vtk hooks <init|verify|rewrite> | vtk version");
             return 2;
         }
 
@@ -654,22 +655,35 @@ public static class Program
     /// Reports cumulative token savings from the invocation log, dollarized
     /// via the checked-in price table + bytes/4 heuristic (#58). Optional
     /// rollups: --daily (per-UTC-day table), --graph (bar chart of daily
-    /// saved bytes), --history (recent invocations). Read-only over metadata
-    /// — no exec, no network, no output content (invariant 3).
+    /// saved bytes), --history (recent invocations), --session (savings per
+    /// recent agent session, #46 — attribution by transcript time window).
+    /// Read-only over metadata — no exec, no network, no output content
+    /// (invariant 3; the session view reads only transcript timestamps).
     /// </summary>
     private static int CmdGain(string[] args)
     {
-        bool daily = false, graph = false, history = false;
-        foreach (var a in args)
+        bool daily = false, graph = false, history = false, session = false;
+        string? sessionsDir = null;
+        for (var i = 0; i < args.Length; i++)
         {
-            switch (a)
+            switch (args[i])
             {
                 case "--daily": daily = true; break;
                 case "--graph": graph = true; break;
                 case "--history": history = true; break;
+                case "--session": session = true; break;
+                case "--sessions":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("vtk gain: --sessions requires a directory");
+                        return 2;
+                    }
+                    i++;
+                    sessionsDir = args[i];
+                    break;
                 default:
-                    Console.Error.WriteLine($"vtk gain: unexpected argument \"{a}\"");
-                    Console.Error.WriteLine("usage: vtk gain [--daily] [--graph] [--history]");
+                    Console.Error.WriteLine($"vtk gain: unexpected argument \"{args[i]}\"");
+                    Console.Error.WriteLine("usage: vtk gain [--daily] [--graph] [--history] [--session [--sessions <dir>]]");
                     return 2;
             }
         }
@@ -722,7 +736,51 @@ public static class Program
                 Console.Out.WriteLine($"{inv.Time.ToUniversalTime().ToString("MM-dd HH:mm", CultureInfo.InvariantCulture)}  {cmd,-40}  saved {saved,10} ({Percent(saved, inv.RawBytes),6}, {Usd(Economics.SavedUsd(saved))})");
             }
         }
+        if (session)
+        {
+            Console.Out.WriteLine();
+            Console.Out.WriteLine("savings per session (invocations within each transcript's time window)");
+            var dir = sessionsDir ?? SessionProvider.SessionDirFor(Directory.GetCurrentDirectory());
+            var windows = SessionWindows(dir);
+            var sessions = st.BySession(windows);
+            if (sessions.Count == 0)
+            {
+                Console.Out.WriteLine(windows.Count == 0
+                    ? $"no session transcripts in {dir}"
+                    : "no logged invocations fall inside a session window");
+            }
+            else
+            {
+                Console.Out.WriteLine($"{"SESSION",-10} {"START (UTC)",-16} {"CALLS",7} {"SAVED",12} {"SAVED%",8} {"~TOKENS",9} {"~USD",10}");
+                var window = sessions.Count <= 10 ? sessions : sessions[^10..];
+                foreach (var s in window)
+                {
+                    var id = s.Id.Length <= 8 ? s.Id : s.Id[..8];
+                    Console.Out.WriteLine($"{id,-10} {s.Start.ToString("MM-dd HH:mm", CultureInfo.InvariantCulture),-16} {s.Calls,7} {s.Saved,12} {Percent(s.Saved, s.RawBytes),8} {Tokens(s.Saved),9} {Usd(Economics.SavedUsd(s.Saved)),10}");
+                }
+            }
+        }
         return 0;
+    }
+
+    /// <summary>
+    /// Reads each transcript's time window from a session directory: id =
+    /// file name stem, bounds = first/last top-level timestamp. Unreadable
+    /// or timestamp-less transcripts are skipped — best-effort scan, same as
+    /// learn's. Only timestamps are read; transcript content never surfaces.
+    /// </summary>
+    private static List<(string Id, DateTime Start, DateTime End)> SessionWindows(string dir)
+    {
+        var windows = new List<(string, DateTime, DateTime)>();
+        foreach (var file in SessionProvider.SessionFiles(dir))
+        {
+            (DateTime Start, DateTime End)? w;
+            try { w = SessionReader.ReadWindow(File.ReadLines(file)); }
+            catch (IOException) { continue; } // transcript in use / vanished
+            if (w is null) continue;
+            windows.Add((Path.GetFileNameWithoutExtension(file), w.Value.Start, w.Value.End));
+        }
+        return windows;
     }
 
     /// <summary>Formats a token count with invariant thousands separators.</summary>

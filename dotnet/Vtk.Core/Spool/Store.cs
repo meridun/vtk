@@ -297,6 +297,45 @@ public sealed class Store
     }
 
     /// <summary>
+    /// Aggregates countable invocations into agent-session time windows.
+    /// Backs `vtk gain --session` (#46). Same countable gate as Gain()/
+    /// Daily(). Attribution is by containment (UTC); when windows overlap,
+    /// the one with the latest start wins — the most-recently-started active
+    /// session, a deterministic approximation consistent with the #46/#58
+    /// registry decisions. Invocations outside every window and sessions with
+    /// zero attributed calls are omitted. Sorted oldest-first by start.
+    /// </summary>
+    public List<SessionGain> BySession(IReadOnlyList<(string Id, DateTime Start, DateTime End)> windows)
+    {
+        var agg = new Dictionary<string, SessionGain>();
+        foreach (var inv in Invocations())
+        {
+            if (!Countable(inv)) continue;
+            var t = inv.Time.ToUniversalTime();
+            (string Id, DateTime Start, DateTime End)? best = null;
+            foreach (var w in windows)
+            {
+                if (t < w.Start || t > w.End) continue;
+                if (best is null || w.Start > best.Value.Start) best = w;
+            }
+            if (best is null) continue;
+            if (!agg.TryGetValue(best.Value.Id, out var s))
+            {
+                s = new SessionGain { Id = best.Value.Id, Start = best.Value.Start, End = best.Value.End };
+                agg[best.Value.Id] = s;
+            }
+            s.Calls++;
+            s.RawBytes += inv.RawBytes;
+            s.OutBytes += inv.OutBytes;
+        }
+        var outList = agg.Values.ToList();
+        outList.Sort((a, b) => a.Start != b.Start
+            ? a.Start.CompareTo(b.Start)
+            : string.CompareOrdinal(a.Id, b.Id));
+        return outList;
+    }
+
+    /// <summary>
     /// The last <paramref name="n"/> countable invocations in log order
     /// (oldest of the window first). Backs `vtk gain --history` (#58).
     /// </summary>
