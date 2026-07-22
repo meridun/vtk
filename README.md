@@ -88,6 +88,12 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   and progress-bar/spinner frames; keeps `Found <pkg> Version <v>`, result/alias/PATH lines, and
   upgrade tables (a listing passes through unchanged). Measured 64% on a real install capture;
   failed installs (non-zero exit) pass through raw with exit-code parity intact.
+- **choco filter** — `choco install/upgrade/uninstall/outdated` (#106, TOML def): strips the
+  `Chocolatey v...` banner, `Progress:` redraw frames, `Downloading`/hash-verification chatter,
+  and license-acceptance boilerplate; keeps package results, versions, warnings, errors, and
+  summaries. Read-only verbs (`search`, `list`) never engage the filter. Measured 10–19% on
+  real-capture fixtures; failed installs (non-zero exit) pass through raw with exit-code parity
+  intact.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
@@ -108,7 +114,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   an *approximate* dollarized line (bytes/4 token heuristic, checked-in per-model input prices
   updated by PR — no network calls), and optional rollups: `--daily` (per-UTC-day table),
   `--graph` (bar chart of daily saved bytes over the last 30 logged days), `--history` (the last
-  10 invocations with per-command savings).
+  10 invocations with per-command savings), `--session` (savings per Claude Code session:
+  attributes logged invocations to session transcript time windows and renders the 10 most
+  recent sessions with calls, saved bytes/%, ~tokens, ~USD; `--sessions <dir>` overrides the
+  transcript directory). The session view reads only top-level transcript *timestamps* — never
+  transcript content.
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm`/`winget`/`choco`/`reg` route
   through vtk without being prefixed. Marker-delimited and idempotent, with
@@ -121,8 +131,8 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   repeating the mistake. Read-only analysis over local transcripts — no process spawning, no
   network; commands pass the spool credential-redaction pass before landing in the rules file.
   `--min-confidence`/`--min-occurrences` thresholds, `--sessions`/`--out` overrides, `--dry-run`
-  prints instead of writing. First consumer of the shared session provider that `discover` (#44)
-  reuses and per-session gain (#46) will reuse.
+  prints instead of writing. First consumer of the shared session provider that `discover`
+  (#44) and per-session gain (`vtk gain --session`, #46) reuse.
 - **Missed-optimization report + `vtk discover`** — rule-based analysis pass over the same
   session transcripts (#44), layered on `gaps`: where `gaps` counts raw bytes at execution
   time, `discover` reasons post-hoc about specific command shapes. Each mined command segment
@@ -168,6 +178,7 @@ vtk gain                # cumulative savings: raw vs emitted bytes, overall and 
 vtk gain --daily        # per-UTC-day savings table (~tokens, ~USD per day)
 vtk gain --graph        # bar chart of daily saved bytes, last 30 logged days
 vtk gain --history      # last 10 invocations with per-command savings (flags combine)
+vtk gain --session      # savings per Claude Code session (timestamps only; --sessions <dir>)
 vtk learn               # mine session JSONL for fail->succeed corrections ->
                         # .claude/rules/cli-corrections.md
 vtk learn --dry-run     # print the rules file without writing it

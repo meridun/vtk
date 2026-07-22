@@ -1,0 +1,14 @@
+Chocolatey v2.3.0
+Outdated Packages
+ Output is package name | current version | available version | pinned?
+
+chocolatey|2.3.0|2.7.3|false
+chocolatey-visualstudio.extension|1.11.1|1.13.0|false
+python|3.12.3|3.14.6|false
+python3|3.12.3|3.14.6|false
+python312|3.12.3|3.12.10|false
+vcredist140|14.40.33810|14.51.36247|false
+visualstudio2019buildtools|16.11.36|16.11.57|false
+visualstudio-installer|2.0.3|2.0.7|false
+
+Chocolatey has determined 8 package(s) are outdated. 
