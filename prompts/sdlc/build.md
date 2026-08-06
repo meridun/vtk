@@ -21,12 +21,23 @@ Per the README universal loop — lane `stage:build`, idle reply `BUILD: idle`.
 ### 2. WORK
 Decide the sub-case first (idempotency):
 - **Branch already pushed, implementation complete, targeted tests green** → skip to ADVANCE.
-- **A branch exists but is incomplete** → continue on it in its worktree (merge `origin/dev`
-  first per the README staleness rule; build owns conflict resolution). A prior plan comment
+- **A branch exists but is incomplete** — including a pre-existing branch intake named (adopt
+  it as-is; don't recut or rename it to the standard pattern — the issue link lives in the body
+  and comments, not the branch name) → continue on it in its worktree (merge `origin/dev`
+  first per the README staleness rule; build owns conflict resolution). If the branch isn't the
+  pipeline's, post the README reconciliation note first: diff it against the plan, state what's
+  done with evidence and what remains, then build only the gap — extending its existing tests
+  rather than starting parallel ones. A prior plan comment
   stands — don't re-plan unless the merge invalidated it.
 - **Nothing started** → plan, then implement:
   - **PLAN (mandatory, before any code):** read the issue, its acceptance criteria, and any
-    decision-registry lines it cites. Find the closest existing pattern. Then post a plan
+    decision-registry lines it cites. Find the closest existing pattern. **Salvage sweep
+    (cheap):** check for pre-existing design or implementation notes — in the thread and body,
+    on a predecessor issue linked in the body, and on any prior-work branch intake's summary
+    named (read its log/diff, not just its name). Incorporate what still holds; reject the rest
+    explicitly, one line each on why. When a partial implementation exists, the plan covers the
+    **gap**: record the branch and its HEAD, and mark what's already done vs remaining. Then
+    post a plan
     comment on the issue: files to touch, approach chosen (and the existing pattern it copies),
     test plan, and an explicit invariant-impact line (exit-code parity / passthrough / metadata).
     If drafting the plan surfaces an undecided design question, or the plan cannot satisfy the

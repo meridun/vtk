@@ -55,7 +55,9 @@ Idempotency first: a green verify report for the **current branch HEAD** (no new
   ACs walked and how, exit-code parity evidence, what audit should aim at.
 - **BOUNCE → `stage:build`** — any test red, any AC unmet, any invariant violated (exit-code
   mismatch is automatic bounce). Swap back, remove `sdlc:wip`, comment the specific failure
-  (test name + output, or AC with observed-vs-expected). **Verify validates; it does not fix.**
+  (test name + output, or AC with observed-vs-expected). Apply the README **bounce cap**: two
+  prior verify→build bounces on this issue for the same failure class → PARK with the loop
+  history instead of a third bounce. **Verify validates; it does not fix.**
 - **PARK** — needs a human call: flaky/nondeterministic failure needing judgment, AC genuinely
   ambiguous, or the change meets the AC but the real run shows the *decided design* was wrong
   (re-opening the debate is a human's call). Add `sdlc:needs-human`, remove `sdlc:wip`.

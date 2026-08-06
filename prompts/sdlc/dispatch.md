@@ -12,6 +12,13 @@ the run.
 This file is the canonical, reviewable copy; the scheduled task is a thin pointer that reads it
 and executes one pass.
 
+> **Session orchestration layers.** If the session carries a user-level orchestration policy
+> (e.g. an `## Orchestration` block in `~/.claude/CLAUDE.md`), this prompt's topology overrides
+> it for the dispatch cycle: no discovery/plan/approval phases, no role-agent substitution, no
+> "mechanical default" dispatch — the fan-out below is the whole topology. This is the
+> specific-over-general precedence such layers themselves document. Workers are immune by
+> construction (`vtk-sdlc-worker` has no delegation tool).
+
 ---
 
 ## Prompt (paste this)
@@ -155,6 +162,11 @@ For each lane (intake, build, verify, audit, ship):
    the step-1 ADVANCE case.
 3. **Concurrency:** lane workers claim per-issue and work in issue-scoped worktrees, so they
    may run concurrently — spawn all non-empty lanes' workers in one batch and wait for all.
+   Spawn each worker **in the background** (Agent tool, `run_in_background: true`), then collect
+   results: a foreground-spawned agent that hits its timeout gets its promoted child processes
+   killed seconds after it returns — a worker mid-test-suite or mid-push would be cut off. Each
+   worker's final message is its deliverable; pull it when the batch completes — never re-spawn
+   a finished worker to "resend" a result.
    Exception: run intake before the batch when its merge sweep has pending merges to process,
    and run a lane serially after the batch if it only became non-empty via an ADVANCE this
    cycle. Such follow-on spawns are intentionally uncapped — a hot item may cascade through
