@@ -35,11 +35,13 @@ All inline, read-only (no code changes, no branches):
   `gh issue list -R meridun/vtk --search "<keywords>" --state all --limit 30 --json number,title,state`.
 - **In-progress collision sweep** — does work on this already exist somewhere, even without a
   matching issue title? Three probes, cheap to expensive; stop as soon as one is conclusive:
-  1. **Remote branches:** `git fetch origin && git branch -r`. Branch names follow
+  1. **Local + remote branches:** `git fetch origin && git branch -a`. Branch names follow
      `<type>/<issue#>-<slug>` — scan for a slug matching this issue's subject or an issue#
-     whose issue covers the same ground. On a candidate, `git log origin/dev..origin/<branch>
-     --oneline` and `git diff --name-only origin/dev...origin/<branch>` to see what it actually
-     changes.
+     whose issue covers the same ground (developer-cut branches may not follow the pattern; a
+     reasonable name match counts, an unrelated name doesn't — unpushed branches on other
+     machines and unrecognizably-named ones are not discoverable). On a candidate, `git log
+     origin/dev..origin/<branch> --oneline` and `git diff --name-only origin/dev...origin/<branch>`
+     to see what it actually changes.
   2. **Open PRs by touched paths:**
      `gh pr list -R meridun/vtk --state open --json number,title,headRefName,files` — a PR
      touching the files this issue would touch is a collision even if the titles don't match.
@@ -48,7 +50,12 @@ All inline, read-only (no code changes, no branches):
      `stage:verify` / `stage:audit` / `stage:ship`) — an item already past queued may subsume
      or conflict with this one; read its plan comment, not just its title.
 
-  Verdicts: same work in flight → close as dup linking the live item (or its issue). Partial
+  Verdicts: a branch or PR that corresponds to **this** issue (or a predecessor issue linked in
+  the body) is **prior work, not a collision** — record the branch name, its HEAD, and what its
+  diff already implements in your summary comment, so build resumes it rather than recutting.
+  Work already partially merged to `dev` gets the same treatment: note shipped-vs-missing in
+  the summary; the acceptance criteria still describe the full behavior. Otherwise: same work
+  in flight → close as dup linking the live item (or its issue). Partial
   overlap where this issue can't proceed until the in-flight work lands → comment
   "blocked by #n", apply the `blocked` label (the merge sweep flips it to `ready` when the
   blocker merges), and still EMIT normally on the rest of the triage. Mere adjacency → a scope
@@ -96,7 +103,8 @@ Otherwise stop. One result line **per item processed**:
 - **Intake is also the design stage.** It never picks the winner of a debate — it frames and
   parks; the human decides in-thread; the next pass graduates the answer into the registry.
 - **Idempotent:** a prior intake summary comment → re-confirm cheaply, don't re-research. A
-  PARKed item with an in-thread answer should ADVANCE next pass. A **reopened** issue is
+  PARKed item with an in-thread answer should ADVANCE next pass. A **reopened** issue — or one
+  rewound to intake, cloned from a completed one, or enrolling in-flight developer work — is
   reconciled, not re-triaged from scratch: if the evidence (merged PR, code on `dev`) shows it
   already shipped, PARK with that evidence for a human to close rather than advancing it back
   into the pipeline.

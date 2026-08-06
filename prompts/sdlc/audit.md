@@ -46,7 +46,9 @@ Idempotency first: a clean audit report for the **current branch HEAD** → skip
   Comment the audit report: what was reviewed, findings with severity, anything ship should
   carry into docs (e.g. a new security-relevant behavior for README).
 - **BOUNCE → `stage:build`** — a blocking, fixable defect. Swap back, remove `sdlc:wip`,
-  comment the finding (**file:line** + fix direction). The fix re-flows build → verify → audit —
+  comment the finding (**file:line** + fix direction). Apply the README **bounce cap**: two
+  prior audit→build bounces on this issue for the same failure class → PARK with the loop
+  history instead of a third bounce. The fix re-flows build → verify → audit —
   re-validation is intended, not waste.
 - **PARK** — a human **risk** call: a tradeoff to accept, or the change is unsafe *as decided*
   (re-opening the debate is a human's decision). Add `sdlc:needs-human`, remove `sdlc:wip`.

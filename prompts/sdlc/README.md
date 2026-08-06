@@ -71,6 +71,14 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
      evidence, what remains) before continuing, then do only the gap. If the item is conclusively
      shipped already, PARK with the evidence (PR#, commit, observed behavior) for a human to
      close — don't march it through the remaining lanes.
+
+     Prior work need not come from the pipeline: a local or `origin` branch whose name reasonably
+     matches the issue or a child of it, work already fully or partially merged to `dev`, and
+     artifacts on a predecessor issue linked in the body (a clone's original — clones copy the
+     body, not the thread) are all reconcilable evidence, slotted into the same hierarchy as
+     their pipeline-native equivalents. Branches that are on neither local nor `origin`, or whose
+     names bear no reasonable relation to the issue, are **not discoverable** — don't hunt for
+     them.
    - **Worktree isolation.** Never work in the main checkout — it may hold human WIP or another
      worker. For any lane that touches a branch, use the issue-scoped worktree
      `../vtk-wt/<issue#>`: create it if missing (`git worktree add ../vtk-wt/<issue#> <branch>`,
@@ -88,7 +96,17 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
      naming the conflicting paths. Ship always merges (the PR must be mergeable) and may resolve
      docs-only conflicts itself; code conflicts BOUNCE to build.
 3. **EMIT exactly one outcome** — ADVANCE, BOUNCE, or PARK (build also defines CONTINUE) — never
-   silent. **Every outcome removes `sdlc:wip`** on the way out
+   silent.
+
+   **Bounce cap (bounded loops).** Before EMITting a BOUNCE, check the issue's comments for this
+   lane's prior BOUNCE outcomes to the same target lane for the same class of failure. Two
+   already there → PARK instead (`sdlc:needs-human`), summarizing the loop history (each
+   bounce's reason and what the fixing lane did) so the human sees why it isn't converging. Two
+   full round-trips that didn't converge won't converge on the third automated attempt. A bounce
+   for a *different* failure class (e.g. earlier bounces were red tests, this one is a merge
+   conflict) starts its own count.
+
+   **Every outcome removes `sdlc:wip`** on the way out
    (`pwsh scripts/sdlc-release.ps1 <issue#>` — idempotent). Leave the worktree in place
    (dispatcher maintenance prunes worktrees for merged/dead branches).
 4. **STOP** — reply the lane's one-line result, then end the reply with a fenced **JSON result
