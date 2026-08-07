@@ -146,7 +146,8 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   and `--top <N>` flags. Read-only like `learn`: no process spawning, no network, no disk
   writes — the report goes to stdout only.
 - **Agent hooks + `vtk hooks`** — installs a pre-tool-call rewrite hook that routes plain
-  `git`/`gh`/`npm`/`winget`/`choco`/`reg` shell tool calls through vtk at the agent's
+  `git`/`gh`/`npm`/`winget`/`choco`/`reg` — plus, for bash tool calls, `grep`/`ls`/`find` —
+  shell tool calls through vtk at the agent's
   tool-call layer, with an
   integrity-verifiable install: `init` writes the managed hook config (Claude Code
   `~/.claude/settings.json` by default; GitHub Copilot CLI `~/.copilot/hooks/vtk.json` with
@@ -230,11 +231,15 @@ a binary that is absent or is not the one running the check — the desync class
 hand-wired setup can't detect.
 
 The installed hook runs `vtk hooks rewrite` on each Bash tool call: a plain, top-level
-command in an intercepted family (`git`/`gh`/`npm`/`winget`/`choco`/`reg`) is rewritten (via
+command in an intercepted family (`git`/`gh`/`npm`/`winget`/`choco`/`reg`, plus
+`grep`/`ls`/`find` — bash-only families the shell wrappers deliberately skip, since a shell
+function wraps mid-pipeline calls too) is rewritten (via
 `hookSpecificOutput.updatedInput`) to run through
 vtk. Everything else — pipes, redirects, chained or substituted commands, non-Bash tools,
 already-wrapped commands, malformed input, any internal error — produces no output and exit `0`,
 so the agent's command runs exactly as typed and compacted output never lands inside a pipeline.
+Wrapped `grep` output spools like any other wrapped family — full results (redacted) land in the
+capture spool, retrievable via `vtk show <id>`.
 The hook never emits a `permissionDecision`: it can update a tool call's input but cannot
 approve or block it — the normal permission flow still applies.
 
@@ -252,7 +257,10 @@ deletes exactly that file. `vtk hooks verify --copilot` checks the same desync c
 Claude path. The rewrite payload speaks Copilot's native shape — `{toolName, toolArgs}` in,
 `{"modifiedArgs": …}` out — with the same conservative eligibility as the Claude hook, plus a
 stricter ban list for `powershell` tool calls (`(`, `)`, `{`, `}`, `@` disqualify, since those
-shift PowerShell into expression mode).
+shift PowerShell into expression mode). The `bash` flavor intercepts the full family set
+including `grep`/`ls`/`find`; the `powershell` flavor keeps the core set only, because
+PowerShell resolves `ls` to its `Get-ChildItem` alias and Windows resolves `find` to
+`find.exe` (string search) — rewriting those would change what runs.
 
 One behavioral difference matters: Copilot CLI `preToolUse` hooks are **fail-closed** — if the
 hook process exits nonzero, Copilot *denies* the agent's tool call. vtk's rewrite always exits
