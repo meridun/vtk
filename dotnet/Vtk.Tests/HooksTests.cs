@@ -221,6 +221,9 @@ public class HooksTests
     [InlineData("winget list")]
     [InlineData("choco list --local-only")]
     [InlineData("reg query HKCU\\Environment")]
+    [InlineData("grep -rn needle src")] // POSIX utilities: bash-eligible (#114)
+    [InlineData("ls -la")]
+    [InlineData("find . -name '*.cs'")]
     [InlineData("  git log --oneline -5  ")] // surrounding whitespace trimmed
     public void RewriteToolCall_WrapsPlainFamilyCommands(string command)
     {
@@ -245,7 +248,10 @@ public class HooksTests
     [InlineData("git checkout $BRANCH")] // expansion
     [InlineData("git tag `date +%Y`")] // substitution
     [InlineData("git status; ls")]
-    [InlineData("ls -la")] // uncovered family
+    [InlineData("grep err log.txt | wc -l")] // pipe: folded output would corrupt the count
+    [InlineData("ls -la > listing.txt")] // redirect on a POSIX-utility family
+    [InlineData("cat notes.txt")] // uncovered family
+    [InlineData("findstr needle *.cs")] // prefix, not the find family
     [InlineData("vtk git status")] // already wrapped
     [InlineData("'/c/tools/vtk/vtk.exe' git status")] // already wrapped, full path
     [InlineData("gitk")] // prefix, not the git family
@@ -407,6 +413,9 @@ public class HooksTests
     [InlineData("winget list")]
     [InlineData("choco list --local-only")]
     [InlineData("reg query HKCU\\Environment")]
+    [InlineData("grep -rn needle src")] // POSIX utilities: bash-eligible (#114)
+    [InlineData("ls -la")]
+    [InlineData("find . -name '*.cs'")]
     [InlineData("  git log --oneline -5  ")] // surrounding whitespace trimmed
     public void RewriteCopilotToolCall_Bash_WrapsPlainFamilyCommands(string command)
     {
@@ -443,10 +452,14 @@ public class HooksTests
     [InlineData("bash", "git log | head -3")] // pipe: downstream expects raw bytes
     [InlineData("bash", "git diff > out.txt")] // redirect: file must get raw bytes
     [InlineData("bash", "git checkout $BRANCH")] // expansion
-    [InlineData("bash", "ls -la")] // uncovered family
+    [InlineData("bash", "cat notes.txt")] // uncovered family
+    [InlineData("bash", "grep err log.txt | wc -l")] // pipe on a POSIX-utility family
     [InlineData("bash", "vtk git status")] // already wrapped
     [InlineData("bash", "")]
     [InlineData("powershell", "git status; ls")] // chaining
+    [InlineData("powershell", "ls -la")] // PS alias for Get-ChildItem — bash-only family (#114)
+    [InlineData("powershell", "grep -rn needle src")] // bash-only family
+    [InlineData("powershell", "find . -name '*.cs'")] // Windows find.exe homonym — bash-only family
     [InlineData("powershell", "git log @{u}")] // PS hashtable/splat trigger
     [InlineData("powershell", "git status (Get-Location)")] // PS subexpression
     [InlineData("powershell", "git log --format={h}")] // PS script-block braces
