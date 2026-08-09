@@ -29,8 +29,19 @@ public static class Hooks
     /// <summary>Suffix that marks a PreToolUse command entry as vtk-managed.</summary>
     internal const string CommandMarker = " hooks rewrite";
 
-    /// <summary>Tool families the rewrite hook wraps — same set as the Install.cs shell wrappers.</summary>
+    /// <summary>Tool families the rewrite hook wraps in every shell flavor — same set as the Install.cs shell wrappers.</summary>
     private static readonly HashSet<string> Families = new(StringComparer.Ordinal) { "git", "gh", "npm", "winget", "choco", "reg" };
+
+    /// <summary>
+    /// Families plus the POSIX file/search utilities (#114) — bash flavors
+    /// only. PowerShell resolves `ls` to the Get-ChildItem alias and Windows
+    /// resolves `find` to find.exe (string search), so rewriting them outside
+    /// bash would change what runs. Hook-only coverage by design: shell
+    /// functions are pipe-unsafe for these families (a grep() function also
+    /// wraps mid-pipeline calls), so Install.cs deliberately does not wrap
+    /// them.
+    /// </summary>
+    private static readonly HashSet<string> BashFamilies = new(Families, StringComparer.Ordinal) { "grep", "ls", "find" };
 
     public static int Run(string[] args)
     {
@@ -498,18 +509,18 @@ public static class Hooks
     /// <summary>Rewrites "git ..." to "'&lt;exe&gt;' git ..." when eligible; null means leave the command untouched.</summary>
     internal static string? RewriteCommand(string command, string exe)
     {
-        var trimmed = EligibleFamilyCommand(command);
+        var trimmed = EligibleFamilyCommand(command, BashFamilies);
         if (trimmed is null) return null;
         return BashQuote(HookExePath(exe)) + " " + trimmed;
     }
 
     /// <summary>
     /// Conservative eligibility shared by every rewrite flavor: a single
-    /// simple top-level command in Families, or null. Rewriting `git log |
-    /// head` or `git diff > f` would put compacted output where the pipeline
-    /// expects raw bytes — altered semantics, so passthrough.
+    /// simple top-level command in the given family set, or null. Rewriting
+    /// `git log | head` or `git diff > f` would put compacted output where
+    /// the pipeline expects raw bytes — altered semantics, so passthrough.
     /// </summary>
-    internal static string? EligibleFamilyCommand(string command)
+    internal static string? EligibleFamilyCommand(string command, HashSet<string> families)
     {
         var trimmed = command.Trim();
         if (trimmed == "") return null;
@@ -517,7 +528,7 @@ public static class Hooks
 
         var space = trimmed.IndexOf(' ');
         var first = space < 0 ? trimmed : trimmed[..space];
-        if (!Families.Contains(first)) return null;
+        if (!families.Contains(first)) return null;
 
         return trimmed;
     }
@@ -899,7 +910,9 @@ public static class Hooks
             case "bash":
                 return RewriteCommand(command, exe);
             case "powershell":
-                var trimmed = EligibleFamilyCommand(command);
+                // Core families only — see BashFamilies for why the POSIX
+                // utilities are excluded here.
+                var trimmed = EligibleFamilyCommand(command, Families);
                 if (trimmed is null) return null;
                 // PowerShell expression-mode triggers on top of the shared
                 // banned set: parens/braces/@ start subexpressions, script

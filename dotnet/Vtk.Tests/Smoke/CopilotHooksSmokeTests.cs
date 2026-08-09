@@ -188,6 +188,19 @@ public class CopilotHooksSmokeTests : IDisposable
         var pCmd = JsonNode.Parse(pOut)!.AsObject()["modifiedArgs"]!["command"]!.GetValue<string>();
         Assert.StartsWith("& '", pCmd);
         Assert.EndsWith(" gh pr list", pCmd);
+
+        // bash-only POSIX-utility family (#114): wrapped in bash flavor
+        var lsInput = new JsonObject
+        {
+            ["toolName"] = "bash",
+            ["toolArgs"] = new JsonObject { ["command"] = "ls -la" },
+        }.ToJsonString();
+        var (lOut, lErr, lCode) = RunStdin(lsInput, "hooks", "rewrite", "--copilot");
+        Assert.Equal(0, lCode);
+        Assert.Equal("", lErr);
+        var lCmd = JsonNode.Parse(lOut)!.AsObject()["modifiedArgs"]!["command"]!.GetValue<string>();
+        Assert.StartsWith("'", lCmd);
+        Assert.EndsWith(" ls -la", lCmd);
     }
 
     [Theory]
@@ -196,7 +209,11 @@ public class CopilotHooksSmokeTests : IDisposable
     [InlineData("{\"toolName\":\"powershell\",\"toolArgs\":{\"command\":\"cd x; git status\"}}")] // chaining
     [InlineData("{\"toolName\":\"powershell\",\"toolArgs\":{\"command\":\"git status (Get-Location)\"}}")] // PS subexpression
     [InlineData("{\"toolName\":\"powershell\",\"toolArgs\":{\"command\":\"git log @{a=1}\"}}")] // PS splatting/hashtable
-    [InlineData("{\"toolName\":\"bash\",\"toolArgs\":{\"command\":\"ls -la\"}}")] // non-family
+    [InlineData("{\"toolName\":\"bash\",\"toolArgs\":{\"command\":\"cat notes.txt\"}}")] // non-family
+    [InlineData("{\"toolName\":\"bash\",\"toolArgs\":{\"command\":\"grep err log.txt | wc -l\"}}")] // pipe on a POSIX-utility family (#114)
+    [InlineData("{\"toolName\":\"powershell\",\"toolArgs\":{\"command\":\"ls -la\"}}")] // PS Get-ChildItem alias — bash-only family (#114)
+    [InlineData("{\"toolName\":\"powershell\",\"toolArgs\":{\"command\":\"grep -rn needle src\"}}")] // bash-only family (#114)
+    [InlineData("{\"toolName\":\"powershell\",\"toolArgs\":{\"command\":\"find . -name '*.cs'\"}}")] // Windows find.exe homonym — bash-only family (#114)
     [InlineData("{\"toolName\":\"str_replace\",\"toolArgs\":{\"command\":\"git status\"}}")] // non-shell tool
     [InlineData("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git status\"}}")] // Claude shape, wrong casing
     [InlineData("{\"toolName\":\"bash\",\"toolArgs\":{}}")] // missing command

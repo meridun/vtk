@@ -143,7 +143,7 @@ public class HooksSmokeTests : IDisposable
     [Fact]
     public void RewriteWrapsPlainFamilyCommands()
     {
-        foreach (var cmd in new[] { "git status", "gh pr list", "npm test", "winget list", "choco list --local-only", "reg query HKCU\\Environment" })
+        foreach (var cmd in new[] { "git status", "gh pr list", "npm test", "winget list", "choco list --local-only", "reg query HKCU\\Environment", "grep -rn needle src", "ls -la", "find . -name '*.cs'" })
         {
             var input = new JsonObject
             {
@@ -169,7 +169,8 @@ public class HooksSmokeTests : IDisposable
     [InlineData("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git log | head\"}}")] // pipe
     [InlineData("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git diff > f.txt\"}}")] // redirect
     [InlineData("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd x && git status\"}}")] // chaining
-    [InlineData("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls -la\"}}")] // non-family
+    [InlineData("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat notes.txt\"}}")] // non-family
+    [InlineData("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"grep err log.txt | wc -l\"}}")] // pipe on a POSIX-utility family (#114)
     [InlineData("{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"x\"}}")] // non-Bash tool
     [InlineData("{not json")] // malformed
     [InlineData("")] // empty stdin
