@@ -116,6 +116,10 @@ public sealed class Store
     public const string ReasonNonzeroExit = "nonzero-exit";
     public const string ReasonFilterPanic = "filter-panic";
     public const string ReasonSpoolFail = "spool-fail";
+    // Child never started (unresolvable command, self-flag typo, ...): the
+    // invocation is still logged — fallback always logs — but it is not a
+    // coverage gap, so it must not rank a family in `vtk gaps` (#118).
+    public const string ReasonSpawnFail = "spawn-fail";
 
     private string MetaPath => Path.Combine(_dir, "invocations.jsonl");
 

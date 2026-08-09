@@ -225,6 +225,38 @@ public class ReservedMetaSmokeTests : IDisposable
         Assert.Equal(127, code);
     }
 
+    [Theory]
+    [InlineData("help")]
+    [InlineData("--help")]
+    [InlineData("-h")]
+    public void HelpSpellingsPrintUsageInProcess(string spelling)
+    {
+        // #118: these used to spawn-fail as external commands (`--help`, `-h`)
+        // or reach Windows cmd's HELP (`help`).
+        var (stdout, stderr, code) = _h.Run(_h.Repo, spelling);
+        Assert.Equal(0, code);
+        Assert.Contains("usage: vtk", stdout);
+        Assert.Equal("", stderr);
+        // Resolved before the store opens: no telemetry trace, like `proxy`.
+        Assert.False(File.Exists(Path.Combine(_h.Home, "vtk", "invocations.jsonl")));
+    }
+
+    [Fact]
+    public void SpawnFailureIsLoggedButExcludedFromGaps()
+    {
+        // #118: a child that never started is logged (fallback always logs)
+        // under spawn-fail, and its family never ranks in `vtk gaps`.
+        var (_, _, code) = _h.Run(_h.Repo, "definitely-not-a-command-xyz");
+        Assert.Equal(127, code);
+        var log = _h.InvocationLog();
+        Assert.Contains("\"cmd\":\"definitely-not-a-command-xyz\"", log);
+        Assert.Contains("\"reason\":\"spawn-fail\"", log);
+
+        var (gapsOut, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("definitely-not-a-command-xyz", gapsOut);
+    }
+
     [Fact]
     public void ShippedSubcommandsUnaffected()
     {
