@@ -139,8 +139,10 @@ vtk show 2e3f --grep pat  →   just the matching lines
   one store, three queries.
 - **Session provider** (`Vtk.Core/Session/`) — locates and reads local agent session
   transcripts (Claude Code JSONL under `~/.claude/projects/<munged-cwd>/`), yielding command
-  events (command, error output presence, ordering). Analysis-side only: the wrap path never
-  touches it (registry decision #43). Shared by `vtk learn`, `vtk discover` (#44), and
+  events (command, error output presence, ordering, timestamp). Analysis-side only: the wrap
+  path never touches it (registry decision #43). Shared by `vtk learn`, `vtk discover` (#44,
+  which also reads the invocation log's time + redacted command fields to subtract
+  already-wrapped calls, #115), and
   per-session gain (`vtk gain --session`, #46 — which reads only top-level transcript
   timestamps). Consumers are read-only over transcripts — no process spawning — and route any
   command text destined for disk through the spool redaction pass (`discover` writes nothing:
