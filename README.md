@@ -97,11 +97,14 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
-  reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`), and filtered
+  reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`,
+  `spawn-fail`), and filtered
   invocations record the engaged filter's registry name (e.g. `gh run`) as theirs, so the
   invocation log names which filter handled each call; `vtk gaps`
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
+  A child that never started (unresolvable command, self-flag typo) still exits 127 and is
+  still logged, but under `spawn-fail` — it never ranks a gap family.
   `vtk gaps --file-issues` (#61) turns recurring gap families into `stage:intake` filter issues
   via `gh`: dry-run by default (`--yes` to create), `--min-bytes`/`--min-calls` thresholds
   (defaults 50 KiB / 3 calls, floors 4096 B / 2), and dedupe against open `Filter:` issues so
@@ -161,8 +164,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 Further filter families are not yet implemented. The meta word `proxy` is reserved: invoking it
 prints `vtk: "proxy" is not implemented yet` and exits `2` instead of falling through to exec — so
 it fails clearly rather than with a misleading "executable not found", and a real executable
-named `proxy` cannot be run through vtk. Only this documented meta word is intercepted; any other
-unknown word still execs as usual.
+named `proxy` cannot be run through vtk. `help`, `--help`, and `-h` are likewise reserved: they
+print the usage line to stdout and exit `0` instead of spawning as external commands (bare `vtk`
+still prints usage to stderr and exits `2`). Only these documented meta words are intercepted; any
+other unknown word still execs as usual.
 Design decisions are recorded one line each in
 [docs/Architecture.md](docs/Architecture.md#decision-registry) with links to the debate issues.
 
@@ -196,6 +201,7 @@ vtk hooks init --uninstall  # remove exactly the managed hook entry
 vtk hooks init --copilot    # install the GitHub Copilot CLI preToolUse hook (~/.copilot/hooks/vtk.json)
 vtk hooks verify --copilot  # integrity-check the Copilot hook file; exit 1 on missing/desync
 vtk version             # running build's commit: "vtk <sha>" (vtk --version also works)
+vtk help                # usage line, exit 0 (vtk --help / vtk -h also work)
 ```
 
 ### Shell integration (`vtk install`)
