@@ -64,6 +64,27 @@ public class ProcessRunnerTests
         }
     }
 
+    [Fact]
+    public void RunCaptured_NonexistentCommand_Synthesizes127AndFlagsSpawnFail()
+    {
+        var result = ProcessRunner.RunCaptured(new[] { "vtk-definitely-not-a-command-xyz" });
+
+        Assert.Equal(127, result.ExitCode);
+        Assert.True(result.SpawnFailed, "spawn failure must be flagged so callers log it as spawn-fail, not a coverage gap (#118)");
+        Assert.Equal("", result.Combined);
+    }
+
+    [Fact]
+    public void RunPassthroughCounted_NonexistentCommand_Synthesizes127AndFlagsSpawnFail()
+    {
+        var code = ProcessRunner.RunPassthroughCounted(
+            new[] { "vtk-definitely-not-a-command-xyz" }, tty: false, out var bytes, out var spawnFailed);
+
+        Assert.Equal(127, code);
+        Assert.True(spawnFailed, "spawn failure must be flagged so callers log it as spawn-fail, not a coverage gap (#118)");
+        Assert.Equal(0, bytes);
+    }
+
     [Theory]
     [InlineData("run", "run")]                        // bare token: unchanged
     [InlineData("dup-check", "dup-check")]             // hyphen is not special

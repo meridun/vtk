@@ -10,6 +10,8 @@ public sealed class CapturedResult
     public required int ExitCode { get; init; }
     public required string Stdout { get; init; }
     public required string Stderr { get; init; }
+    /// <summary>True when the child process never started (exit code is the synthetic 127, not a child's).</summary>
+    public bool SpawnFailed { get; init; }
     public string Combined => Stdout + Stderr;
 }
 
@@ -153,15 +155,21 @@ public static class ProcessRunner
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             Console.Error.WriteLine($"vtk: {ex.Message}");
-            return new CapturedResult { ExitCode = 127, Stdout = "", Stderr = "" };
+            return new CapturedResult { ExitCode = 127, Stdout = "", Stderr = "", SpawnFailed = true };
         }
     }
 
-    /// <summary>Runs argv with stdout/stderr inherited directly (TTY passthrough) and returns the exit code, counting bytes written.</summary>
-    public static int RunPassthroughCounted(IReadOnlyList<string> argv, bool tty, out long bytesWritten)
+    /// <summary>
+    /// Runs argv with stdout/stderr inherited directly (TTY passthrough) and
+    /// returns the exit code, counting bytes written. <paramref name="spawnFailed"/>
+    /// is true when the child never started (the synthetic 127 return, #118),
+    /// so callers can log the invocation as a spawn failure, not a coverage gap.
+    /// </summary>
+    public static int RunPassthroughCounted(IReadOnlyList<string> argv, bool tty, out long bytesWritten, out bool spawnFailed)
     {
         var psi = BuildStartInfo(argv);
         long total = 0;
+        spawnFailed = false;
 
         if (tty)
         {
@@ -193,6 +201,7 @@ public static class ProcessRunner
         {
             Console.Error.WriteLine($"vtk: {ex.Message}");
             bytesWritten = 0;
+            spawnFailed = true;
             return 127;
         }
     }

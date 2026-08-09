@@ -61,6 +61,8 @@ hand-written filter always wins its command.
 Every passthrough writes a metadata-only entry tagged with a reason; `vtk gaps` counts only true
 coverage gaps (`no-filter` — no registry match), aggregated by command family and sorted by total
 raw bytes emitted — the top of that list is the next filter to write. Covered-but-unfiltered
-invocations (tty-bypass, nonzero-exit, filter-panic, spool-fail) are excluded; panicking filters
+invocations (tty-bypass, nonzero-exit, filter-panic, spool-fail) are excluded, as are
+spawn-fail entries — a child that never started (unresolvable command, self-flag typo) is
+logged but is not a coverage gap, so junk argv never ranks a family; panicking filters
 surface separately in the DEGRADED section. This table
 should be re-prioritized from real gap data once vtk is in daily use.

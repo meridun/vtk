@@ -63,6 +63,29 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public void Gaps_ExcludesSpawnFailEntries()
+    {
+        // Junk argv that never started a child (#118): logged — fallback
+        // always logs — but never ranked as a coverage-gap family.
+        _store.LogInvocation(new Invocation { Cmd = "--passthrough", Reason = Store.ReasonSpawnFail });
+        _store.LogInvocation(new Invocation { Cmd = "definitely-not-a-command-xyz", Reason = Store.ReasonSpawnFail });
+        _store.LogInvocation(new Invocation { Cmd = "ls -la", RawBytes = 100, Reason = Store.ReasonNoFilter });
+
+        var gaps = _store.Gaps();
+        var ls = Assert.Single(gaps);
+        Assert.Equal("ls", ls.Family);
+    }
+
+    [Fact]
+    public void FileIssueGaps_ExcludesSpawnFailEntries()
+    {
+        for (var i = 0; i < 5; i++)
+            _store.LogInvocation(new Invocation { Cmd = "definitely-not-a-command-xyz run", RawBytes = 99999, OutBytes = 99999, Reason = Store.ReasonSpawnFail });
+
+        Assert.Empty(_store.FileIssueGaps(1, 1));
+    }
+
+    [Fact]
     public void Gain_ComputesSavedBytesPerFamily()
     {
         _store.LogInvocation(new Invocation { Cmd = "git status", RawBytes = 1000, OutBytes = 100, Filtered = true });

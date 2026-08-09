@@ -18,6 +18,10 @@ public static class Program
     // from turning "not implemented" into "executable file not found" (#11).
     private static readonly HashSet<string> ReservedMeta = new() { "proxy" };
 
+    // Single source of the usage line: printed to stderr (exit 2) when vtk is
+    // invoked bare, and to stdout (exit 0) for an explicit help request.
+    private const string UsageText = "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps [--file-issues [--yes] [--min-bytes N] [--min-calls N]] | vtk gain [--daily] [--graph] [--history] [--session [--sessions <dir>]] | vtk learn [--min-confidence X] [--min-occurrences N] [--sessions <dir>] [--out <file>] [--dry-run] | vtk discover [--sessions <dir>] [--top N] | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print] | vtk hooks <init|verify|rewrite> | vtk version";
+
     public static int Run(string[] args)
     {
         // Redirected (pipe/file) output re-encodes as UTF-8, matching the
@@ -39,12 +43,21 @@ public static class Program
 
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps [--file-issues [--yes] [--min-bytes N] [--min-calls N]] | vtk gain [--daily] [--graph] [--history] [--session [--sessions <dir>]] | vtk learn [--min-confidence X] [--min-occurrences N] [--sessions <dir>] [--out <file>] [--dry-run] | vtk discover [--sessions <dir>] [--top N] | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print] | vtk hooks <init|verify|rewrite> | vtk version");
+            Console.Error.WriteLine(UsageText);
             return 2;
         }
 
         switch (args[0])
         {
+            // Explicit help request resolves in-process (#118): without this
+            // guard `--help`/`-h` spawn-fail as external commands and `help`
+            // falls through to Windows cmd's HELP. Same reserved-spelling
+            // mechanism as `version`/`--version` (#11, #98).
+            case "help":
+            case "--help":
+            case "-h":
+                Console.Out.WriteLine(UsageText);
+                return 0;
             case "show": return CmdShow(args[1..]);
             case "gaps": return CmdGaps(args[1..]);
             case "gain": return CmdGain(args[1..]);
@@ -143,6 +156,13 @@ public static class Program
             Console.Error.Write(result.Stderr);
             LogInvocation(st, logArgs, raw.Length, raw.Length, filtered: false, tty: false, reason);
             return result.ExitCode;
+        }
+
+        // npm itself never started (runner already printed the error and
+        // synthesized 127): not a coverage gap (#118).
+        if (result.SpawnFailed)
+        {
+            return EmitRawAttr(match, Store.ReasonSpawnFail);
         }
 
         var strip = Npm.StripBanner(raw);
@@ -336,10 +356,13 @@ public static class Program
     /// </summary>
     private static int Passthrough(Store? st, string[] args, bool tty, string reason, string[]? logArgs = null)
     {
-        var code = ProcessRunner.RunPassthroughCounted(args, tty, out var n);
+        var code = ProcessRunner.RunPassthroughCounted(args, tty, out var n, out var spawnFailed);
         if (st is not null)
         {
-            LogInvocation(st, logArgs ?? args, n, n, filtered: false, tty, reason);
+            // A child that never started is not a coverage gap: log it under
+            // spawn-fail so junk argv (self-flag typos, nonexistent commands)
+            // never ranks a family in `vtk gaps` (#118).
+            LogInvocation(st, logArgs ?? args, n, n, filtered: false, tty, spawnFailed ? Store.ReasonSpawnFail : reason);
         }
         return code;
     }
@@ -363,6 +386,13 @@ public static class Program
             Console.Error.Write(result.Stderr);
             LogInvocation(st, match, raw.Length, raw.Length, filtered: false, tty: false, reason);
             return result.ExitCode;
+        }
+
+        // The covered tool never started (runner already printed the error
+        // and synthesized 127): not a coverage gap (#118).
+        if (result.SpawnFailed)
+        {
+            return EmitRaw(Store.ReasonSpawnFail);
         }
 
         if (!entry.Filters(result.ExitCode))
