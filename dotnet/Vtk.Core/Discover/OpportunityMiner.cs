@@ -32,12 +32,24 @@ public sealed record Opportunity(
 /// </summary>
 public delegate bool CoverageLookup(string[] argv, out string filterName);
 
+/// <summary>
+/// Wrapped-invocation probe (#115): true when a segment's argv and result
+/// timestamp match a logged vtk invocation — the command actually routed
+/// through vtk (e.g. via a transcript-invisible shell-function wrapper), so
+/// it is not an opportunity. Injected so the miner is testable without a
+/// real invocation log; a successful probe consumes the matched log entry.
+/// </summary>
+public delegate bool WrappedLookup(string[] argv, DateTime? at);
+
 public static class OpportunityMiner
 {
     /// <summary>
     /// Classifies session command events into ranked opportunities. Error
     /// events are skipped (failures emit raw by invariant 1 — nothing to
-    /// compact); so are `vtk`-wrapped and `cd`/assignment-only segments. A
+    /// compact); so are `vtk`-wrapped and `cd`/assignment-only segments, and
+    /// segments the <paramref name="wrapped"/> probe matches to a logged vtk
+    /// invocation (shell-function-wrapped calls are transcript-invisible —
+    /// #115). A
     /// compound command's output is attributed to its <b>first</b> classified
     /// segment only — never double-counted. Shipped-filter coverage is
     /// probed before the rules, so shapes that already have a filter report
@@ -45,7 +57,8 @@ public static class OpportunityMiner
     /// Ranked by observed output desc, then calls desc, then name.
     /// </summary>
     public static List<Opportunity> Mine(
-        IEnumerable<CommandEvent> events, CoverageLookup covered, IReadOnlyList<DiscoverRule> rules)
+        IEnumerable<CommandEvent> events, CoverageLookup covered, IReadOnlyList<DiscoverRule> rules,
+        WrappedLookup? wrapped = null)
     {
         var agg = new Dictionary<(OpportunityClass Class, string Name), (int Calls, long Chars, string Example, string Hint)>();
         foreach (var ev in events)
@@ -53,6 +66,7 @@ public static class OpportunityMiner
             if (ev.IsError) continue;
             foreach (var argv in Segments(ev.Command))
             {
+                if (wrapped is not null && wrapped(argv, ev.Timestamp)) continue;
                 if (!Classify(argv, covered, rules, out var cls, out var name, out var hint)) continue;
                 var key = (cls, name);
                 var example = string.Join(" ", argv);

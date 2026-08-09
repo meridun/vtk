@@ -1,12 +1,14 @@
 using Vtk.Core.Discover;
 using Vtk.Core.Session;
+using Vtk.Core.Spool;
 
 namespace Vtk.Tests.Discover;
 
 /// <summary>
 /// Table-driven tests for the discover opportunity miner (#44): command
 /// segmentation, vtk/error/cd skips, shipped-filter dedupe (coverage beats
-/// rules), single-attribution of compound commands, and ranking.
+/// rules), single-attribution of compound commands, ranking, and the
+/// wrapped-invocation subtraction (#115).
 /// </summary>
 public class OpportunityMinerTests
 {
@@ -22,8 +24,9 @@ public class OpportunityMinerTests
         return false;
     }
 
-    private static CommandEvent Ev(string command, string output, bool isError = false) =>
-        new(command, output, isError);
+    private static CommandEvent Ev(
+        string command, string output, bool isError = false, DateTime? at = null) =>
+        new(command, output, isError, at);
 
     public static IEnumerable<object[]> SegmentCases()
     {
@@ -140,6 +143,62 @@ public class OpportunityMinerTests
         Assert.Equal("dotnet-test", opps[0].Name); // 9 chars
         Assert.Equal("git log", opps[1].Name);     // 5 chars, 2 calls
         Assert.Equal("git status", opps[2].Name);  // 5 chars, 1 call
+    }
+
+    [Fact]
+    public void Mine_WrappedMatch_SubtractsOneToOne()
+    {
+        // Two bare `git status` events, one logged vtk invocation: the
+        // matched event is subtracted, the other still reports (#115).
+        var t = new DateTime(2026, 7, 21, 10, 0, 0, DateTimeKind.Utc);
+        var wrapped = new WrappedInvocations(new[]
+        {
+            new Invocation { Cmd = "git status", Time = t },
+        });
+
+        var opps = OpportunityMiner.Mine(
+            new[]
+            {
+                Ev("git status", "0123456789", at: t.AddSeconds(1)),
+                Ev("git status", "01234", at: t.AddSeconds(30)),
+            },
+            FakeCovered, DiscoverRules.Default(), wrapped.TryConsume);
+
+        var o = Assert.Single(opps);
+        Assert.Equal("git status", o.Name);
+        Assert.Equal(1, o.Calls);
+        Assert.Equal(5, o.OutputChars);
+        Assert.Equal(1, wrapped.Matched);
+    }
+
+    [Fact]
+    public void Mine_WrappedSegmentInCompound_LaterSegmentClaimsOutput()
+    {
+        // The wrapped first segment is skipped like a vtk-prefixed one, so
+        // the remaining segment claims the event's output.
+        var t = new DateTime(2026, 7, 21, 10, 0, 0, DateTimeKind.Utc);
+        var wrapped = new WrappedInvocations(new[]
+        {
+            new Invocation { Cmd = "git status", Time = t },
+        });
+
+        var opps = OpportunityMiner.Mine(
+            new[] { Ev("git status && dotnet test x", "0123456789", at: t) },
+            FakeCovered, DiscoverRules.Default(), wrapped.TryConsume);
+
+        var o = Assert.Single(opps);
+        Assert.Equal("dotnet-test", o.Name);
+        Assert.Equal(10, o.OutputChars);
+    }
+
+    [Fact]
+    public void Mine_NoWrappedLookup_BehavesAsBefore()
+    {
+        var opps = OpportunityMiner.Mine(
+            new[] { Ev("git status", "0123456789") }, FakeCovered, DiscoverRules.Default());
+
+        var o = Assert.Single(opps);
+        Assert.Equal(OpportunityClass.Unwrapped, o.Class);
     }
 
     [Fact]

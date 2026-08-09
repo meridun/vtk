@@ -24,11 +24,15 @@ public class SessionReaderTests
         Assert.Equal("git satus", events[0].Command);
         Assert.True(events[0].IsError);
         Assert.Contains("'satus' is not a git command", events[0].Output);
+        // The event carries its tool_result line's timestamp (#115).
+        Assert.Equal(new DateTime(2026, 7, 1, 10, 0, 1, DateTimeKind.Utc), events[0].Timestamp);
 
         Assert.Equal("git status", events[1].Command);
         Assert.False(events[1].IsError);
         // Array-of-text content flattens to newline-joined text.
         Assert.Equal("On branch dev\nnothing to commit, working tree clean", events[1].Output);
+        // The u3 result line has no top-level timestamp: null, never a guess.
+        Assert.Null(events[1].Timestamp);
     }
 
     [Fact]
@@ -43,6 +47,19 @@ public class SessionReaderTests
         Assert.Equal("lint clean", events[1].Output); // plain-string content
         Assert.True(events[2].IsError);
         Assert.False(events[3].IsError);
+    }
+
+    [Fact]
+    public void ReadCommands_MalformedTimestamp_YieldsNull()
+    {
+        var events = SessionReader.ReadCommands(new[]
+        {
+            "{\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"Bash\",\"input\":{\"command\":\"ls\"}}]}}",
+            "{\"timestamp\":\"not a date\",\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"x\"}]}}",
+        });
+
+        var ev = Assert.Single(events);
+        Assert.Null(ev.Timestamp);
     }
 
     public static IEnumerable<object[]> NoiseCases()
