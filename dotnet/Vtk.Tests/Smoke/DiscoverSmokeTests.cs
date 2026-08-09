@@ -29,6 +29,26 @@ public class DiscoverSmokeTests : IDisposable
         File.Copy(Path.Combine(FixtureDir, name), Path.Combine(_sessions, asName));
 
     [Fact]
+    public void WrappedInvocationCrossReference()
+    {
+        // A seeded invocation log in the isolated store home matches the
+        // fixture's timestamped `git status` event: the report subtracts the
+        // wrapped call and says so (#115).
+        CopyFixture("session_discover.jsonl", "a.jsonl");
+        var storeDir = Path.Combine(_h.Home, "vtk");
+        Directory.CreateDirectory(storeDir);
+        File.WriteAllText(Path.Combine(storeDir, "invocations.jsonl"),
+            "{\"time\":\"2026-07-19T10:00:00Z\",\"cmd\":\"git status\",\"raw_bytes\":100," +
+            "\"out_bytes\":10,\"filtered\":true,\"tty\":false,\"reason\":\"git status\"}\n");
+
+        var (stdout, _, code) = _h.Run(_h.Repo, "discover", "--sessions", _sessions);
+
+        Assert.Equal(0, code);
+        Assert.Contains("1 matched logged vtk invocations (already wrapped; excluded)", stdout);
+        Assert.Matches(@"git status\s+1\s", stdout);
+    }
+
+    [Fact]
     public void DiscoverWorkflow()
     {
         CopyFixture("session_discover.jsonl", "a.jsonl");
