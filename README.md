@@ -145,7 +145,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   shape (`dotnet build/test`, `go build/test`, `npm install/ci`, `pip install`, `docker build`,
   `terraform plan/apply`, `make`, `winget`/`choco install`) with no filter yet. Coverage is
   probed against the live filter registry before rules, so a shape stops reporting as a
-  candidate the moment its filter ships. Ranked by observed output volume; `--sessions <dir>`
+  candidate the moment its filter ships. Segments that actually routed through vtk via
+  transcript-invisible shell-function wrappers are subtracted by cross-referencing the
+  invocation log (match = redacted argv + ±5-minute window, consumed one-to-one), with the
+  excluded count reported in the summary; when the log is unavailable the report is simply
+  produced without the cross-reference. Ranked by observed output volume; `--sessions <dir>`
   and `--top <N>` flags. Read-only like `learn`: no process spawning, no network, no disk
   writes — the report goes to stdout only.
 - **Agent hooks + `vtk hooks`** — installs a pre-tool-call rewrite hook that routes plain

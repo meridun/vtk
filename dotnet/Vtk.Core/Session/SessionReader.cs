@@ -13,8 +13,9 @@ public static class SessionReader
     /// Extracts Bash tool invocations from one session transcript's lines.
     /// A <c>tool_use</c> (name "Bash") is joined to its <c>tool_result</c>
     /// by <c>tool_use_id</c>; the event is emitted when the result arrives,
-    /// so events are ordered by outcome. Tool uses without a result, other
-    /// tools, and malformed lines are dropped.
+    /// so events are ordered by outcome and stamped with the result line's
+    /// top-level <c>timestamp</c> (null when absent — #115). Tool uses
+    /// without a result, other tools, and malformed lines are dropped.
     /// </summary>
     public static List<CommandEvent> ReadCommands(IEnumerable<string> lines)
     {
@@ -29,6 +30,7 @@ public static class SessionReader
             using (doc)
             {
                 if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
+                var lineTime = LineTimestamp(doc.RootElement);
                 if (!doc.RootElement.TryGetProperty("message", out var msg) ||
                     msg.ValueKind != JsonValueKind.Object) continue;
                 if (!msg.TryGetProperty("content", out var content) ||
@@ -61,7 +63,7 @@ public static class SessionReader
                             {
                                 var isError = item.TryGetProperty("is_error", out var ie) &&
                                     ie.ValueKind == JsonValueKind.True;
-                                events.Add(new CommandEvent(command, ResultText(item), isError));
+                                events.Add(new CommandEvent(command, ResultText(item), isError, lineTime));
                             }
                             break;
                     }
@@ -90,16 +92,26 @@ public static class SessionReader
             using (doc)
             {
                 if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
-                if (!doc.RootElement.TryGetProperty("timestamp", out var ts) ||
-                    ts.ValueKind != JsonValueKind.String) continue;
-                if (!DateTime.TryParse(ts.GetString(), CultureInfo.InvariantCulture,
-                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var t))
-                    continue;
+                if (LineTimestamp(doc.RootElement) is not { } t) continue;
                 if (start is null || t < start) start = t;
                 if (end is null || t > end) end = t;
             }
         }
         return start is null || end is null ? null : (start.Value, end.Value);
+    }
+
+    /// <summary>
+    /// Parses a transcript line's top-level <c>timestamp</c> as UTC, or null
+    /// when absent or unparseable (same tolerance as everything else here).
+    /// </summary>
+    private static DateTime? LineTimestamp(JsonElement root)
+    {
+        if (!root.TryGetProperty("timestamp", out var ts) ||
+            ts.ValueKind != JsonValueKind.String) return null;
+        return DateTime.TryParse(ts.GetString(), CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var t)
+            ? t
+            : null;
     }
 
     /// <summary>
