@@ -57,21 +57,25 @@ public class DiscoverSmokeTests : IDisposable
         // rule matches without a filter surface as `candidate`.
         var (rptOut, _, rptCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions);
         Assert.Equal(0, rptCode);
-        Assert.Contains("from 5 commands across 1 sessions", rptOut);
+        Assert.Contains("from 6 commands across 1 sessions", rptOut);
         Assert.Contains("unwrapped", rptOut);
         Assert.Contains("git status", rptOut);
+        // `dotnet test` is covered by the shipped dotnet def (#121):
+        // unwrapped, never a candidate.
+        Assert.Matches(@"unwrapped\s+dotnet\s", rptOut);
+        Assert.DoesNotContain("dotnet-test", rptOut);
         Assert.Contains("candidate", rptOut);
-        Assert.Contains("dotnet-test", rptOut);
+        Assert.Contains("go-test", rptOut);
         // vtk-wrapped `git log` and the failed `dotnet build` produce no rows.
         Assert.DoesNotContain("git log", rptOut);
         Assert.DoesNotContain("dotnet-build", rptOut);
 
         // --top limits the table without changing the summary counts;
-        // dotnet-test's observed output outranks git status's, so it survives.
+        // go-test's observed output outranks git status's, so it survives.
         var (topOut, _, topCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions, "--top", "1");
         Assert.Equal(0, topCode);
-        Assert.Contains("from 5 commands across 1 sessions", topOut);
-        Assert.Contains("dotnet-test", topOut);
+        Assert.Contains("from 6 commands across 1 sessions", topOut);
+        Assert.Contains("go-test", topOut);
         Assert.DoesNotContain("git status", topOut);
 
         // missing sessions dir is an environment failure: exit 1
