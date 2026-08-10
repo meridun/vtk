@@ -1,0 +1,88 @@
+# gcc/g++ — strip include-chain preambles, blank/bare-pipe spacer lines, and
+# clang-style "N warnings/errors generated" summaries; keep every diagnostic
+# (warning/error/note lines, source excerpts, carets). Ported from rtk's
+# gcc.toml (rtk-ai/rtk, issue #41) with one fix: rtk's match pattern
+# `^g(cc|\+\+)\b` can never match `g++` (no word boundary between `+` and a
+# space), so the alternation is anchored on a space/end instead.
+#
+# exit_codes defaults to {0}: a warning-laden build still exits 0 and gets
+# compacted; a compile/link error exits 1 and passes through raw (failures
+# always emit raw — Architecture.md invariant 1, cargo.toml precedent).
+
+name = "gcc"
+match_command = '^(gcc|g\+\+)( |$)'
+strip_ansi = true
+
+strip_lines_matching = [
+  '^\s*$',
+  '^\s+\|\s*$',
+  '^In file included from ',
+  '^\s+from ',
+  '^\d+ warnings? generated',
+  '^\d+ errors? generated',
+]
+
+max_lines = 50
+on_empty = "gcc: ok"
+
+# Real capture: `gcc -Wall -Wextra -c app.c` with a three-deep unused-helper
+# include chain, gcc (MinGW-W64) 16.1.0 output redirected — the same pipe
+# capture vtk uses. The byte-exact original is the LongTailTomlTests golden
+# fixture (testdata/longtail/gcc.*).
+[[tests.warning_include_chain]]
+input = """
+app.c: In function 'main':
+app.c:5:9: warning: unused variable 'count' [-Wunused-variable]
+    5 |     int count = 0;
+      |         ^~~~~
+In file included from app.c:2:
+util2.h: At top level:
+util2.h:4:12: warning: 'unused_helper' defined but not used [-Wunused-function]
+    4 | static int unused_helper(void) { return 42; }
+      |            ^~~~~~~~~~~~~
+In file included from util2.h:3:
+mid.h:4:12: warning: 'mid_helper' defined but not used [-Wunused-function]
+    4 | static int mid_helper(void) { return 2; }
+      |            ^~~~~~~~~~
+In file included from mid.h:3:
+deep.h:3:12: warning: 'deep_helper' defined but not used [-Wunused-function]
+    3 | static int deep_helper(void) { return 1; }
+      |            ^~~~~~~~~~~
+"""
+expected = """
+app.c: In function 'main':
+app.c:5:9: warning: unused variable 'count' [-Wunused-variable]
+    5 |     int count = 0;
+      |         ^~~~~
+util2.h: At top level:
+util2.h:4:12: warning: 'unused_helper' defined but not used [-Wunused-function]
+    4 | static int unused_helper(void) { return 42; }
+      |            ^~~~~~~~~~~~~
+mid.h:4:12: warning: 'mid_helper' defined but not used [-Wunused-function]
+    4 | static int mid_helper(void) { return 2; }
+      |            ^~~~~~~~~~
+deep.h:3:12: warning: 'deep_helper' defined but not used [-Wunused-function]
+    3 | static int deep_helper(void) { return 1; }
+      |            ^~~~~~~~~~~"""
+
+# Adapted from rtk's clang-style fixture: multi-line include chain
+# (continuation "from" lines) and trailing warning-count summary stripped.
+[[tests.clang_chain_and_summary]]
+input = """
+In file included from /usr/include/stdio.h:42:
+                 from main.c:1:
+main.c:15:12: warning: unused variable 'x' [-Wunused-variable]
+    int x = 42;
+        ^
+2 warnings generated.
+"""
+expected = """
+main.c:15:12: warning: unused variable 'x' [-Wunused-variable]
+    int x = 42;
+        ^"""
+
+# A clean compile writes nothing; the on_empty marker says so explicitly
+# (rtk's fixture).
+[[tests.clean_compile]]
+input = ""
+expected = "gcc: ok"

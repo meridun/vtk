@@ -1,0 +1,49 @@
+# yamllint — strip the blank spacer lines between per-file sections and cap
+# pathological line lengths; keep every finding row verbatim. Ported from
+# rtk's yamllint.toml (rtk-ai/rtk, issue #41).
+#
+# exit_codes {0, 1, 2}: yamllint's documented return codes are 0 (clean or
+# warnings), 1 (errors found), and 2 (warnings found, only under --strict) —
+# 1 and 2 are findings reports, not tool failures (eslint/mocha precedent,
+# decision #7), so their output is exactly what to compact. Any other exit
+# stays raw; exit-code parity is untouched either way.
+
+name = "yamllint"
+match_command = '^yamllint\b'
+exit_codes = [0, 1, 2]
+strip_ansi = true
+
+strip_lines_matching = [
+  '^\s*$',
+]
+
+max_lines = 50
+truncate_lines_at = 120
+
+# Adapted from rtk's fixture, extended to the multi-file layout (yamllint
+# separates per-file sections with a blank line).
+[[tests.findings]]
+input = """
+config.yml
+  3:1     warning  missing document start "---"  (document-start)
+  5:12    error    too many spaces inside braces  (braces)
+
+  8:1     error    wrong indentation: expected 2 but found 4  (indentation)
+
+deploy.yml
+  1:1     warning  missing document start "---"  (document-start)
+  12:81   error    line too long (92 > 80 characters)  (line-length)
+"""
+expected = """
+config.yml
+  3:1     warning  missing document start "---"  (document-start)
+  5:12    error    too many spaces inside braces  (braces)
+  8:1     error    wrong indentation: expected 2 but found 4  (indentation)
+deploy.yml
+  1:1     warning  missing document start "---"  (document-start)
+  12:81   error    line too long (92 > 80 characters)  (line-length)"""
+
+# rtk's clean-run fixture.
+[[tests.clean_passthrough]]
+input = ""
+expected = ""
