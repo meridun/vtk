@@ -59,9 +59,12 @@ outgrows a screen.)
   pass over session history (ranked opportunities, deduped against shipped filters), built with
   `learn` on the shared session provider — [#44](https://github.com/meridun/vtk/issues/44)
 - The rtk noise-strip long-tail is a **tracking umbrella** split into per-tool child issues (one
-  `.toml` + fixtures each, TOML-engine line-strip only; output-reshaping filters are C# code,
-  #42's lane), children spawned as gap-log evidence justifies rather than bulk-imported —
-  [#41](https://github.com/meridun/vtk/issues/41)
+  `.toml` + fixtures each, TOML-engine line-strip only; output-reshaping filters are hand-written
+  C# classes in `Vtk.Core/Filter/`), children spawned as gap-log evidence justifies rather than
+  bulk-imported — [#41](https://github.com/meridun/vtk/issues/41). The reshape-side umbrella
+  ([#42](https://github.com/meridun/vtk/issues/42)) closed as superseded: `gaps --file-issues`
+  (#61) spawns scoped `Filter: <tool>` issues directly from live gap data (first child: #121,
+  dotnet test/build)
 - `npm run <script>` with an **unrecognized inner tool** uses a **size-floored fold** (option C):
   success output folds behind `OK <id>` only above a generous absolute byte floor (build picks
   the exact floor, ~64KB order); below it — and on any failure — output stays inline, so terse

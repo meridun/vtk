@@ -1,0 +1,68 @@
+# terraform plan — strip state-refresh chatter, state-lock notices,
+# unchanged-resource comments, and blank lines; keep the action list, change
+# details, and the Plan:/No changes summary. Ported from rtk's
+# terraform-plan.toml (rtk-ai/rtk, issue #41) with one addition: modern
+# terraform (0.14+) prefixes refresh lines with the resource address
+# ("aws_vpc.main: Refreshing state... [id=...]"), which rtk's line-start
+# pattern misses; both forms are stripped.
+#
+# exit_codes defaults to {0}: a failed plan exits 1 and passes through raw
+# (failures always emit raw — Architecture.md invariant 1). The
+# `-detailed-exitcode` form's exit 2 ("changes present") is left raw too
+# until gap-log evidence justifies adding it.
+
+name = "terraform-plan"
+match_command = '^terraform plan\b'
+strip_ansi = true
+
+strip_lines_matching = [
+  '^Refreshing state',
+  '^\S+: Refreshing state\.\.\.',
+  '^\s*#.*unchanged',
+  '^\s*$',
+  '^Acquiring state lock',
+  '^Releasing state lock',
+]
+
+max_lines = 80
+on_empty = "terraform plan: no changes detected"
+
+# Adapted from rtk's fixture, extended to the modern resource-prefixed
+# refresh format.
+[[tests.plan_with_changes]]
+input = """
+Acquiring state lock. This may take a few moments...
+aws_vpc.main: Refreshing state... [id=vpc-0a1b2c3d]
+aws_subnet.public[0]: Refreshing state... [id=subnet-1111]
+aws_subnet.public[1]: Refreshing state... [id=subnet-2222]
+aws_security_group.web: Refreshing state... [id=sg-0f9e8d7c]
+aws_instance.web: Refreshing state... [id=i-0123456789abcdef0]
+Releasing state lock. This may take a few moments...
+
+Terraform will perform the following actions:
+
+  # aws_instance.web will be updated in-place
+  ~ resource "aws_instance" "web" {
+        id            = "i-0123456789abcdef0"
+      ~ instance_type = "t3.micro" -> "t3.small"
+    }
+
+Plan: 0 to add, 1 to change, 0 to destroy.
+"""
+expected = """
+Terraform will perform the following actions:
+  # aws_instance.web will be updated in-place
+  ~ resource "aws_instance" "web" {
+        id            = "i-0123456789abcdef0"
+      ~ instance_type = "t3.micro" -> "t3.small"
+    }
+Plan: 0 to add, 1 to change, 0 to destroy."""
+
+# rtk's no-changes fixture (old line-start refresh format).
+[[tests.no_changes]]
+input = """
+Refreshing state... [id=vpc-abc]
+No changes. Your infrastructure matches the configuration.
+"""
+expected = """
+No changes. Your infrastructure matches the configuration."""
