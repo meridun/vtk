@@ -28,7 +28,8 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   found" is a report, not a failure); exit `2`+ (fatal/config) stays raw. The child's exit code is
   always returned unchanged. The `npm run lint` wrapped form is covered via the npm run
   dispatch layer below.
-- **npm run dispatch** — `npm run <script>`: strips the two-line npm banner
+- **npm run dispatch** — `npm run <script>` and the lifecycle aliases `npm test`/`t`/`tst`/
+  `start`/`stop`/`restart` (#120): strips the two-line npm banner
   (`> pkg@ver script` + expanded command line), detects the inner tool from the expanded line,
   and delegates the remaining output to that tool's filter (`npm run lint` → eslint). When the
   inner tool has no filter, a size-floored fold applies (#93): successful (exit 0) output of
@@ -40,7 +41,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
   npm. The full raw output, banner included, stays recoverable via `vtk show`. Measured 44–58%
   on banner-strip/delegation fixtures and ≈99.8% on a 122 KB folded run; savings compound with
-  the inner filter's on large reports.
+  the inner filter's on large reports. Aliases behave byte-identically to their `npm run`
+  spellings; off-TTY `npm start` buffers output until exit (same as `npm run start`), and on a
+  real terminal all npm calls still pass through interactively.
 - **launcher-prefix unwrap** (#97) — filter matching sees through transparent launcher prefixes:
   `cross-env VAR=x <cmd>`, `npx <cmd>` (with `--yes`/`-y`/`--no-install`), and bare leading
   `VAR=x` tokens, stacked in any combination, unwrap to the inner command before filter lookup —

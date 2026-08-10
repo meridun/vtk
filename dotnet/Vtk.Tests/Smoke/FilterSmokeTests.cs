@@ -309,6 +309,31 @@ public class NpmDispatchSmokeTests : IDisposable
         Assert.Contains("node", gaps);
         Assert.DoesNotContain("npm", gaps);
     }
+
+    [Fact]
+    public void NpmTestAliasDelegatesToMochaFilterWithMochaAttribution()
+    {
+        // `npm test` (lifecycle alias, no `run` verb) must route through the
+        // same dispatch layer as `npm run test` (#120) — banner stripped,
+        // body delegated to the mocha filter, attribution to mocha.
+        var env = new Dictionary<string, string> { ["VTK_FAKE_MOCHA_CODE"] = "1" };
+        var (outp, _, code) = _h.RunFaked(_h.Repo, env, "npm", "test");
+        Assert.Equal(1, code); // parity through the npm dispatch layer
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.Contains("25 passing", outp);
+        Assert.Contains("charges card", outp);
+        // npm banner stripped, passing specs folded.
+        Assert.DoesNotContain("demo@1.0.0", outp);
+        Assert.DoesNotContain("> mocha", outp);
+        Assert.DoesNotContain("✔", outp);
+        // Attribution is to mocha, not npm.
+        Assert.Contains("\"cmd\":\"mocha", _h.InvocationLog());
+        // The spool recovers the full raw, banner + folded specs included.
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("> mocha --reporter spec", shown);
+        Assert.Contains("starts empty", shown);
+    }
 }
 
 /// <summary>
@@ -370,6 +395,39 @@ public class NpmFoldSmokeTests : IDisposable
         // near-passthrough so it leaves the gap table.
         Assert.Equal(raw, outp + err);
         Assert.Contains("\"reason\":\"npm-run-fold\"", _h.InvocationLog());
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("npm", gaps);
+    }
+
+    [Fact]
+    public void BigBannerlessTestAliasFoldsWithNpmOffGapTable()
+    {
+        // The #120 gap shape itself: `npm test` under modern npm (>= 11)
+        // emits no banner off-TTY and used to bypass dispatch entirely,
+        // landing as a raw npm-family gap. Via the alias route it now takes
+        // the #93 size-floored fold like `npm run` does.
+        var env = new Dictionary<string, string> { ["VTK_FAKE_NPM_ALIAS_SCRIPT"] = "bigraw" };
+        var (raw, rawCode) = _h.RunRawTool(env, "npm", "test");
+        Assert.Equal(0, rawCode);
+        Assert.True(raw.Length >= 64 * 1024, $"fixture below the fold floor: {raw.Length} bytes");
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, env, "npm", "test");
+        Assert.Equal(rawCode, code); // parity
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.Contains("done: 1500 items in 4.2s", outp);
+        Assert.DoesNotContain("processed item 0001", outp);
+        Assert.True(outp.Length < 700, $"fold output not compact ({outp.Length} bytes):\n{outp}\nstderr: {err}");
+
+        // The full raw is recoverable via the spool.
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("processed item 0001", shown);
+
+        // Telemetry: fold identity, no output content, npm off the gap table.
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"npm-run-fold\"", log);
+        Assert.DoesNotContain("processed item", log);
         var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
         Assert.Equal(0, gapsCode);
         Assert.DoesNotContain("npm", gaps);

@@ -107,12 +107,12 @@ public static class Program
             return Passthrough(st, args, true, reason, match);
         }
 
-        // `npm run <script>` is a dispatch layer, not a leaf command: npm
-        // prepends a banner and the real work is done by an inner tool
-        // (eslint, mocha, ...). Strip the banner and delegate the body to
-        // the inner tool's filter, with gap attribution to that inner tool
-        // — not to npm.
-        if (IsNpmRun(match))
+        // `npm run <script>` — and its lifecycle aliases (`npm test`, ...)
+        // (#120) — is a dispatch layer, not a leaf command: npm prepends a
+        // banner and the real work is done by an inner tool (eslint, mocha,
+        // ...). Strip the banner and delegate the body to the inner tool's
+        // filter, with gap attribution to that inner tool — not to npm.
+        if (IsNpmScript(match))
         {
             return RunNpm(st, args, match);
         }
@@ -124,14 +124,27 @@ public static class Program
         return RunFiltered(st, entry, args, match);
     }
 
+    // npm subcommands that run a package script without the `run` verb
+    // (npm's lifecycle aliases: `npm test` = `npm run test`, likewise its
+    // shorthands and the start/stop/restart trio). They produce the same
+    // banner/fold output shapes as `npm run` and must route through the same
+    // dispatch layer (#120).
+    private static readonly HashSet<string> NpmLifecycleAliases =
+        new() { "test", "t", "tst", "start", "stop", "restart" };
+
     /// <summary>
-    /// Reports whether args is an `npm run &lt;script&gt; ...` invocation, the
-    /// only npm form that carries the dispatch banner this layer handles.
-    /// Bare `npm run` (no script) and other npm subcommands fall through to
-    /// normal gap-logged passthrough.
+    /// Reports whether args is an npm script invocation the dispatch layer
+    /// handles: `npm run &lt;script&gt; ...` or a lifecycle alias (`npm test`,
+    /// `npm t`, `npm tst`, `npm start`, `npm stop`, `npm restart`) (#120).
+    /// Bare `npm run` (no script) and all other npm subcommands
+    /// (install/ci/ls/...) fall through to normal gap-logged passthrough.
     /// </summary>
-    private static bool IsNpmRun(string[] args) =>
-        args.Length >= 3 && args[0] == "npm" && args[1] == "run";
+    internal static bool IsNpmScript(string[] args)
+    {
+        if (args.Length < 2 || args[0] != "npm") return false;
+        if (args[1] == "run") return args.Length >= 3;
+        return NpmLifecycleAliases.Contains(args[1]);
+    }
 
     /// <summary>
     /// Captures the `npm run` output once, strips the npm banner, and routes
