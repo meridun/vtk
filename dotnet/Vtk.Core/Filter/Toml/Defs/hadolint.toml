@@ -1,0 +1,38 @@
+# hadolint — strip blank spacer lines and cap pathological line lengths;
+# keep every Dockerfile finding verbatim. Ported from rtk's hadolint.toml
+# (rtk-ai/rtk, issue #41).
+#
+# exit_codes {0, 1}: hadolint reports rule violations via exit 1 — a report,
+# not a failure (eslint/mocha precedent, decision #7), so that output is
+# exactly what to compact. Other exits (unreadable Dockerfile, bad usage)
+# stay raw. Exit-code parity is untouched either way.
+
+name = "hadolint"
+match_command = '^hadolint\b'
+exit_codes = [0, 1]
+strip_ansi = true
+
+strip_lines_matching = [
+  '^\s*$',
+]
+
+truncate_lines_at = 120
+max_lines = 40
+
+# rtk's fixture.
+[[tests.findings]]
+input = """
+Dockerfile:3 DL3008 warning: Pin versions in apt-get install
+Dockerfile:5 DL3009 info: Delete apt-get lists after installing
+
+Dockerfile:8 DL4006 warning: Set SHELL option -o pipefail before RUN with pipe
+"""
+expected = """
+Dockerfile:3 DL3008 warning: Pin versions in apt-get install
+Dockerfile:5 DL3009 info: Delete apt-get lists after installing
+Dockerfile:8 DL4006 warning: Set SHELL option -o pipefail before RUN with pipe"""
+
+# rtk's clean-run fixture.
+[[tests.clean_passthrough]]
+input = ""
+expected = ""

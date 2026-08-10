@@ -1,0 +1,37 @@
+make -C sub all
+gcc -Wall -c ../../main.c -o main.o
+../../main.c: In function 'main':
+../../main.c:5:9: warning: unused variable 'count' [-Wunused-variable]
+    5 |     int count = 0;
+      |         ^~~~~
+In file included from ../../main.c:2:
+../../util.h: At top level:
+../../util.h:3:12: warning: 'unused_helper' defined but not used [-Wunused-function]
+    3 | static int unused_helper(void) { return 42; }
+      |            ^~~~~~~~~~~~~
+../../main.c: In function 'main':
+../../main.c:7:19: warning: '%d' directive writing 5 bytes into a region of size 4 [-Wformat-overflow=]
+    7 |     sprintf(buf, "%d", 12345);
+      |                   ^~
+../../main.c:7:5: note: 'sprintf' output 6 bytes into a destination of size 4
+    7 |     sprintf(buf, "%d", 12345);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~
+gcc -Wall -c ../app.c -o app.o
+../app.c: In function 'main':
+../app.c:5:9: warning: unused variable 'count' [-Wunused-variable]
+    5 |     int count = 0;
+      |         ^~~~~
+In file included from ../app.c:2:
+../util2.h: At top level:
+../util2.h:4:12: warning: 'unused_helper' defined but not used [-Wunused-function]
+    4 | static int unused_helper(void) { return 42; }
+      |            ^~~~~~~~~~~~~
+In file included from ../util2.h:3:
+../mid.h:4:12: warning: 'mid_helper' defined but not used [-Wunused-function]
+    4 | static int mid_helper(void) { return 2; }
+      |            ^~~~~~~~~~
+In file included from ../mid.h:3:
+../deep.h:3:12: warning: 'deep_helper' defined but not used [-Wunused-function]
+    3 | static int deep_helper(void) { return 1; }
+      |            ^~~~~~~~~~~
+Build complete.

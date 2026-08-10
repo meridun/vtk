@@ -1,0 +1,14 @@
+app.c: In function 'main':
+app.c:5:9: warning: unused variable 'count' [-Wunused-variable]
+    5 |     int count = 0;
+      |         ^~~~~
+util2.h: At top level:
+util2.h:4:12: warning: 'unused_helper' defined but not used [-Wunused-function]
+    4 | static int unused_helper(void) { return 42; }
+      |            ^~~~~~~~~~~~~
+mid.h:4:12: warning: 'mid_helper' defined but not used [-Wunused-function]
+    4 | static int mid_helper(void) { return 2; }
+      |            ^~~~~~~~~~
+deep.h:3:12: warning: 'deep_helper' defined but not used [-Wunused-function]
+    3 | static int deep_helper(void) { return 1; }
+      |            ^~~~~~~~~~~

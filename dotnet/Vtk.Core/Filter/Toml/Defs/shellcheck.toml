@@ -1,0 +1,44 @@
+# shellcheck — strip the blank spacer lines between findings; keep every
+# finding verbatim (source excerpt + caret + SC code). Ported from rtk's
+# shellcheck.toml (rtk-ai/rtk, issue #41).
+#
+# exit_codes {0, 1}: shellcheck reports "issues found" via exit 1 — a report,
+# not a failure, so that output is exactly what to compact (eslint/mocha
+# precedent, decision #7). Exit 2+ (unprocessable files, bad invocation)
+# stays raw. Exit-code parity is untouched either way.
+
+name = "shellcheck"
+match_command = '^shellcheck\b'
+exit_codes = [0, 1]
+strip_ansi = true
+
+strip_lines_matching = [
+  '^\s*$',
+]
+
+max_lines = 50
+
+# rtk's multi-warning fixture.
+[[tests.findings]]
+input = """
+In script.sh line 3:
+if [[ $1 == "" ]]
+     ^-- SC2236: Use -z instead of ! -n.
+
+In script.sh line 7:
+echo $var
+     ^-- SC2086: Double quote to prevent globbing.
+
+"""
+expected = """
+In script.sh line 3:
+if [[ $1 == "" ]]
+     ^-- SC2236: Use -z instead of ! -n.
+In script.sh line 7:
+echo $var
+     ^-- SC2086: Double quote to prevent globbing."""
+
+# rtk's clean-run fixture: no findings, nothing printed, nothing invented.
+[[tests.clean_passthrough]]
+input = ""
+expected = ""

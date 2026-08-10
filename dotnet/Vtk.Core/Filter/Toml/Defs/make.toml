@@ -1,0 +1,58 @@
+# make — strip recursive-make bookkeeping (Entering/Leaving directory,
+# numbered sub-make chatter, "Nothing to be done") and blank lines; keep
+# recipe echoes and every compiler/tool diagnostic. Ported from rtk's
+# make.toml (rtk-ai/rtk, issue #41) with the patterns corrected against a
+# real GNU make capture: chatter lines are always prefixed `make:` or
+# `make[N]:` (rtk's bare `^Nothing to be done` never matches real output),
+# and top-level `make -C` prints unnumbered Entering/Leaving lines.
+#
+# exit_codes defaults to {0}: a failed recipe exits 2 and passes through raw
+# (failures always emit raw — Architecture.md invariant 1). `make[N]: ***`
+# error lines only occur on those nonzero exits, so stripping by the
+# `make[N]:` prefix never touches a displayed failure.
+
+name = "make"
+match_command = '^make\b'
+
+strip_lines_matching = [
+  '^make(\[\d+\])?: (Entering|Leaving) directory ',
+  '^make\[\d+\]:',
+  '^make: Nothing to be done for',
+  '^\s*$',
+]
+
+max_lines = 50
+on_empty = "make: ok"
+
+# Adapted from rtk's fixture; the real recursive-make capture (mingw32-make
+# 4.x, `mingw32-` prefix and host paths scrubbed) is the LongTailTomlTests
+# golden fixture (testdata/longtail/make.*).
+[[tests.submake_chatter]]
+input = """
+make[1]: Entering directory '/home/user/proj'
+gcc -O2 -c foo.c -o foo.o
+make[1]: Leaving directory '/home/user/proj'
+"""
+expected = """
+gcc -O2 -c foo.c -o foo.o"""
+
+# Top-level `make -C` chatter is unnumbered; a run that was all bookkeeping
+# collapses to the on_empty marker.
+[[tests.nothing_to_do]]
+input = """
+make: Entering directory '/home/user/proj/sub'
+make: Nothing to be done for 'all'.
+make: Leaving directory '/home/user/proj/sub'
+"""
+expected = "make: ok"
+
+# rtk's blank-line fixture.
+[[tests.blank_lines]]
+input = """
+gcc -O2 foo.c
+
+gcc -O2 bar.c
+"""
+expected = """
+gcc -O2 foo.c
+gcc -O2 bar.c"""
