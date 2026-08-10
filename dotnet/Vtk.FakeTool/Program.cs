@@ -289,9 +289,19 @@ public static class Program
     //   quiet     -> NO banner and a terse status payload (`npm run sdlc`
     //                shape): must stay a byte-identical inline passthrough
     //                (exit from VTK_FAKE_NPM_CODE, default 0)
+    //
+    // Lifecycle aliases (`npm test`, `npm t`, `npm tst`, `npm start`, `npm
+    // stop`, `npm restart`) run scripts without the `run` verb (#120): they
+    // map to the script of the same name (t/tst normalize to test), or to
+    // VTK_FAKE_NPM_ALIAS_SCRIPT when set — which lets a smoke test reach the
+    // banner-less shapes (bigraw/quiet) through an alias spelling.
     private static int Npm(TextWriter stdout, TextWriter stderr, string[] args)
     {
-        var script = args.Length >= 2 && args[0] == "run" ? args[1] : "";
+        var script = args.Length >= 2 && args[0] == "run" ? args[1]
+            : args.Length >= 1 && args[0] is "test" or "t" or "tst" or "start" or "stop" or "restart"
+                ? Environment.GetEnvironmentVariable("VTK_FAKE_NPM_ALIAS_SCRIPT")
+                    ?? (args[0] is "t" or "tst" ? "test" : args[0])
+                : "";
         switch (script)
         {
             case "lint":
