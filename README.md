@@ -97,6 +97,17 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   summaries. Read-only verbs (`search`, `list`) never engage the filter. Measured 10–19% on
   real-capture fixtures; failed installs (non-zero exit) pass through raw with exit-code parity
   intact.
+- **long-tail TOML strip defs** — `gcc`/`g++`, `make`, `terraform plan`, `shellcheck`,
+  `yamllint`, `hadolint` (#41): six pure line-strip defs ported from rtk. gcc drops
+  include-chain preambles and spacer lines, keeping every diagnostic (a clean compile prints
+  `gcc: ok`); make drops recursive-make `Entering/Leaving directory` chatter, including the
+  Windows `make.EXE` argv[0] shape; terraform plan drops state-refresh and lock chatter,
+  keeping the action list and `Plan:` summary; the three linters drop blank spacer lines with
+  a length cap. Measured 13% (gcc real capture), 12–67% (make golden capture / recursive
+  real run), ≈60% (terraform plan fixture); linter savings are small by design. Compile,
+  recipe, and plan failures (non-zero exit) pass through raw; shellcheck/hadolint exit `1`
+  and yamllint exits `1`–`2` are findings reports and stay filtered — exit-code parity intact
+  throughout.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
