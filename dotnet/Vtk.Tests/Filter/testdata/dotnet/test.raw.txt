@@ -1,0 +1,13 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Vtk.Core -> C:\Claude\vtk-wt\121\dotnet\Vtk.Core\bin\Debug\net9.0\Vtk.Core.dll
+  Vtk.FakeTool -> C:\Claude\vtk-wt\121\dotnet\Vtk.FakeTool\bin\Debug\net9.0\vtk-faketool.dll
+  Vtk.Cli -> C:\Claude\vtk-wt\121\dotnet\Vtk.Cli\bin\Debug\net9.0\vtk.dll
+  Vtk.Tests -> C:\Claude\vtk-wt\121\dotnet\Vtk.Tests\bin\Debug\net9.0\Vtk.Tests.dll
+Test run for C:\Claude\vtk-wt\121\dotnet\Vtk.Tests\bin\Debug\net9.0\Vtk.Tests.dll (.NETCoreApp,Version=v9.0)
+VSTest version 17.14.1 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    23, Skipped:     0, Total:    23, Duration: 236 ms - Vtk.Tests.dll (net9.0)
