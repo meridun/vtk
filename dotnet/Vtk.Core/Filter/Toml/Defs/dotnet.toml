@@ -1,0 +1,91 @@
+# dotnet build/test — strip MSBuild restore/compile progress and the VSTest
+# banner; keep compiler/analyzer warnings, the Build succeeded summary
+# (warning/error counts + elapsed), and the Passed!/Failed! test summary line
+# verbatim. vtk's own C#/.NET dev loop, flagged by `vtk discover` (#121);
+# same "data not code" strip-def pattern as cargo.toml (#61).
+#
+# Capture note: vtk captures the child via pipes, so MSBuild uses the classic
+# console logger (no terminal-logger rendering, no ANSI). Captured lines are
+# CRLF and the pipeline splits on \n only, so each line keeps a trailing \r —
+# end-anchored patterns use \r?$. MSBuild prints warnings twice on a green
+# build (inline + again after "Build succeeded."); both copies are kept —
+# deduping needs positional context a line-strip def doesn't have, and
+# warnings are signal, not chatter.
+#
+# exit_codes defaults to {0}: compile errors and failing tests exit non-zero
+# and pass through raw (failures always emit raw — Architecture.md
+# invariant 1).
+
+name = "dotnet"
+match_command = '^dotnet (build|test)\b'
+
+strip_lines_matching = [
+  '^\s*Determining projects to restore\.\.\.\r?$',
+  '^\s*All projects are up-to-date for restore\.\r?$',
+  '^\s*Restored .+ \(in .+\)\.\r?$',
+  '^\s+\S+ -> .+\.(dll|exe)\r?$',
+  '^Test run for .+\r?$',
+  '^VSTest version .+\r?$',
+  '^Starting test execution, please wait\.\.\.\r?$',
+  '^A total of \d+ test files matched the specified pattern\.\r?$',
+  '^\s*$',
+]
+
+# Real captures from vtk's own solution (dotnet 9 SDK / VSTest 17.14.1,
+# pipe-redirected). LF form here; the CRLF byte-exact originals are the
+# DotnetTomlTests golden fixtures.
+
+[[tests.test_green]]
+input = '''
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Vtk.Core -> C:\Claude\vtk\dotnet\Vtk.Core\bin\Debug\net9.0\Vtk.Core.dll
+  Vtk.Tests -> C:\Claude\vtk\dotnet\Vtk.Tests\bin\Debug\net9.0\Vtk.Tests.dll
+Test run for C:\Claude\vtk\dotnet\Vtk.Tests\bin\Debug\net9.0\Vtk.Tests.dll (.NETCoreApp,Version=v9.0)
+VSTest version 17.14.1 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    23, Skipped:     0, Total:    23, Duration: 236 ms - Vtk.Tests.dll (net9.0)
+'''
+expected = '''Passed!  - Failed:     0, Passed:    23, Skipped:     0, Total:    23, Duration: 236 ms - Vtk.Tests.dll (net9.0)'''
+
+[[tests.build_clean]]
+input = '''
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Vtk.Core -> C:\Claude\vtk\dotnet\Vtk.Core\bin\Debug\net9.0\Vtk.Core.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:01.08
+'''
+expected = '''Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+Time Elapsed 00:00:01.08'''
+
+[[tests.warnings_kept]]
+input = '''
+  Determining projects to restore...
+  Restored C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj (in 1.15 sec).
+C:\Claude\vtk\dotnet\Vtk.Tests\Runner\ProcessRunnerTests.cs(54,29): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj]
+  Vtk.Tests -> C:\Claude\vtk\dotnet\Vtk.Tests\bin\Debug\net9.0\Vtk.Tests.dll
+
+Build succeeded.
+
+C:\Claude\vtk\dotnet\Vtk.Tests\Runner\ProcessRunnerTests.cs(54,29): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj]
+    1 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:05.63
+'''
+expected = '''C:\Claude\vtk\dotnet\Vtk.Tests\Runner\ProcessRunnerTests.cs(54,29): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj]
+Build succeeded.
+C:\Claude\vtk\dotnet\Vtk.Tests\Runner\ProcessRunnerTests.cs(54,29): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj]
+    1 Warning(s)
+    0 Error(s)
+Time Elapsed 00:00:05.63'''

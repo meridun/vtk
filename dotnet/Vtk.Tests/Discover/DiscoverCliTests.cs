@@ -54,20 +54,25 @@ public class DiscoverCliTests : IDisposable
         var code = Run(out var stdout, out _, "--sessions", _sessions);
 
         Assert.Equal(0, code);
-        // 5 Bash events in the fixture (vtk-wrapped and error events counted
+        // 6 Bash events in the fixture (vtk-wrapped and error events counted
         // as commands, then skipped by classification).
-        Assert.Contains("from 5 commands across 1 sessions", stdout);
+        Assert.Contains("from 6 commands across 1 sessions", stdout);
         // Bare `git status` (x2) is covered by the shipped registry: unwrapped.
         Assert.Contains("unwrapped", stdout);
         Assert.Contains("git status", stdout);
-        // `cd dotnet && dotnet test ...` matches the dotnet-test rule: candidate.
+        // `cd dotnet && dotnet test ...` is covered by the shipped dotnet def
+        // (#121): unwrapped under the registry name, never a candidate.
+        Assert.Matches(@"unwrapped\s+dotnet\s", stdout);
+        Assert.Contains("dotnet test Vtk.sln", stdout);
+        Assert.DoesNotContain("dotnet-test", stdout);
+        // `go test ./...` matches the go-test rule with no shipped filter: candidate.
         Assert.Contains("candidate", stdout);
-        Assert.Contains("dotnet-test", stdout);
+        Assert.Contains("go-test", stdout);
         // The vtk-wrapped `git log` and the failed `dotnet build` produce no rows.
         Assert.DoesNotContain("git log", stdout);
         Assert.DoesNotContain("dotnet-build", stdout);
-        // dotnet-test's observed output outranks git status's.
-        Assert.True(stdout.IndexOf("dotnet-test", StringComparison.Ordinal)
+        // go-test's observed output outranks git status's.
+        Assert.True(stdout.IndexOf("go-test", StringComparison.Ordinal)
             < stdout.IndexOf("git status", StringComparison.Ordinal));
     }
 
@@ -79,10 +84,11 @@ public class DiscoverCliTests : IDisposable
         var code = Run(out var stdout, out _, "--sessions", _sessions, "--top", "1");
 
         Assert.Equal(0, code);
-        Assert.Contains("discover: 2 opportunities", stdout);
-        Assert.Contains("dotnet-test", stdout);
-        // The lower-ranked `git status` row is cut; only the legend mentions
-        // the unwrapped class.
+        Assert.Contains("discover: 3 opportunities", stdout);
+        Assert.Contains("go-test", stdout);
+        // The lower-ranked `dotnet test` and `git status` rows are cut; only
+        // the legend mentions the unwrapped class.
+        Assert.DoesNotContain("dotnet test Vtk.sln", stdout);
         Assert.DoesNotContain("git status", stdout);
     }
 

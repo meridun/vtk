@@ -108,6 +108,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   recipe, and plan failures (non-zero exit) pass through raw; shellcheck/hadolint exit `1`
   and yamllint exits `1`–`2` are findings reports and stay filtered — exit-code parity intact
   throughout.
+- **dotnet filter** — `dotnet build`/`dotnet test` (#121, TOML def): strips restore chatter,
+  per-project compile lines, and the VSTest banner; keeps compiler/analyzer warnings verbatim,
+  the `Build succeeded.` counts + elapsed summary, and the `Passed!`/`Failed!` test summary
+  line. Measured 5–85% on fixtures (green test 85%, clean build 69%, warning-heavy build 5%);
+  red builds and failing tests (non-zero exit) pass through raw with exit-code parity intact.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
