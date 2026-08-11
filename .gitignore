@@ -13,3 +13,6 @@ vtk.exe
 # Local logs / scratch (vtk's own gap/stats logs never belong in the repo)
 *.log
 scratch/
+
+# Windows crash artifacts (Git Bash / MSYS2)
+*.stackdump
