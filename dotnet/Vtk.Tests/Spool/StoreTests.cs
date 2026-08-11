@@ -37,6 +37,39 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Write_RetriesPastTransientDestinationLock()
+    {
+        // #125: concurrent identical invocations replace the same spool file;
+        // on Windows the replace can transiently fail with a sharing
+        // violation. Hold the destination open with no sharing, release it on
+        // another thread inside the retry window, and require Write to
+        // succeed via retry. Sharing violations are Windows semantics — on
+        // other platforms the open never blocks the replace, so skip.
+        if (!OperatingSystem.IsWindows()) return;
+
+        var argv = new[] { "git", "log" };
+        var id = _store.Write(argv, "first\n", DateTime.UtcNow);
+        var dest = Path.Combine(_dir, "spool", id + ".txt");
+
+        var lockFs = new FileStream(dest, FileMode.Open, FileAccess.Read, FileShare.None);
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(60); // shorter than the 25+50+100 ms retry budget
+            lockFs.Dispose();
+        });
+        try
+        {
+            var id2 = _store.Write(argv, "second\n", DateTime.UtcNow);
+            Assert.Equal(id, id2);
+        }
+        finally
+        {
+            await release;
+        }
+        Assert.Contains("second", _store.Read(id));
+    }
+
+    [Fact]
     public void Read_UnknownId_Throws()
     {
         Assert.ThrowsAny<Exception>(() => _store.Read("dead"));
