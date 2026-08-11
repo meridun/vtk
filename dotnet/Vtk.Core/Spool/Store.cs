@@ -66,9 +66,33 @@ public sealed class Store
 
         var tmpName = Path.Combine(SpoolDir, id + ".tmp-" + Path.GetRandomFileName());
         File.WriteAllText(tmpName, content);
-        File.Move(tmpName, Path.Combine(SpoolDir, id + SpoolExt), overwrite: true);
-        return id;
+        var dest = Path.Combine(SpoolDir, id + SpoolExt);
+        // Concurrent identical invocations replace the same destination, and
+        // on Windows the replace can transiently fail with a sharing
+        // violation (#125). A bounded retry narrows that window; on final
+        // failure the tmp file is removed best-effort and the exception
+        // propagates so the caller degrades to raw passthrough (spool-fail),
+        // the designed fallback — output is never lost.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Move(tmpName, dest, overwrite: true);
+                return id;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (attempt >= MoveRetryDelaysMs.Length)
+                {
+                    try { File.Delete(tmpName); } catch { /* best-effort */ }
+                    throw;
+                }
+                Thread.Sleep(MoveRetryDelaysMs[attempt]);
+            }
+        }
     }
+
+    private static readonly int[] MoveRetryDelaysMs = { 25, 50, 100 };
 
     /// <summary>Returns the spooled content (provenance header first) for an ID.</summary>
     public string Read(string id)

@@ -131,15 +131,30 @@ public class SmokeTests : IDisposable
         var (_, _, sweptShowCode) = _h.Run(_h.Repo, "show", statusId);
         Assert.Equal(1, sweptShowCode);
 
-        // concurrent identical invocations both succeed
+        // Concurrent identical invocations: neither may lose output and at
+        // least one must fold. Both race a replace into the same spool file;
+        // on Windows one can transiently lose and degrade to raw passthrough
+        // — the designed spool-fail fallback (invariant 2, #125) — so
+        // requiring both to fold over-asserts against decided behavior.
         var t1 = Task.Run(() => _h.Run(_h.Repo, "git", "log"));
         var t2 = Task.Run(() => _h.Run(_h.Repo, "git", "log"));
         Task.WaitAll(t1, t2);
         Assert.Equal(0, t1.Result.code);
         Assert.Equal(0, t2.Result.code);
-        SmokeHarness.MustOkId(t1.Result.stdout);
-        SmokeHarness.MustOkId(t2.Result.stdout);
-        Assert.Equal(t1.Result.stdout, t2.Result.stdout);
+        var okRe = new System.Text.RegularExpressions.Regex(@"(?m)^OK [0-9a-f]{4}$");
+        var results = new[] { t1.Result, t2.Result };
+        var folded = 0;
+        foreach (var r in results)
+        {
+            if (okRe.IsMatch(r.stdout))
+                folded++; // folded: raw is recoverable via the spool id
+            else
+                // Raw passthrough: the full git log must be present verbatim.
+                Assert.Contains("commit 3: add file3.txt", r.stdout);
+        }
+        Assert.True(folded >= 1, "neither concurrent invocation folded");
+        if (folded == 2)
+            Assert.Equal(t1.Result.stdout, t2.Result.stdout);
     }
 
     [Fact]
