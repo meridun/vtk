@@ -82,15 +82,17 @@ public static class Npm
     // folds behind `OK <id>` only above a generous absolute byte floor;
     // below it — and on any failure — output stays inline, so terse
     // load-bearing scripts (`npm run sdlc`) pass through automatically with
-    // no exempt list. The CLI runner owns the exit-code gate, the spool, and
-    // the telemetry; the helpers here are pure.
+    // no exempt list. The mechanism (floor, tail caps, tail slice) lives in
+    // <see cref="Fold"/>, shared with `powershell -File` (#131); the aliases
+    // below keep npm's original public surface. The CLI runner owns the
+    // exit-code gate, the spool, and the telemetry; the helpers here are pure.
 
     /// <summary>
     /// Absolute byte floor a successful unrecognized-inner `npm run` body
-    /// must reach before it folds behind `OK &lt;id&gt;` (#93, option C). Far
-    /// above the #52 savings bar, so a fold always clears that bar too.
+    /// must reach before it folds behind `OK &lt;id&gt;` (#93, option C).
+    /// Alias of <see cref="Fold.FloorBytes"/>.
     /// </summary>
-    public const int FoldFloorBytes = 64 * 1024;
+    public const int FoldFloorBytes = Fold.FloorBytes;
 
     /// <summary>
     /// Registry-style identity for the fold pseudo-filter. Telemetry records
@@ -101,37 +103,12 @@ public static class Npm
     /// </summary>
     public const string FoldName = "npm-run-fold";
 
-    /// <summary>Maximum number of trailing lines <see cref="FoldTail"/> keeps inline.</summary>
-    public const int FoldTailMaxLines = 5;
+    /// <summary>Maximum number of trailing lines <see cref="FoldTail"/> keeps inline. Alias of <see cref="Fold.TailMaxLines"/>.</summary>
+    public const int FoldTailMaxLines = Fold.TailMaxLines;
 
-    /// <summary>Maximum total size (chars) of the tail <see cref="FoldTail"/> keeps inline.</summary>
-    public const int FoldTailMaxBytes = 512;
+    /// <summary>Maximum total size (chars) of the tail <see cref="FoldTail"/> keeps inline. Alias of <see cref="Fold.TailMaxBytes"/>.</summary>
+    public const int FoldTailMaxBytes = Fold.TailMaxBytes;
 
-    /// <summary>
-    /// The generic "summary stays inline" slice of a folded body: its last
-    /// lines — where CLI tools put their summaries — capped at
-    /// <see cref="FoldTailMaxLines"/> lines and <see cref="FoldTailMaxBytes"/>
-    /// chars. Trailing blank lines are dropped first; lines are taken from
-    /// the end while both caps hold, so an oversized final line yields ""
-    /// (a bare `OK &lt;id&gt;` fold). Pure — the full body is always
-    /// recoverable from the spool.
-    /// </summary>
-    public static string FoldTail(string body)
-    {
-        var lines = body.Split('\n');
-        var end = lines.Length;
-        while (end > 0 && lines[end - 1].Trim() == "") end--;
-
-        var start = end;
-        var total = 0;
-        while (start > 0 && end - start < FoldTailMaxLines)
-        {
-            // +1 for the joining newline on every line after the first.
-            var cost = lines[start - 1].Length + (start == end ? 0 : 1);
-            if (total + cost > FoldTailMaxBytes) break;
-            total += cost;
-            start--;
-        }
-        return start == end ? "" : string.Join("\n", lines[start..end]);
-    }
+    /// <summary>The shared fold tail slice — see <see cref="Fold.Tail"/>.</summary>
+    public static string FoldTail(string body) => Fold.Tail(body);
 }

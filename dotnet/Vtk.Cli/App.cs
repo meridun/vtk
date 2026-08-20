@@ -117,6 +117,16 @@ public static class Program
             return RunNpm(st, args, match);
         }
 
+        // `powershell -File <script>` / `pwsh -File <script>` (#131): the
+        // family's traffic is script runs whose bulk is test-runner + server
+        // log output, with no argv-derivable inner tool. Route success
+        // output through the shared size-floored fold (#93 mechanism);
+        // failures and small outputs stay inline.
+        if (PowershellFile.Matches(match))
+        {
+            return RunPowershellFile(st, args, match);
+        }
+
         if (!found)
         {
             return Passthrough(st, args, false, Store.ReasonNoFilter, match);
@@ -188,9 +198,9 @@ public static class Program
             // raw, gap-logged under the npm family as before.
             if (result.ExitCode == 0)
             {
-                if (raw.Length >= Npm.FoldFloorBytes)
+                if (raw.Length >= Fold.FloorBytes)
                 {
-                    if (TryNpmFold(st, args, match, raw, raw))
+                    if (TryFold(st, args, match, raw, raw, Npm.FoldName))
                         return result.ExitCode;
                     return EmitRawAttr(match, Store.ReasonSpoolFail);
                 }
@@ -279,7 +289,7 @@ public static class Program
         // the size-floored fold (#93, option C) beats banner-only stripping.
         // A fold failure falls through to the pre-fold behavior below (which
         // itself degrades to raw on spool failure — never lost output).
-        if (code == 0 && body.Length >= Npm.FoldFloorBytes && TryNpmFold(st, inner, inner, raw, body))
+        if (code == 0 && body.Length >= Fold.FloorBytes && TryFold(st, inner, inner, raw, body, Npm.FoldName))
             return code;
 
         if (body.Length >= raw.Length)
@@ -329,19 +339,72 @@ public static class Program
     }
 
     /// <summary>
-    /// The above-floor half of the #93 size-floored fold: spools the full
-    /// raw (banner included when present) and emits the body's short summary
-    /// tail plus `OK &lt;id&gt;`, logging filtered=true under the fold's static
-    /// identity. Callers gate on child exit 0 and <see cref="Npm.FoldFloorBytes"/>.
-    /// The 64KB floor strictly dominates the #52 savings bar, so a fold
-    /// never fires a false recover-me signal. Returns false — emitting
-    /// nothing — when the tail computation throws or the spool write fails,
-    /// so the caller can degrade to raw (invariant 2: recovery must exist
-    /// before anything is elided).
+    /// Captures a `powershell -File`/`pwsh -File` run and routes it through
+    /// the shared size-floored fold (#131; mechanism #93): success at or
+    /// above <see cref="Fold.FloorBytes"/> folds behind `OK &lt;id&gt;` with the
+    /// full raw spooled and a short summary tail inline; success below the
+    /// floor is a byte-identical per-stream passthrough logged as an
+    /// intentional near-passthrough under the fold identity; any failure
+    /// stays raw inline and remains a genuine powershell-family gap.
+    /// Exit-code parity holds on every branch, and a fold failure degrades
+    /// to raw — never to lost output.
     /// </summary>
-    private static bool TryNpmFold(Store st, string[] spoolArgv, string[] logArgv, string raw, string body)
+    private static int RunPowershellFile(Store st, string[] args, string[] match)
     {
-        if (!TryApplyFilter(Npm.FoldTail, body, out var tail)) return false;
+        var result = ProcessRunner.RunCaptured(args);
+        var raw = result.Combined;
+
+        int EmitRaw(string reason)
+        {
+            Console.Out.Write(result.Stdout);
+            Console.Error.Write(result.Stderr);
+            LogInvocation(st, match, raw.Length, raw.Length, filtered: false, tty: false, reason);
+            return result.ExitCode;
+        }
+
+        // The host never started (runner already printed the error and
+        // synthesized 127): not a coverage gap (#118).
+        if (result.SpawnFailed)
+        {
+            return EmitRaw(Store.ReasonSpawnFail);
+        }
+        if (result.ExitCode != 0)
+        {
+            // Failures never fold: the script's error/test-failure output is
+            // the load-bearing case. Full raw, still a coverage gap.
+            return EmitRaw(Store.ReasonNoFilter);
+        }
+        if (raw.Length >= Fold.FloorBytes)
+        {
+            if (TryFold(st, args, match, raw, raw, PowershellFile.FoldName))
+                return result.ExitCode;
+            return EmitRaw(Store.ReasonSpoolFail);
+        }
+        // Below the floor: byte-identical per-stream passthrough, logged as
+        // an intentional near-passthrough (filtered=true, fold identity) so
+        // terse script runs leave the gap table without ever being silently
+        // unlogged.
+        Console.Out.Write(result.Stdout);
+        Console.Error.Write(result.Stderr);
+        LogInvocation(st, match, raw.Length, raw.Length, filtered: true, tty: false, PowershellFile.FoldName);
+        return result.ExitCode;
+    }
+
+    /// <summary>
+    /// The above-floor half of the size-floored fold (#93 mechanism, shared
+    /// by `npm run` and `powershell -File`): spools the full raw (banner
+    /// included when present) and emits the body's short summary tail plus
+    /// `OK &lt;id&gt;`, logging filtered=true under <paramref name="foldName"/>,
+    /// the fold's static identity. Callers gate on child exit 0 and
+    /// <see cref="Fold.FloorBytes"/>. The 64KB floor strictly dominates the
+    /// #52 savings bar, so a fold never fires a false recover-me signal.
+    /// Returns false — emitting nothing — when the tail computation throws
+    /// or the spool write fails, so the caller can degrade to raw
+    /// (invariant 2: recovery must exist before anything is elided).
+    /// </summary>
+    private static bool TryFold(Store st, string[] spoolArgv, string[] logArgv, string raw, string body, string foldName)
+    {
+        if (!TryApplyFilter(Fold.Tail, body, out var tail)) return false;
         string id;
         try
         {
@@ -357,7 +420,7 @@ public static class Program
             if (!tail.EndsWith('\n')) Console.Out.WriteLine();
         }
         Console.Out.WriteLine($"OK {id}");
-        LogInvocation(st, logArgv, raw.Length, tail.Length, filtered: true, tty: false, Npm.FoldName);
+        LogInvocation(st, logArgv, raw.Length, tail.Length, filtered: true, tty: false, foldName);
         return true;
     }
 
