@@ -70,6 +70,11 @@ outgrows a screen.)
   the exact floor, ~64KB order); below it — and on any failure — output stays inline, so terse
   load-bearing scripts (e.g. `npm run sdlc`) pass through automatically with no exempt list —
   [#93](https://github.com/meridun/vtk/issues/93)
+- `powershell -File <script>` traffic reuses the **#93 size-floored success fold** (option 2,
+  same floor): success output above the floor folds behind `OK <id>`, failures and small
+  outputs stay inline; the cmdlet-reshaper premise is retired (measured traffic is 100%
+  `-File`, zero cmdlet calls) and re-spawnable via `gaps --file-issues` (#61) if cmdlet
+  traffic appears — [#131](https://github.com/meridun/vtk/issues/131)
 
 ## Pipeline
 
