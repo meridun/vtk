@@ -452,6 +452,114 @@ public class NpmFoldSmokeTests : IDisposable
     }
 }
 
+/// <summary>
+/// #131 size-floored fold for `powershell -File &lt;script&gt;` / `pwsh -File`
+/// (shared #93 mechanism): big success output folds behind `OK &lt;id&gt;` with a
+/// short summary tail inline, terse output stays byte-identical, and
+/// failures are never folded.
+/// </summary>
+[Collection("Smoke")]
+public class PowershellFoldSmokeTests : IDisposable
+{
+    private readonly SmokeHarness _h = new();
+    public void Dispose() => _h.Dispose();
+
+    private static Dictionary<string, string> Code(int n) => new() { ["VTK_FAKE_PS_CODE"] = n.ToString() };
+
+    // The measured #131 shape: -ExecutionPolicy Bypass -File <script>.
+    private static readonly string[] BigArgs = { "-ExecutionPolicy", "Bypass", "-File", "scripts/big.ps1" };
+
+    [Fact]
+    public void BigFileSuccessFoldsToTailPlusOkWithRecovery()
+    {
+        var (raw, rawCode) = _h.RunRawTool(null, "powershell", BigArgs);
+        Assert.Equal(0, rawCode);
+        Assert.True(raw.Length >= 64 * 1024, $"fixture below the fold floor: {raw.Length} bytes");
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, null, new[] { "powershell" }.Concat(BigArgs).ToArray());
+        Assert.Equal(rawCode, code); // parity
+        var id = SmokeHarness.MustOkId(outp);
+        // Bulk folded away; the trailing summary stays inline.
+        Assert.Contains("42 passed (312.4s)", outp);
+        Assert.DoesNotContain("request 0001 handled", outp);
+        Assert.True(outp.Length < 700, $"fold output not compact ({outp.Length} bytes):\n{outp}\nstderr: {err}");
+
+        // The full raw is recoverable via the spool.
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("request 0001 handled", shown);
+
+        // Telemetry: fold identity, filtered=true, no output content
+        // (invariant 3), and no powershell gap-table entry.
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"powershell-file-fold\"", log);
+        Assert.Contains("\"filtered\":true", log);
+        Assert.DoesNotContain("request 0001", log);
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("powershell", gaps);
+    }
+
+    [Fact]
+    public void PwshSpellingFoldsToo()
+    {
+        var (outp, err, code) = _h.RunFaked(_h.Repo, null, new[] { "pwsh" }.Concat(BigArgs).ToArray());
+        Assert.Equal(0, code);
+        SmokeHarness.MustOkId(outp);
+        Assert.Contains("42 passed (312.4s)", outp);
+        Assert.True(outp.Length < 700, $"fold output not compact ({outp.Length} bytes):\n{outp}\nstderr: {err}");
+        Assert.Contains("\"reason\":\"powershell-file-fold\"", _h.InvocationLog());
+    }
+
+    [Fact]
+    public void TerseFileSuccessStaysVerbatimAndOffGapTable()
+    {
+        var (raw, rawCode) = _h.RunRawTool(null, "powershell", "-File", "scripts/quiet.ps1");
+        Assert.Equal(0, rawCode);
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, null, "powershell", "-File", "scripts/quiet.ps1");
+        Assert.Equal(rawCode, code); // parity
+        SmokeAssert.NoOk(outp + err);
+        // Below the floor: byte-identical passthrough (the terse
+        // load-bearing-output guarantee), logged as an intentional
+        // near-passthrough so it leaves the gap table.
+        Assert.Equal(raw, outp + err);
+        Assert.Contains("\"reason\":\"powershell-file-fold\"", _h.InvocationLog());
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("powershell", gaps);
+    }
+
+    [Fact]
+    public void BigFileFailureStaysRawWithParity()
+    {
+        var (raw, rawCode) = _h.RunRawTool(Code(3), "powershell", BigArgs);
+        Assert.Equal(3, rawCode);
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, Code(3), new[] { "powershell" }.Concat(BigArgs).ToArray());
+        Assert.Equal(rawCode, code); // parity
+        SmokeAssert.NoOk(outp + err);
+        // Failures are never folded (invariant 2): full raw survives and the
+        // call remains a genuine powershell-family gap.
+        Assert.Equal(raw, outp + err);
+        Assert.Contains("\"reason\":\"no-filter\"", _h.InvocationLog());
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.Contains("powershell", gaps);
+    }
+
+    [Fact]
+    public void CommandFormBypassesTheFoldPath()
+    {
+        // -Command is not a -File run: it takes normal gap-logged
+        // passthrough, never the fold. The fake errors on unknown scripts,
+        // which is fine — the assertion is about routing, not payload.
+        var (outp, err, _) = _h.RunFaked(_h.Repo, null, "powershell", "-Command", "Get-Date");
+        SmokeAssert.NoOk(outp + err);
+        Assert.DoesNotContain("\"reason\":\"powershell-file-fold\"", _h.InvocationLog());
+    }
+}
+
 /// <summary>Port of test/smoke/dbmate_smoke_test.go: the dbmate filter family, direct and via the npm-run dispatch.</summary>
 [Collection("Smoke")]
 public class DbmateSmokeTests : IDisposable

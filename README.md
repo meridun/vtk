@@ -44,6 +44,14 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   the inner filter's on large reports. Aliases behave byte-identically to their `npm run`
   spellings; off-TTY `npm start` buffers output until exit (same as `npm run start`), and on a
   real terminal all npm calls still pass through interactively.
+- **powershell -File fold** — `powershell`/`pwsh -ExecutionPolicy ... -File <script>` (#131)
+  reuses the same size-floored fold: successful (exit 0) script output of 64 KiB or more (a
+  shared floor constant with the npm fold) collapses to a short summary tail plus an `OK <id>`
+  recovery line, with the full raw output recoverable via `vtk show`. Below the floor, output
+  passes through byte-identical; failures are never folded — a red test run keeps its full
+  output inline with the script's exit code returned unchanged. Both spellings (± `.exe`, any
+  case) are covered; `-Command`/`-EncodedCommand` invocations bypass the fold and pass through
+  gap-logged. Measured ≈99.8% on a 146 KB real-run fold.
 - **launcher-prefix unwrap** (#97) — filter matching sees through transparent launcher prefixes:
   `cross-env VAR=x <cmd>`, `npx <cmd>` (with `--yes`/`-y`/`--no-install`), and bare leading
   `VAR=x` tokens, stacked in any combination, unwrap to the inner command before filter lookup —

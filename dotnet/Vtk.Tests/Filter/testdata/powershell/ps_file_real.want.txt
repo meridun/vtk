@@ -1,0 +1,5 @@
+[server] 2026-08-20T12:00:00.000Z GET /api/state 200 12ms request 1199 handled
+[server] 2026-08-20T12:00:00.000Z GET /api/state 200 12ms request 1200 handled
+
+42 passed (312.4s)
+run-e2e-local: done in 312.4s

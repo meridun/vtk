@@ -42,6 +42,7 @@ public static class Program
             "npx" => Npx(stdout, stderr, args),
             "npm" => Npm(stdout, stderr, args),
             "gh" => Gh(stdout, stderr, args),
+            "powershell" or "pwsh" => Powershell(stdout, stderr, args),
             "dbmate" => Dbmate(stdout, stderr, args),
             "ls" => Ls(stdout, args),
             "grep" => Grep(stdout, args),
@@ -389,6 +390,44 @@ public static class Program
             default:
                 stderr.WriteLine("unknown fake gh args: " + string.Join(' ', args));
                 return code;
+        }
+    }
+
+    // ---- powershell / pwsh -------------------------------------------------
+    // Emulates `powershell -ExecutionPolicy Bypass -File <script>` (#131):
+    // the script path's stem selects the payload shape. Exit code forced via
+    // VTK_FAKE_PS_CODE (default 0); the payload is unchanged by the code,
+    // mirroring a test-runner script whose output precedes the failing exit.
+    //   big.ps1   -> large (>64KB) e2e-runner-style payload (server log
+    //                lines interleaved with runner progress) ending in a
+    //                summary block: the size-floored fold shape
+    //   quiet.ps1 -> terse status lines: must stay a byte-identical inline
+    //                passthrough
+    private static int Powershell(TextWriter stdout, TextWriter stderr, string[] args)
+    {
+        var script = "";
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals("-File", StringComparison.OrdinalIgnoreCase))
+            {
+                script = Path.GetFileNameWithoutExtension(args[i + 1]);
+                break;
+            }
+        }
+        switch (script)
+        {
+            case "big":
+                stdout.Write("run-e2e-local: starting server (pid 4242)\n");
+                for (var i = 1; i <= 1200; i++)
+                    stdout.Write($"[server] 2026-08-20T12:00:00.000Z GET /api/state 200 12ms request {i:0000} handled\n");
+                stdout.Write("\n42 passed (312.4s)\nrun-e2e-local: done\n");
+                return EnvCode("VTK_FAKE_PS_CODE", 0);
+            case "quiet":
+                stdout.Write("run-check: 3 files verified\nrun-check: ok\n");
+                return EnvCode("VTK_FAKE_PS_CODE", 0);
+            default:
+                stderr.WriteLine("vtk-faketool powershell: unknown script");
+                return 64;
         }
     }
 
