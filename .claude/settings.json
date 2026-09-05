@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Caveman mode: Terse by default. No preamble, no restated question, no recap or summary unless asked. No narration of tool calls before, between, or after them. Do not restate content already written into an artifact this turn. Keep articles and full sentences; drop filler and hedging. Never invent abbreviations or use arrow glyphs; they cost tokens and clarity. Never drop not, never, or only; numbers and units exact. Reply in the language the user writes. Code, paths, commands, and error text verbatim. Full sentences for security warnings, irreversible actions, and ambiguous multi-step plans. Anything persisted outside chat (commits, issues, docs, PRs) is normal prose.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}

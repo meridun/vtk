@@ -333,6 +333,29 @@ user-scoped ACLs of `%LocalAppData%` (POSIX 0700 permissions are a no-op on NTFS
   output (`✔`, `—`, `ü`) survives byte-faithfully even under Windows legacy codepages. Raw
   passthrough copies the child's bytes stream-to-stream, untouched.
 
+## Shared config
+
+Repo-level agent configuration is cherry-picked from the
+[meridun/model-repo](https://github.com/meridun/model-repo) upstream hub. Procedure:
+`.github/skills/proj-upstream-sync/SKILL.md`. Declined rows are recorded so the decision can be
+revisited; they are not drift.
+
+> **Upstream pin:** meridun/model-repo **d97e6b6** (2026-09-05). To re-sync, run the
+> proj-upstream-sync downstream interview against the component inventory in model-repo's
+> README, then bump this pin. Local adaptations to preserve: `.claude/` copies are hand-mirrored
+> (no sync script); caveman drift check (meta-drift rule 4) not adopted; SDLC is pinned to
+> agentic-sdlc directly, not through model-repo.
+
+| Component | Status | Reason / notes |
+|---|---|---|
+| Doc-tier system (L1/L2/L3) | partial: L1 shape and `CLAUDE.md` include only | `proj-doc-tiers` / `proj-agent-skill` skills and the Compound Tasks table not needed yet |
+| Config sync + meta-drift guard | declined | .NET repo, no Node toolchain; one agent and one skill are hand-mirrored into `.claude/` |
+| Caveman mode hook | adopted: L1 `## Caveman mode` + `UserPromptSubmit` hook in `.claude/settings.json` | replaces the former `caveman` skill; drift rule 4 not adopted (needs the Node drift script) |
+| graphify nudge hook | declined | graphify not used in vtk |
+| Role-based model routing | declined | `vtk-sdlc-worker` is the only agent; work runs through SDLC lanes, main-session delegation is rare |
+| Agentic SDLC pipeline | adopted from [meridun/agentic-sdlc](https://github.com/meridun/agentic-sdlc) directly | see `prompts/sdlc/PROFILE.md`; design lane off, PowerShell deterministic core; not synced via model-repo |
+| Upstream sync procedure | adopted: `.github/skills/proj-upstream-sync/` (mirrored to `.claude/skills/`) | prefix kept as `proj-`; its links to `proj-agent-skill` / `proj-doc-tiers` dangle here (declined above) |
+
 ## Documentation
 
 - [docs/Overview.md](docs/Overview.md) — goals, scope, comparison to rtk
