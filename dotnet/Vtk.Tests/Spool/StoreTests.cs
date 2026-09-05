@@ -284,6 +284,39 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public void Gaps_Since_KeepsRowsAtOrAfterWindow_DropsUndated()
+    {
+        // #140: the window is a row predicate on Time; rows before it and
+        // undated (default Time) rows leave the rollup, and the no-window
+        // call still reads all history.
+        var since = new DateTime(2026, 8, 20, 0, 0, 0, DateTimeKind.Utc);
+        _store.LogInvocation(new Invocation { Time = since.AddDays(-30), Cmd = "grep -r foo", RawBytes = 1000, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Time = since.AddSeconds(-1), Cmd = "grep -n bar", RawBytes = 500, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Time = since, Cmd = "grep baz", RawBytes = 100, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Time = since.AddDays(1), Cmd = "ls -la", RawBytes = 40, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Cmd = "ls -R", RawBytes = 60, Reason = Store.ReasonNoFilter }); // undated
+        _store.LogInvocation(new Invocation { Time = since.AddDays(-1), Cmd = "make all", RawBytes = 70, Reason = Store.ReasonFilterPanic });
+        _store.LogInvocation(new Invocation { Time = since.AddDays(2), Cmd = "make lint", RawBytes = 30, Reason = Store.ReasonFilterPanic });
+
+        var all = _store.Gaps();
+        Assert.Equal(new[] { ("grep", 3, 1600L), ("ls", 2, 100L) }, all.Select(g => (g.Family, g.Calls, g.RawBytes)));
+
+        var windowed = _store.Gaps(since);
+        Assert.Equal(new[] { ("grep", 1, 100L), ("ls", 1, 40L) }, windowed.Select(g => (g.Family, g.Calls, g.RawBytes)));
+
+        var degraded = _store.Degraded(since);
+        var make = Assert.Single(degraded);
+        Assert.Equal(1, make.Calls);
+        Assert.Equal(30, make.RawBytes);
+
+        // Filing thresholds apply to the windowed totals: grep clears 3 calls
+        // over all history but only 1 inside the window.
+        Assert.Single(_store.FileIssueGaps(1000, 3));
+        Assert.Empty(_store.FileIssueGaps(1000, 3, since));
+        Assert.Single(_store.FileIssueGaps(100, 1, since), g => g.Family == "grep");
+    }
+
+    [Fact]
     public void Sweep_RemovesEntriesOlderThanTtl()
     {
         var id = _store.Write(new[] { "git", "status" }, "raw", DateTime.UtcNow);

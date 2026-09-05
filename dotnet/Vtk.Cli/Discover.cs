@@ -17,7 +17,7 @@ public static class Discover
 {
     internal const int DefaultTop = 20;
 
-    private const string Usage = "usage: vtk discover [--sessions <dir>] [--top <N>]";
+    private const string Usage = "usage: vtk discover [--sessions <dir>] [--top <N>] [--since <Nd|Nh|date>]";
 
     public static int Run(string[] args) => Run(args, Console.Out, Console.Error, LoadInvocations);
 
@@ -43,6 +43,9 @@ public static class Discover
     /// 1 on environment failure (no session transcripts), 2 on usage errors —
     /// the same convention as show/gaps/gain/learn. The invocation loader is
     /// injected so tests stay hermetic (no real-store read in-process).
+    /// `--since` (#140) windows the scan: session files not written since the
+    /// bound are skipped, events stamped before it (or undated) are dropped
+    /// and counted; without the flag the report is unchanged.
     /// </summary>
     internal static int Run(
         string[] args, TextWriter stdout, TextWriter stderr,
@@ -50,10 +53,27 @@ public static class Discover
     {
         string? sessionsDir = null;
         var top = DefaultTop;
+        DateTime? since = null;
+        string? sinceSpec = null;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
             {
+                case "--since":
+                    if (i + 1 >= args.Length)
+                    {
+                        stderr.WriteLine("vtk discover: --since requires a value (<N>d, <N>h, or an ISO-8601 date)");
+                        return 2;
+                    }
+                    i++;
+                    if (!SinceSpec.TryParse(args[i], DateTime.UtcNow, out var s))
+                    {
+                        stderr.WriteLine($"vtk discover: invalid --since \"{args[i]}\" (want <N>d, <N>h, or an ISO-8601 date)");
+                        return 2;
+                    }
+                    since = s;
+                    sinceSpec = args[i];
+                    break;
                 case "--sessions":
                     if (i + 1 >= args.Length)
                     {
@@ -84,20 +104,38 @@ public static class Discover
         }
 
         sessionsDir ??= SessionProvider.SessionDirFor(Directory.GetCurrentDirectory());
-        var files = SessionProvider.SessionFiles(sessionsDir);
-        if (files.Count == 0)
+        // Environment check on the unwindowed directory: an empty window over
+        // a populated directory is a valid (empty) result, not an error.
+        var allFiles = SessionProvider.SessionFiles(sessionsDir);
+        if (allFiles.Count == 0)
         {
             stderr.WriteLine($"vtk discover: no session transcripts in {sessionsDir}");
             return 1;
         }
+        var files = since is null ? allFiles : SessionProvider.SessionFiles(sessionsDir, since);
 
         var commands = 0;
+        var undated = 0;
         var events = new List<CommandEvent>();
         foreach (var file in files)
         {
             try
             {
                 var read = SessionReader.ReadCommands(File.ReadLines(file));
+                if (since is { } bound)
+                {
+                    // Window filter (#140): keep events stamped at or after the
+                    // bound; undated events cannot be placed, so they are
+                    // dropped and reported rather than silently kept.
+                    var kept = new List<CommandEvent>(read.Count);
+                    foreach (var ev in read)
+                    {
+                        if (ev.Timestamp is not { } t) { undated++; continue; }
+                        if (t.ToUniversalTime() < bound) continue;
+                        kept.Add(ev);
+                    }
+                    read = kept;
+                }
                 commands += read.Count;
                 events.AddRange(read);
             }
@@ -129,13 +167,16 @@ public static class Discover
         var wrappedNote = wrapped.Matched > 0
             ? $"; {wrapped.Matched} matched logged vtk invocations (already wrapped; excluded)"
             : "";
+        var windowNote = since is { } w
+            ? $"; window since {SinceSpec.Format(w)} ({sinceSpec})" + (undated > 0 ? $"; {undated} undated events dropped" : "")
+            : "";
         if (opportunities.Count == 0)
         {
-            stdout.WriteLine($"no opportunities found ({commands} commands across {files.Count} sessions{wrappedNote})");
+            stdout.WriteLine($"no opportunities found ({commands} commands across {files.Count} sessions{wrappedNote}{windowNote})");
             return 0;
         }
 
-        stdout.WriteLine($"discover: {opportunities.Count} opportunities from {commands} commands across {files.Count} sessions{wrappedNote}");
+        stdout.WriteLine($"discover: {opportunities.Count} opportunities from {commands} commands across {files.Count} sessions{wrappedNote}{windowNote}");
         stdout.WriteLine();
         stdout.WriteLine($"{"CLASS",-10} {"OPPORTUNITY",-24} {"CALLS",7} {"OUTPUT CHARS",12}  EXAMPLE");
         foreach (var o in opportunities.Take(top))

@@ -178,16 +178,22 @@ public sealed class Store
         return result;
     }
 
-    /// <summary>Aggregates true coverage gaps (no registry match) by command family, sorted by total raw bytes descending.</summary>
-    public List<GapSummary> Gaps() => Aggregate(inv =>
+    /// <summary>
+    /// Aggregates true coverage gaps (no registry match) by command family,
+    /// sorted by total raw bytes descending. <paramref name="since"/> (UTC,
+    /// #140) restricts the read to rows logged at or after that time; null
+    /// reads all history.
+    /// </summary>
+    public List<GapSummary> Gaps(DateTime? since = null) => Aggregate(inv =>
     {
         if (inv.Filtered) return false;
         if (inv.Reason == "") return !inv.TTY; // legacy entry, pre-reason
         return inv.Reason == ReasonNoFilter;
-    });
+    }, since);
 
-    /// <summary>Aggregates filter-panic invocations by command family.</summary>
-    public List<GapSummary> Degraded() => Aggregate(inv => inv.Reason == ReasonFilterPanic);
+    /// <summary>Aggregates filter-panic invocations by command family, optionally windowed (#140).</summary>
+    public List<GapSummary> Degraded(DateTime? since = null) =>
+        Aggregate(inv => inv.Reason == ReasonFilterPanic, since);
 
     /// <summary>
     /// Returns coverage-gap families eligible for auto-filed intake issues
@@ -197,9 +203,10 @@ public sealed class Store
     /// structurally uncompressable — not a filter defect, so not worth a
     /// filter issue. Sorted by raw bytes descending. Read-only over metadata
     /// (invariant 3): byte counts and redacted command families only, never
-    /// output content.
+    /// output content. <paramref name="since"/> (UTC, #140) windows the
+    /// measurement; null reads all history.
     /// </summary>
-    public List<GapSummary> FileIssueGaps(long minBytes, int minCalls)
+    public List<GapSummary> FileIssueGaps(long minBytes, int minCalls, DateTime? since = null)
     {
         var all = Aggregate(inv =>
         {
@@ -208,7 +215,7 @@ public sealed class Store
                 ? !inv.TTY // legacy entry, pre-reason
                 : inv.Reason == ReasonNoFilter;
             return isGap && !IsMachineReadable(inv.Cmd);
-        });
+        }, since);
         return all.Where(g => g.RawBytes >= minBytes && g.Calls >= minCalls).ToList();
     }
 
@@ -239,11 +246,17 @@ public sealed class Store
         return false;
     }
 
-    private List<GapSummary> Aggregate(Func<Invocation, bool> match)
+    /// <summary>
+    /// Family rollup over the invocation log. The window (#140) is a row
+    /// predicate on <see cref="Invocation.Time"/> only — undated rows are
+    /// excluded whenever a window is set — and never touches the family key.
+    /// </summary>
+    private List<GapSummary> Aggregate(Func<Invocation, bool> match, DateTime? since)
     {
         var agg = new Dictionary<string, GapSummary>();
         foreach (var inv in Invocations())
         {
+            if (!SinceSpec.InWindow(inv.Time, since)) continue;
             if (!match(inv)) continue;
             var family = FirstToken(inv.Cmd);
             if (family == "") continue;

@@ -18,6 +18,8 @@ internal sealed class FileIssuesOpts
     public bool Yes;
     public long MinBytes = GapsIssues.DefaultMinBytes;
     public int MinCalls = GapsIssues.DefaultMinCalls;
+    /// <summary>UTC lower bound of the measurement window (`--since`, #140); null = all history.</summary>
+    public DateTime? Since;
 }
 
 internal static class GapsIssues
@@ -45,7 +47,7 @@ internal static class GapsIssues
         List<GapSummary> candidates;
         try
         {
-            candidates = st.FileIssueGaps(o.MinBytes, o.MinCalls);
+            candidates = st.FileIssueGaps(o.MinBytes, o.MinCalls, o.Since);
         }
         catch (Exception ex)
         {
@@ -97,7 +99,7 @@ internal static class GapsIssues
             string url;
             try
             {
-                url = GhCreateFilterIssue(FilterIssueTitle(g.Family), FilterIssueBody(g, o.MinBytes, o.MinCalls));
+                url = GhCreateFilterIssue(FilterIssueTitle(g.Family), FilterIssueBody(g, o.MinBytes, o.MinCalls, o.Since));
             }
             catch (Exception ex)
             {
@@ -137,7 +139,7 @@ internal static class GapsIssues
         FilterIssueTitlePrefix + family + " (auto-filed from vtk gaps)";
 
     /// <summary>Renders the intake issue body from metadata only: family name plus call/byte counts (invariant 3 — never output content).</summary>
-    internal static string FilterIssueBody(GapSummary g, long minBytes, int minCalls)
+    internal static string FilterIssueBody(GapSummary g, long minBytes, int minCalls, DateTime? since = null)
     {
         var b = new StringBuilder();
         b.Append($"Auto-filed by `vtk gaps --file-issues`: the `{g.Family}` command family is passing through unfiltered at meaningful volume.\n\n");
@@ -145,7 +147,9 @@ internal static class GapsIssues
         b.Append($"- Family: `{g.Family}`\n");
         b.Append($"- Passthrough calls: {g.Calls}\n");
         b.Append($"- Cumulative raw bytes: {g.RawBytes}\n");
-        b.Append($"- Threshold at filing: min-bytes={minBytes}, min-calls={minCalls}\n\n");
+        b.Append($"- Threshold at filing: min-bytes={minBytes}, min-calls={minCalls}\n");
+        if (since is { } s) b.Append($"- Window: since {SinceSpec.Format(s)}\n");
+        b.Append('\n');
         b.Append("Machine-readable (`--json` &c.) invocations are excluded from this measurement — they are structurally uncompressable, not a filter defect.\n\n");
         b.Append("## Acceptance criteria\n\n");
         b.Append($"- A `{g.Family}` filter: pure function, raw output in → compact out, fixture-tested with a measured-savings assertion.\n");

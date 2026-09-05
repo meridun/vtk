@@ -20,7 +20,7 @@ public static class Program
 
     // Single source of the usage line: printed to stderr (exit 2) when vtk is
     // invoked bare, and to stdout (exit 0) for an explicit help request.
-    private const string UsageText = "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps [--file-issues [--yes] [--min-bytes N] [--min-calls N]] | vtk gain [--daily] [--graph] [--history] [--session [--sessions <dir>]] | vtk learn [--min-confidence X] [--min-occurrences N] [--sessions <dir>] [--out <file>] [--dry-run] | vtk discover [--sessions <dir>] [--top N] | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print] | vtk hooks <init|verify|rewrite> | vtk version";
+    private const string UsageText = "usage: vtk <command> [args...] | vtk show <id> [--grep <pat>] | vtk gaps [--since <Nd|Nh|date>] [--file-issues [--yes] [--min-bytes N] [--min-calls N]] | vtk gain [--daily] [--graph] [--history] [--session [--sessions <dir>]] | vtk learn [--min-confidence X] [--min-occurrences N] [--sessions <dir>] [--out <file>] [--dry-run] | vtk discover [--sessions <dir>] [--top N] [--since <Nd|Nh|date>] | vtk install [--shell bash|pwsh] [--dry-run] [--uninstall] [--print] | vtk hooks <init|verify|rewrite> | vtk version";
 
     public static int Run(string[] args)
     {
@@ -652,18 +652,36 @@ public static class Program
     /// explicit, user-invoked action that shells to `gh` — outside the
     /// no-network non-goal, which binds only the wrap path and telemetry
     /// storage (registry / #34). It is dry-run by default; --yes actually
-    /// creates issues.
+    /// creates issues. `--since &lt;Nd|Nh|date&gt;` (#140) windows both the
+    /// report and the filing measurement; without it all history is read,
+    /// output byte-identical to before the flag existed.
     /// </summary>
     private static int CmdGaps(string[] args)
     {
         var fileIssues = false;
         var o = new FileIssuesOpts();
+        string? sinceSpec = null;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
             {
                 case "--file-issues":
                     fileIssues = true;
+                    break;
+                case "--since":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("vtk gaps: --since requires a value (<N>d, <N>h, or an ISO-8601 date)");
+                        return 2;
+                    }
+                    i++;
+                    if (!SinceSpec.TryParse(args[i], DateTime.UtcNow, out var since))
+                    {
+                        Console.Error.WriteLine($"vtk gaps: invalid --since \"{args[i]}\" (want <N>d, <N>h, or an ISO-8601 date)");
+                        return 2;
+                    }
+                    sinceSpec = args[i];
+                    o.Since = since;
                     break;
                 case "--yes":
                     o.Yes = true;
@@ -712,7 +730,12 @@ public static class Program
         try { st = Store.Open(); }
         catch (Exception ex) { Console.Error.WriteLine($"vtk: {ex.Message}"); return 1; }
 
-        if (!fileIssues) return PrintGapsReport(st);
+        // Window header only when a window was asked for — the unwindowed
+        // report stays byte-identical (#140).
+        if (o.Since is { } win)
+            Console.Out.WriteLine($"window: since {SinceSpec.Format(win)} ({sinceSpec})");
+
+        if (!fileIssues) return PrintGapsReport(st, o.Since);
 
         // Sane floors: below-floor thresholds clamp up (anti-spam guard) so
         // an over-eager invocation can't file trivial gaps.
@@ -730,10 +753,10 @@ public static class Program
     }
 
     /// <summary>Emits the human-facing coverage-gap and degraded-filter tables (the default `vtk gaps` output).</summary>
-    private static int PrintGapsReport(Store st)
+    private static int PrintGapsReport(Store st, DateTime? since)
     {
-        var gaps = st.Gaps();
-        var degraded = st.Degraded();
+        var gaps = st.Gaps(since);
+        var degraded = st.Degraded(since);
 
         if (gaps.Count == 0 && degraded.Count == 0)
         {
