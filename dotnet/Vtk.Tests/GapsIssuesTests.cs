@@ -63,6 +63,17 @@ public class GapsIssuesTests
         {
             Assert.Contains(want, body);
         }
+        Assert.DoesNotContain("Window:", body);
+    }
+
+    [Fact]
+    public void FilterIssueBody_WithWindow_RecordsSinceBound()
+    {
+        // #140: a windowed measurement says so in the filed body (metadata
+        // only — a UTC timestamp, never output content).
+        var g = new GapSummary { Family = "cargo", Calls = 7, RawBytes = 123456 };
+        var body = GapsIssues.FilterIssueBody(g, 51200, 3, new DateTime(2026, 8, 22, 0, 0, 0, DateTimeKind.Utc));
+        Assert.Contains("- Window: since 2026-08-22T00:00:00Z", body);
     }
 
     /// <summary>
@@ -77,6 +88,12 @@ public class GapsIssuesTests
     [InlineData("gaps", "--file-issues", "--min-calls", "x")]
     [InlineData("gaps", "--yes")]
     [InlineData("gaps", "--min-bytes", "1000")]
+    [InlineData("gaps", "--since")]
+    [InlineData("gaps", "--since", "0d")]
+    [InlineData("gaps", "--since", "bogus")]
+    [InlineData("gaps", "--since", "999999d")]
+    [InlineData("gaps", "--since", "2147483647d")]
+    [InlineData("gaps", "--file-issues", "--since", "14")]
     public void GapsArgErrors_ExitTwo(params string[] args)
     {
         Assert.Equal(2, Vtk.Cli.Program.Run(args));

@@ -42,12 +42,16 @@ public static class SessionProvider
     /// The session transcript files (*.jsonl) in a directory, oldest first
     /// (last-write time, then name for determinism). Missing directory →
     /// empty list — callers decide whether that is an error.
+    /// <paramref name="modifiedSince"/> (UTC, #140) drops files whose
+    /// last-write time precedes it — a transcript not touched since the
+    /// window opened cannot hold events inside it.
     /// </summary>
-    public static List<string> SessionFiles(string dir)
+    public static List<string> SessionFiles(string dir, DateTime? modifiedSince = null)
     {
         if (!Directory.Exists(dir)) return new List<string>();
         return Directory.EnumerateFiles(dir, "*.jsonl")
             .Select(p => (Path: p, Time: File.GetLastWriteTimeUtc(p)))
+            .Where(f => modifiedSince is not { } s || f.Time >= s)
             .OrderBy(f => f.Time)
             .ThenBy(f => f.Path, StringComparer.Ordinal)
             .Select(f => f.Path)

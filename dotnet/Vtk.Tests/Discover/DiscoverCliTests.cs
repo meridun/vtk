@@ -151,6 +151,74 @@ public class DiscoverCliTests : IDisposable
         Assert.Contains("no session transcripts", stderr);
     }
 
+    [Fact]
+    public void Run_Since_BeforeFixtureStamps_KeepsRowsAndPrintsWindow()
+    {
+        // Only the first `git status` result line in the fixture carries a
+        // timestamp (2026-07-19T10:00:01Z); the other 5 events are undated.
+        // A window opening the day before keeps the stamped event, drops the
+        // undated ones with a count, and names the window (#140).
+        CopyFixture("session_discover.jsonl", "a.jsonl");
+
+        var code = Run(out var stdout, out _, "--sessions", _sessions, "--since", "2026-07-18");
+
+        Assert.Equal(0, code);
+        Assert.Contains(
+            "discover: 1 opportunities from 1 commands across 1 sessions; window since 2026-07-18T00:00:00Z (2026-07-18); 5 undated events dropped",
+            stdout);
+        Assert.Matches(@"unwrapped\s+git status\s+1\s", stdout);
+        Assert.DoesNotContain("go-test", stdout);
+    }
+
+    [Fact]
+    public void Run_Since_AfterFixtureStamps_DropsEvents()
+    {
+        // Same transcript, window opening after the stamp: the file passes
+        // the mtime pre-filter (just copied) but the stamped event falls
+        // before the bound (dropped silently — it is dated, just old) and the
+        // undated ones are counted. Empty result is exit 0, not an
+        // environment error.
+        CopyFixture("session_discover.jsonl", "a.jsonl");
+
+        var code = Run(out var stdout, out _, "--sessions", _sessions, "--since", "2026-07-19T10:00:02Z");
+
+        Assert.Equal(0, code);
+        Assert.Contains(
+            "no opportunities found (0 commands across 1 sessions; window since 2026-07-19T10:00:02Z (2026-07-19T10:00:02Z); 5 undated events dropped)",
+            stdout);
+    }
+
+    [Fact]
+    public void Run_Since_StaleSessionFile_SkippedByMtimePreFilter()
+    {
+        // A transcript last written before the window opened is never read
+        // (#140 pre-filter), so it contributes neither commands nor a session
+        // to the count; the fresh copy still does.
+        CopyFixture("session_discover.jsonl", "old.jsonl");
+        File.SetLastWriteTimeUtc(Path.Combine(_sessions, "old.jsonl"), new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        CopyFixture("session_discover.jsonl", "new.jsonl");
+
+        var code = Run(out var stdout, out _, "--sessions", _sessions, "--since", "2026-07-01");
+
+        Assert.Equal(0, code);
+        // One session, one stamped command, 5 undated — the stale copy would
+        // have doubled every figure had it been read.
+        Assert.Contains("from 1 commands across 1 sessions; window since 2026-07-01T00:00:00Z (2026-07-01); 5 undated events dropped", stdout);
+    }
+
+    [Fact]
+    public void Run_NoSince_OutputUnchanged()
+    {
+        // Opt-in flag: without it the summary line carries no window note.
+        CopyFixture("session_discover.jsonl", "a.jsonl");
+
+        var code = Run(out var stdout, out _, "--sessions", _sessions);
+
+        Assert.Equal(0, code);
+        Assert.Contains("discover: 3 opportunities from 6 commands across 1 sessions\n", stdout.Replace("\r\n", "\n"));
+        Assert.DoesNotContain("window", stdout);
+    }
+
     public static IEnumerable<object[]> UsageErrorCases()
     {
         yield return new object[] { new[] { "--bogus" } };
@@ -158,6 +226,12 @@ public class DiscoverCliTests : IDisposable
         yield return new object[] { new[] { "--top" } };
         yield return new object[] { new[] { "--top", "0" } };
         yield return new object[] { new[] { "--top", "abc" } };
+        yield return new object[] { new[] { "--since" } };
+        yield return new object[] { new[] { "--since", "0d" } };
+        yield return new object[] { new[] { "--since", "bogus" } };
+        yield return new object[] { new[] { "--since", "14" } };
+        yield return new object[] { new[] { "--since", "999999d" } };
+        yield return new object[] { new[] { "--since", "99999999h" } };
     }
 
     [Theory]
