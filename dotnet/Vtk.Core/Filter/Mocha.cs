@@ -9,9 +9,11 @@
 // the spec tree, keeps the summary lines, and keeps the failure-detail
 // blocks verbatim.
 //
-// mocha reports test failures via exit 1 — that output is exactly what we
-// want to compact. The registry declares mocha's exit-code allowlist as
-// {0, 1} (exit 2+ is a mocha/config error and stays raw).
+// mocha's exit code is its failure count, min(failures, 255) — a run with N
+// failing specs exits N, and that output is exactly what we want to compact.
+// The registry therefore allowlists 0..255 (#138); fatal/config errors carry
+// no summary line and pass through unchanged below, so content — not exit
+// code — is what keeps them raw.
 // Port of internal/filter/mocha/mocha.go.
 using System.Text.RegularExpressions;
 

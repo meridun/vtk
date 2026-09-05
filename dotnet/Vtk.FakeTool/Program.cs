@@ -135,16 +135,27 @@ public static class Program
 
     // ---- mocha / npx -------------------------------------------------------
     // VTK_FAKE_MOCHA_CODE (default 1) selects the exit code AND the payload:
-    // 0 -> green run; 1 -> failing run (mocha's "tests failed", filterable);
-    // 2 -> same failing bytes but exit 2 (config error, outside the {0,1}
-    // allowlist: must stay raw).
+    // 0 -> green run; N>0 -> failing run at exit N (real mocha exits its
+    // failure count, min(failures, 255); every 0..255 code is allowlisted,
+    // #138). VTK_FAKE_MOCHA_FATAL=1 instead emits a real "No test files
+    // found" config error on stderr — no summary line — at exit 1: the
+    // content gate must keep it raw.
     private static int Mocha(TextWriter stdout, TextWriter stderr, string? banner)
     {
+        if (EnvCode("VTK_FAKE_MOCHA_FATAL", 0) == 1)
+        {
+            stderr.Write(MochaFatalRaw);
+            return 1;
+        }
         var code = EnvCode("VTK_FAKE_MOCHA_CODE", 1);
         if (banner != null) stdout.Write(banner);
         stdout.Write(code == 0 ? MochaPassRaw : MochaFailRaw);
         return code;
     }
+
+    // Captured from mocha 11.7.5 with a glob matching nothing (exit 1).
+    private const string MochaFatalRaw =
+        "\u001b[31mError: No test files found: \"nope/**/*.test.js\"\u001b[39m\n";
 
     // `npx <tool>`: the Go suite copied the fake mocha to npx(.exe) so that
     // `npx mocha` resolved to it. Emulate the same, tolerating the

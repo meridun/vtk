@@ -107,6 +107,9 @@ public sealed class Registry
         return false;
     }
 
+    /// <summary>mocha exits with its failure count (min(failures, 255)), so every code in 0..255 is a report, not a failure (#138).</summary>
+    private static readonly int[] MochaExitCodes = Enumerable.Range(0, 256).ToArray();
+
     /// <summary>The registry with all shipped filter families wired in. Empty until filters are ported (task #2+).</summary>
     public static Registry Default()
     {
@@ -124,11 +127,14 @@ public sealed class Registry
         // point to compact. Exit 2+ is a fatal/config error and stays raw.
         r.RegisterCodes("eslint", Eslint.Filter, 0, 1);
         r.RegisterCodes("npx eslint", Eslint.Filter, 0, 1);
-        // mocha reports test failures via exit 1; that failing run is exactly
-        // what to compact (fold passing specs, keep failures). Exit 2+ is a
-        // mocha/config error and stays raw.
-        r.RegisterCodes("mocha", Mocha.Filter, 0, 1);
-        r.RegisterCodes("npx mocha", Mocha.Filter, 0, 1);
+        // mocha's exit code is its failure count, min(failures, 255) (#138):
+        // a run with N failing specs exits N, and that failing run is exactly
+        // what to compact (fold passing specs, keep failures). Allow the whole
+        // 0..255 range; fatal/config errors carry no "N passing/failing"
+        // summary and Mocha.Filter already returns those byte-identical, so
+        // content — not exit code — is the gate for the raw path.
+        r.RegisterCodes("mocha", Mocha.Filter, MochaExitCodes);
+        r.RegisterCodes("npx mocha", Mocha.Filter, MochaExitCodes);
         // gh list families: TSV human output on success (exit 0). `gh --json`
         // forms hit the same keys but pass through structurally intact.
         r.Register("gh issue", Gh.IssueList);

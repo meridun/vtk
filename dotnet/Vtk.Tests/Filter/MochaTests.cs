@@ -13,6 +13,7 @@ public class MochaTests
     [InlineData("pass", 0.85)]
     [InlineData("pending", 0.60)]
     [InlineData("fail", 0.20)]
+    [InlineData("fail2", 0.20)] // real mocha 11.7.5, 2 failing -> exit 2 (#138)
     public void MatchesGoldenOutput(string name, double minSavings)
     {
         var raw = File.ReadAllText(Path.Combine(FixtureDir, name + ".raw.txt"));
@@ -52,6 +53,19 @@ public class MochaTests
         var got = Mocha.Filter(raw);
         Assert.DoesNotContain("✔", got);
         Assert.Equal("7 passing (5ms)", got);
+    }
+
+    /// <summary>
+    /// A fatal/config error (real mocha 11.7.5 "No test files found", exit 1)
+    /// carries no summary line: the filter returns it byte-identical. With the
+    /// 0..255 allowlist (#138) this content gate is what keeps fatal runs raw.
+    /// </summary>
+    [Fact]
+    public void FatalNoSummary_PassesThroughByteIdentical()
+    {
+        var raw = File.ReadAllText(Path.Combine(FixtureDir, "fatal.raw.txt"));
+        Assert.DoesNotMatch(@"\d+\s+(passing|failing|pending)", raw);
+        Assert.Equal(raw, Mocha.Filter(raw));
     }
 
     [Fact]
