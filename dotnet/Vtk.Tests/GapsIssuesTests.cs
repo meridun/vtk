@@ -91,6 +91,8 @@ public class GapsIssuesTests
     [InlineData("gaps", "--since")]
     [InlineData("gaps", "--since", "0d")]
     [InlineData("gaps", "--since", "bogus")]
+    [InlineData("gaps", "--since", "999999d")]
+    [InlineData("gaps", "--since", "2147483647d")]
     [InlineData("gaps", "--file-issues", "--since", "14")]
     public void GapsArgErrors_ExitTwo(params string[] args)
     {

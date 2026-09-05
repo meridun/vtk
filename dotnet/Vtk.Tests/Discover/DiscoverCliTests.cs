@@ -230,6 +230,8 @@ public class DiscoverCliTests : IDisposable
         yield return new object[] { new[] { "--since", "0d" } };
         yield return new object[] { new[] { "--since", "bogus" } };
         yield return new object[] { new[] { "--since", "14" } };
+        yield return new object[] { new[] { "--since", "999999d" } };
+        yield return new object[] { new[] { "--since", "99999999h" } };
     }
 
     [Theory]

@@ -36,8 +36,12 @@ public static class SinceSpec
         {
             if (!int.TryParse(spec[..^1], NumberStyles.None, CultureInfo.InvariantCulture, out var n) || n < 1)
                 return false;
-            var span = unit == 'd' ? TimeSpan.FromDays(n) : TimeSpan.FromHours(n);
-            sinceUtc = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc) - span;
+            // Bound-check before any arithmetic: a duration reaching back past
+            // DateTime.MinValue (or overflowing TimeSpan) is a usage error,
+            // never a crash — reporters must exit 2, not throw.
+            var unitTicks = unit == 'd' ? TimeSpan.TicksPerDay : TimeSpan.TicksPerHour;
+            if (n > nowUtc.Ticks / unitTicks) return false;
+            sinceUtc = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc) - new TimeSpan(n * unitTicks);
             return true;
         }
 

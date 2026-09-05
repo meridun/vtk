@@ -51,6 +51,10 @@ public class SinceSpecTests
     [InlineData("2026-08-01 12:30")]
     [InlineData("08/01/2026")]
     [InlineData("yesterday")]
+    [InlineData("999999d")]
+    [InlineData("2147483647d")]
+    [InlineData("99999999h")]
+    [InlineData("99999999999d")]
     public void TryParse_RejectsMalformed(string spec)
     {
         Assert.False(SinceSpec.TryParse(spec, Now, out _));
