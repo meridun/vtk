@@ -85,6 +85,21 @@ public class ProcessRunnerTests
         Assert.Equal(0, bytes);
     }
 
+    // #144: the child must see the same stdin the shell handed vtk. Only the
+    // interactive-console + captured-output cell gets a closed pipe (a
+    // blocked read there would be an invisible hang); every other cell
+    // inherits vtk's stdin handle so `git commit -F -` / `gh --body-file -`
+    // read what was piped in, and a TTY-bypassed child can prompt.
+    [Theory]
+    [InlineData(false, false, true)]   // captured output, console stdin: close (today's behavior)
+    [InlineData(false, true, false)]   // captured output, piped stdin: inherit (the #144 fix)
+    [InlineData(true, false, false)]   // tty bypass, console stdin: inherit (prompts work)
+    [InlineData(true, true, false)]    // tty bypass, piped stdin: inherit
+    public void ShouldRedirectStdin_ClosesOnlyForInteractiveConsoleUnderCapture(bool tty, bool stdinRedirected, bool want)
+    {
+        Assert.Equal(want, ProcessRunner.ShouldRedirectStdin(tty, stdinRedirected));
+    }
+
     [Theory]
     [InlineData("run", "run")]                        // bare token: unchanged
     [InlineData("dup-check", "dup-check")]             // hyphen is not special

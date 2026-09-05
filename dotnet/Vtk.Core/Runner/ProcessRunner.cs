@@ -50,13 +50,26 @@ public static class ProcessRunner
         return null;
     }
 
-    private static ProcessStartInfo BuildStartInfo(IReadOnlyList<string> argv)
+    /// <summary>
+    /// Decides whether the child's stdin is redirected to a pipe vtk closes
+    /// at once (child sees EOF) or inherited from vtk's own stdin handle
+    /// (child reads exactly what the shell handed vtk). Redirect-and-close
+    /// only when vtk's stdin is an interactive console AND the child's
+    /// output is captured or counted: under capture the user cannot see a
+    /// prompt, so a blocked read would be an invisible hang. Everywhere else
+    /// — TTY bypass (prompts must work) or a piped/file/NUL stdin
+    /// (<c>git commit -F -</c>, <c>gh --body-file -</c>) — inherit, so the
+    /// wrapper never alters the child's input (#144).
+    /// </summary>
+    internal static bool ShouldRedirectStdin(bool tty, bool stdinRedirected) => !tty && !stdinRedirected;
+
+    private static ProcessStartInfo BuildStartInfo(IReadOnlyList<string> argv, bool redirectStdin)
     {
         var resolved = ResolveExecutable(argv[0]) ?? argv[0];
         var psi = new ProcessStartInfo
         {
             UseShellExecute = false,
-            RedirectStandardInput = true,
+            RedirectStandardInput = redirectStdin,
         };
 
         // CreateProcess cannot launch .cmd/.bat scripts directly; route those
@@ -125,7 +138,7 @@ public static class ProcessRunner
     /// <summary>Runs argv with stdout/stderr captured to strings (for filtering). Returns exit 127 if the command could not run.</summary>
     public static CapturedResult RunCaptured(IReadOnlyList<string> argv)
     {
-        var psi = BuildStartInfo(argv);
+        var psi = BuildStartInfo(argv, ShouldRedirectStdin(tty: false, Console.IsInputRedirected));
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
         // Decode captured output as UTF-8, not the ambient console codepage:
@@ -140,7 +153,7 @@ public static class ProcessRunner
         try
         {
             using var proc = Process.Start(psi) ?? throw new InvalidOperationException("process failed to start");
-            proc.StandardInput.Close();
+            if (psi.RedirectStandardInput) proc.StandardInput.Close();
             // Drain both pipes concurrently. Sequential ReadToEnd calls deadlock:
             // a child that fills the ~4KB stderr buffer while we are still blocked
             // on stdout stalls in its stderr write and never closes stdout (#94 —
@@ -167,7 +180,7 @@ public static class ProcessRunner
     /// </summary>
     public static int RunPassthroughCounted(IReadOnlyList<string> argv, bool tty, out long bytesWritten, out bool spawnFailed)
     {
-        var psi = BuildStartInfo(argv);
+        var psi = BuildStartInfo(argv, ShouldRedirectStdin(tty, Console.IsInputRedirected));
         long total = 0;
         spawnFailed = false;
 
@@ -185,7 +198,7 @@ public static class ProcessRunner
         try
         {
             using var proc = Process.Start(psi) ?? throw new InvalidOperationException("process failed to start");
-            proc.StandardInput.Close();
+            if (psi.RedirectStandardInput) proc.StandardInput.Close();
             if (!tty)
             {
                 var stdoutTask = CopyCountedAsync(proc.StandardOutput.BaseStream, Console.OpenStandardOutput());

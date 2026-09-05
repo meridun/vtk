@@ -92,7 +92,11 @@ vtk <cmd> [args...]
   │      the body to the inner tool's filter; an uncovered inner tool gap-logs under the
   │      inner tool's family, not the wrapper's
   │
-  ├─ 2. Preserve semantics: exit code and TTY detection mirror the wrapped command.
+  ├─ 2. Preserve semantics: exit code, TTY detection, and stdin mirror the wrapped command.
+  │      The child inherits vtk's stdin (pipe, file, or console) so `git commit -F -` and
+  │      `gh ... --body-file -` read what was piped into vtk; the one exception is an
+  │      interactive-console stdin under captured output, where the child sees EOF so a
+  │      hidden prompt cannot hang the run.
   │      Interactive/TTY-detected invocations bypass filtering entirely. On the filtered
   │      success path, stdout and stderr are folded into one compact result on stdout;
   │      per-stream separation is preserved on all raw, passthrough, and degraded paths.

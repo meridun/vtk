@@ -149,7 +149,7 @@ public sealed class SmokeHarness : IDisposable
             if (!File.Exists(dll))
                 throw new FileNotFoundException($"vtk-faketool.dll not found beside the tests: {dll}");
             var dir = MakeTempDir();
-            foreach (var name in new[] { "eslint", "gh", "mocha", "cross-env", "npx", "npm", "dbmate", "ls", "grep", "find", "powershell", "pwsh" })
+            foreach (var name in new[] { "eslint", "gh", "mocha", "cross-env", "npx", "npm", "dbmate", "ls", "grep", "find", "powershell", "pwsh", "cat" })
             {
                 File.WriteAllText(Path.Combine(dir, name + ".cmd"),
                     $"@dotnet \"{dll}\" --as {name} %*\r\n");
@@ -180,6 +180,47 @@ public sealed class SmokeHarness : IDisposable
         var stderr = proc.StandardError.ReadToEnd();
         proc.WaitForExit();
         return (stdout, stderr, proc.ExitCode);
+    }
+
+    /// <summary>
+    /// Like Run but with vtk's stdin redirected to a pipe carrying
+    /// <paramref name="stdin"/> (UTF-8), closed after the write so the child
+    /// sees end-of-input — the `printf ... | vtk git commit -F -` shape
+    /// (#144). When <paramref name="faked"/> is set, <see cref="FakeBinDir"/>
+    /// leads PATH. The write runs concurrently with the output drains: a
+    /// payload larger than the pipe buffer would otherwise deadlock against
+    /// a child that writes before it reads.
+    /// </summary>
+    public (string stdout, string stderr, int code) RunStdin(string dir, string stdin, bool faked, params string[] args)
+    {
+        var psi = BasePsi(dir, args);
+        if (faked)
+            psi.EnvironmentVariables["PATH"] = FakeBinDir + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
+        psi.RedirectStandardInput = true;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
+        psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
+        using var proc = Process.Start(psi)!;
+        var payload = new System.Text.UTF8Encoding(false).GetBytes(stdin);
+        var feed = Task.Run(() =>
+        {
+            try
+            {
+                using var w = proc.StandardInput.BaseStream;
+                w.Write(payload, 0, payload.Length);
+            }
+            catch (IOException)
+            {
+                // Child exited without draining stdin: a legitimate shape
+                // (`git rev-parse` never reads it), not a harness failure.
+            }
+        });
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        Task.WaitAll(stdoutTask, stderrTask, feed);
+        proc.WaitForExit();
+        return (stdoutTask.Result, stderrTask.Result, proc.ExitCode);
     }
 
     /// <summary>
