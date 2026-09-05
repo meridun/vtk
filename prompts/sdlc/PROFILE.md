@@ -28,7 +28,9 @@ Bindings per the agentic-sdlc spec (`agentic-sdlc/docs/Composability.md`).
   issue + PR snapshot with claim ages, git/worktree/publish maintenance) plus the
   **native-dependency eligibility gate**, derived `blocked`/`ready` label plan + lint, and the
   close-sweep work-list (pure math in `scripts/lib/SdlcDeps.psm1`, tested by
-  `scripts/tests/SdlcDeps.Tests.ps1`). Claim/release rituals in `scripts/sdlc-claim.ps1` /
+  `scripts/tests/SdlcDeps.Tests.ps1`) and the drift-gated publish decision
+  (`scripts/lib/SdlcPublish.psm1`, `scripts/tests/SdlcPublish.Tests.ps1`). Claim/release
+  rituals in `scripts/sdlc-claim.ps1` /
   `scripts/sdlc-release.ps1`. The script computes; the dispatcher writes.
 - **Known deviations:** the close sweep has no ack marker (the spec's `sweep --ack`) — it is
   bounded by the 24h window and idempotent via the "blocker closed" comment, the spec's
