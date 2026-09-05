@@ -39,6 +39,13 @@ Idempotency first: a clean audit report for the **current branch HEAD** → skip
     TTL sweep can't delete a file another invocation is mid-writing (temp+rename discipline).
   - **Concurrency** — no shared mutable state without the atomic-rename or equivalent
     discipline; nothing assumes a single vtk instance.
+- **Diff-scoped dependency check** (read-only observation of the diff's *shape* — the
+  repo-global vulnerability sweep lives in intake step 0b, not here): if the diff touches a
+  package manifest (`*.csproj`, `Directory.Packages.props`, `packages.lock.json`), run
+  `dotnet list dotnet/Vtk.sln package --vulnerable --include-transitive` **on the branch**. A
+  `High`/`Critical` advisory **introduced or made upgradable by this diff** is a blocking
+  finding (BOUNCE → build to bump). Pre-existing advisories the diff didn't touch are advisory
+  notes only — they belong to intake's sweep; don't block this issue on them.
 - Rank findings: **blocking** (must fix before ship) vs **advisory** (note, don't block).
 
 ### 3. EMIT exactly one outcome

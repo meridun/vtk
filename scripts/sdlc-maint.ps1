@@ -18,6 +18,16 @@
       staleCandidate flags at the 2h threshold, and the open-PR snapshot with
       conflicting flags. The dispatcher performs all GitHub writes
       (verify-before-write reaps, conflict comments/label swaps).
+    - Dependencies (issue #142, agentic-sdlc #27): blocking is read from
+      GitHub's NATIVE issue-dependency edges (blockedBy / blocking via one
+      GraphQL pass), never from the `blocked`/`ready` labels or prose. The
+      digest carries `issues.blocked` (open issues with any OPEN blocker —
+      the dispatcher's fourth ineligibility bucket), `deps` (derived
+      `blocked`/`ready` label edits + `label-only-blocked` / `cycle` lint,
+      computed by scripts/lib/SdlcDeps.psm1), and `sweep` (intake's close
+      sweep: issues closed in the last 24h -> the open issues they were
+      blocking). A failed edge query degrades LOUDLY (`deps.edgeQuery:
+      FAILED`, a note) to the label-only gate instead of aborting.
 
     A third mode, -AppendTokens (issue #79), appends per-lane-pass token cost
     rows to the machine-local telemetry CSV ($ToolsDir\vtk-sdlc\tokens.csv)
@@ -35,7 +45,8 @@
 
 .PARAMETER DataOnly
     Skip the machine lock and all local maintenance; emit only the GitHub data
-    sections (issues, prs). Read-only against both git and GitHub.
+    sections (issues, deps, sweep, prs). Read-only against both git and GitHub.
+    Intake's close sweep reads the `sweep` section from this mode.
 
 .PARAMETER AppendTokens
     Token-append mode. A JSON array (single object also accepted) of rows,
@@ -249,6 +260,99 @@ $issueSnapshot = Invoke-Gh -ArgumentList @('issue', 'list', '-R', $Repo, '--stat
     '--json', 'number,title,labels,createdAt,updatedAt', '--limit', '200')
 if ($null -eq $issueSnapshot) { $issueSnapshot = @(); Note 'issue snapshot failed - gh unavailable or rate-limited; lane/wip data empty' }
 $issueSnapshot = @($issueSnapshot)
+
+# --------------------------------------------------------------------------
+# Native issue-dependency edges (issue #142; agentic-sdlc #27). DATA ONLY.
+# One GraphQL pass per state set — the only bulk read of blockedBy/blocking
+# (`gh issue list --search blocked-by:` returns nothing; the REST
+# /dependencies endpoints are per-issue). `databaseId` is the numeric id the
+# REST edge-write endpoint wants (`-F issue_id=`), NOT the issue number.
+# --------------------------------------------------------------------------
+Import-Module (Join-Path $PSScriptRoot 'lib\SdlcDeps.psm1') -Force
+$repoOwner, $repoName = $Repo -split '/', 2
+$issueGraphQuery = @'
+query($owner:String!,$name:String!,$states:[IssueState!],$after:String){
+  repository(owner:$owner,name:$name){
+    issues(states:$states, first:100, after:$after, orderBy:{field:UPDATED_AT,direction:DESC}){
+      pageInfo{hasNextPage endCursor}
+      nodes{ number databaseId title state closedAt updatedAt
+        labels(first:50){nodes{name}}
+        blockedBy(first:50){nodes{number state}}
+        blocking(first:50){nodes{number state}} }
+    }
+  }
+}
+'@
+
+function Get-IssueGraph {
+    # Issues + edges for one state set, paginated newest-updated first.
+    # -UpdatedAfter stops paging at the first issue updated at/before it
+    # (updatedAt >= closedAt, so it bounds the closed-issue fetch).
+    param([Parameter(Mandatory)][string]$States, [Nullable[DateTimeOffset]]$UpdatedAfter = $null, [int]$MaxPages = 20)
+    $issues = @(); $after = $null
+    for ($page = 0; $page -lt $MaxPages; $page++) {
+        $ghArgs = @('api', 'graphql', '-f', "query=$issueGraphQuery", '-f', "owner=$repoOwner", '-f', "name=$repoName", '-f', "states=$States")
+        if ($after) { $ghArgs += @('-f', "after=$after") }
+        $data = Invoke-Gh -ArgumentList $ghArgs
+        $conn = $null
+        if ($null -ne $data -and $null -ne $data.PSObject.Properties['data'] -and $null -ne $data.data -and
+            $null -ne $data.data.PSObject.Properties['repository'] -and $null -ne $data.data.repository) {
+            $conn = $data.data.repository.issues
+        }
+        if ($null -eq $conn) { throw "dependency query returned no repository.issues (states=$States, page $page)" }
+        $stop = $false
+        foreach ($n in @($conn.nodes)) {
+            if ($null -ne $UpdatedAfter -and $n.updatedAt -and ([DateTimeOffset]::Parse("$($n.updatedAt)", [cultureinfo]::InvariantCulture) -le $UpdatedAfter)) { $stop = $true; break }
+            $issues += [pscustomobject]@{
+                number    = [int]$n.number
+                id        = $n.databaseId
+                title     = $n.title
+                state     = $n.state
+                closedAt  = $n.closedAt
+                updatedAt = $n.updatedAt
+                labels    = @($n.labels.nodes | ForEach-Object name)
+                blockedBy = @($n.blockedBy.nodes | ForEach-Object { @{ number = $_.number; state = $_.state } })
+                blocking  = @($n.blocking.nodes | ForEach-Object { @{ number = $_.number; state = $_.state } })
+            }
+        }
+        if ($stop -or -not $conn.pageInfo.hasNextPage) { break }
+        $after = $conn.pageInfo.endCursor
+    }
+    return , $issues
+}
+
+$deps = [ordered]@{ edgeQuery = 'ok'; edits = @(); findings = @(); blocked = @(); ready = @() }
+$sweep = [ordered]@{ edgeQuery = 'ok'; windowHours = 24; items = @(); closedIssues = @(); empty = $true }
+$blockedIssues = @()
+$blockersByNumber = @{}
+try {
+    $edgeByNumber = @{}
+    foreach ($g in (Get-IssueGraph -States 'OPEN')) { $edgeByNumber[[int]$g.number] = $g }
+    # The gh issue list snapshot stays THE issue list; edges are merged onto it.
+    $openWithEdges = @($issueSnapshot | ForEach-Object {
+            $g = $edgeByNumber[[int]$_.number]
+            if ($null -eq $g) { Note "issue #$($_.number): absent from the dependency graph - treated as unblocked this cycle" }
+            [pscustomobject]@{
+                number    = $_.number
+                title     = $_.title
+                labels    = @($_.labels | ForEach-Object name)
+                blockedBy = $(if ($null -ne $g) { $g.blockedBy } else { @() })
+                blocking  = $(if ($null -ne $g) { $g.blocking } else { @() })
+            }
+        })
+    $blockedIssues = Get-BlockedIssues $openWithEdges
+    foreach ($b in $blockedIssues) { $blockersByNumber[[int]$b.number] = $b.blockers }
+    $plan = Get-DepsPlan $openWithEdges
+    $deps.edits = $plan.edits; $deps.findings = $plan.findings; $deps.blocked = $plan.blocked; $deps.ready = $plan.ready
+
+    $sweepSince = $now.AddHours(-$sweep.windowHours)
+    $sw = Get-CloseSweep (Get-IssueGraph -States 'CLOSED' -UpdatedAfter $sweepSince) $openWithEdges $sweepSince
+    $sweep.items = $sw.items; $sweep.closedIssues = $sw.closedIssues; $sweep.empty = $sw.empty
+} catch {
+    $deps.edgeQuery = 'FAILED'; $sweep.edgeQuery = 'FAILED'
+    $blockedIssues = @(); $blockersByNumber = @{}
+    Note "deps: edge query FAILED ($($_.Exception.Message)) - blocked gate NOT applied this cycle; eligibility degrades to the label-only gate"
+}
 
 $laneDepths = [ordered]@{}
 foreach ($lane in @('intake', 'queued', 'build', 'verify', 'audit', 'ship')) {
@@ -549,13 +653,16 @@ if ($machineLock.acquired) {
     machineLock = $machineLock
     issues      = [ordered]@{
         snapshot   = @($issueSnapshot | ForEach-Object {
-                [ordered]@{ number = $_.number; title = $_.title; labels = @($_.labels | ForEach-Object name); createdAt = $_.createdAt; updatedAt = $_.updatedAt }
+                [ordered]@{ number = $_.number; title = $_.title; labels = @($_.labels | ForEach-Object name); createdAt = $_.createdAt; updatedAt = $_.updatedAt; blockers = @(if ($blockersByNumber.ContainsKey([int]$_.number)) { $blockersByNumber[[int]$_.number] }) }
             })
         laneDepths = $laneDepths
         wip        = $wip
         needsHuman = $needsHuman
         hold       = $holds
+        blocked    = $blockedIssues
     }
+    deps        = $deps
+    sweep       = $sweep
     git         = $git
     publish     = $publish
     worktrees   = $worktrees

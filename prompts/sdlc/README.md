@@ -28,7 +28,10 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
 ## Universal worker loop (binding)
 
 1. **CLAIM** — list open issues labeled `stage:<lane>` that are **NOT** labeled `sdlc:wip`,
-   `sdlc:needs-human` (parked), or `sdlc:hold` (human keep-off). If the invoking message
+   `sdlc:needs-human` (parked), or `sdlc:hold` (human keep-off), **and that have no OPEN
+   native blocker** (see *Dependencies* below — the dispatcher's candidate snapshot already
+   excludes them; a manual run reads `issues.blocked` from
+   `pwsh -NoProfile -File scripts/sdlc-maint.ps1 -DataOnly`). If the invoking message
    supplies a **candidate snapshot** for the lane (issue#, labels, createdAt — the dispatcher
    inlines one from its maintenance digest), select from that list instead of re-querying;
    without one (e.g. a manual run), self-query as above. The snapshot only seeds candidate
@@ -146,12 +149,34 @@ and routes onward. `stage:queued` is intentionally workerless — the human thro
 - **No decisions in docs prose** — decisions are registry one-liners linking to the GitHub issue
   that holds the debate. Workers never write ADR-style history into docs.
 
+## Dependencies — native edges, never prose or labels
+
+An issue that can't proceed until another lands is recorded as a **GitHub native
+issue-dependency edge** (this issue *blocked by* that one), by whichever lane discovers it —
+intake's collision sweep, an epic split into ordered children, build's readiness-regression
+bounce:
+
+```
+gh api -X POST repos/meridun/vtk/issues/<this#>/dependencies/blocked_by \
+  -F issue_id=$(gh api repos/meridun/vtk/issues/<blocker#> --jq .id)
+```
+
+(the blocker's numeric *id*, not its number). The dispatcher's eligibility gate reads those
+edges — `scripts/sdlc-maint.ps1` fetches every open issue's `blockedBy` edges in one GraphQL
+pass and lists any issue with an OPEN blocker under `issues.blocked` — so such an issue is
+claimable in **no** lane, and becomes claimable on the cycle after its last blocker closes.
+A `Depends on #n` line is a human mirror the machine ignores; the `blocked` / `ready` labels
+are **derived** from the edges each cycle (`deps` section of the digest, applied by the
+dispatcher) and are never read by the machine — never set them by hand as a substitute for the
+edge. Native edges are per-repo: a cross-repo blocker is `sdlc:hold` + the prose line, stated
+in the comment.
+
 ## Files
 
 | File | Stage | Notes |
 |---|---|---|
 | [`dispatch.md`](dispatch.md) | *(dispatcher — runs every lane)* | scheduled task, when enabled |
-| [`intake.md`](intake.md) | `stage:intake` → `stage:queued` | triage + decision debates + merge sweep |
+| [`intake.md`](intake.md) | `stage:intake` → `stage:queued` | triage + decision debates + close sweep + dependency-audit sweep |
 | [`build.md`](build.md) | `stage:build` → `stage:verify` | plan comment → implement + targeted tests |
 | [`verify.md`](verify.md) | `stage:verify` → `stage:audit` | full suite + race + real-run smoke |
 | [`audit.md`](audit.md) | `stage:audit` → `stage:ship` | security/invariant review of the diff |

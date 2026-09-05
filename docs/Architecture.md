@@ -75,6 +75,10 @@ outgrows a screen.)
   outputs stay inline; the cmdlet-reshaper premise is retired (measured traffic is 100%
   `-File`, zero cmdlet calls) and re-spawnable via `gaps --file-issues` (#61) if cmdlet
   traffic appears — [#131](https://github.com/meridun/vtk/issues/131)
+- Native GitHub **issue-dependency edges** (`blockedBy`/`blocking`) are the SDLC pipeline's
+  blocking source of truth: `sdlc-maint.ps1` reads the edge graph each cycle and derives the
+  blocked gate, close sweep, and `blocked`/`ready` labels; those labels are display-only and
+  the machine never reads them — [#142](https://github.com/meridun/vtk/issues/142)
 
 ## Pipeline
 

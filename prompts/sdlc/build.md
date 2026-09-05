@@ -65,8 +65,14 @@ Bounce to the lane that owns the failure:
   implemented (noting any deviation from the plan comment and why), which tests pass, what
   verify should aim its real-run smoke at.
 - **BOUNCE → `stage:queued`** — not buildable yet (blocked by a dependency that must land
-  first). Swap the label back, remove `sdlc:wip`, add/keep a `blocked` label, comment the
-  blocker with the issue link. The human throttle gates re-admission.
+  first). This is a **readiness regression**: swap the label back, remove `sdlc:wip`, and
+  **record the dependency as a native edge** — this issue *blocked by* the blocking issue
+  (`gh api -X POST repos/meridun/vtk/issues/<this#>/dependencies/blocked_by -F issue_id=$(gh api repos/meridun/vtk/issues/<blocker#> --jq .id)`;
+  the blocker's numeric *id*, not its number). Comment the blocker (link it) as the human
+  mirror. The edge — not a `blocked` label, which the dispatcher derives from it — is what
+  keeps the item out of every lane until the blocker closes; the human throttle then gates
+  re-admission. A blocker in another repo can't be an edge: `sdlc:hold` + the prose line
+  instead.
 - **BOUNCE → `stage:intake`** — the AC genuinely can't be built as specified (contradicts an
   invariant or an undecided question surfaced). Swap `stage:build` → `stage:intake`, remove
   `sdlc:wip`, comment the specific gap so intake can run the debate.

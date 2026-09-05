@@ -18,7 +18,8 @@ Per the README universal loop — lane `stage:ship`, idle reply `SHIP: idle`.
 ### 2. WORK
 Idempotency first: a PR for this branch already open with the docs fan-out done → skip to
 ADVANCE. A PR for this branch already **merged** with the issue still open → PARK with the
-merge evidence for a human to close (intake's merge sweep normally handles these).
+merge evidence for a human to close (a close cascades to dependents through the native
+dependency edges; intake's close sweep posts the bookkeeping).
 Otherwise, in the issue's worktree (`../vtk-wt/<issue#>`) on build's branch:
 
 - **Merge `origin/dev` unconditionally** — ship is the exception to the staleness rule's
@@ -44,8 +45,10 @@ Otherwise, in the issue's worktree (`../vtk-wt/<issue#>`) on build's branch:
 
 ### 3. EMIT exactly one outcome
 - **ADVANCE (terminal)** — docs fanned out, PR open. Remove `stage:ship` and `sdlc:wip`.
-  Comment the ship summary + PR link. On merge, `Closes #` auto-closes the issue and intake's
-  merge sweep handles cascade-unblock. Ship does **not** close the issue itself.
+  Comment the ship summary + PR link. On merge, `Closes #` auto-closes the issue, the
+  dispatcher's eligibility gate unblocks its dependents from the native dependency edges on
+  the next cycle, and intake's close sweep posts the "blocker landed" bookkeeping. Ship does
+  **not** close the issue itself.
 - **BOUNCE → `stage:build`** — a real code problem at the last look (rare). Swap back, remove
   `sdlc:wip`, comment specifics.
 - **PARK** — a docs/behavior contradiction a human must reconcile (code merge conflicts BOUNCE
