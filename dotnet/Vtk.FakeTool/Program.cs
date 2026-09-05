@@ -47,6 +47,7 @@ public static class Program
             "ls" => Ls(stdout, args),
             "grep" => Grep(stdout, args),
             "find" => Find(stdout),
+            "cat" => Cat(),
             _ => Unknown(stderr, tool),
         };
     }
@@ -544,6 +545,20 @@ public static class Program
         stdout.Write(".\n");
         for (var i = 1; i <= 160; i++)
             stdout.Write($"./entry{i:000}.txt\n");
+        return 0;
+    }
+
+    // ---- cat ---------------------------------------------------------------
+    // Copies stdin to stdout byte-for-byte (no decoding, no newline
+    // translation) and exits 0. Exists so the stdin-forwarding smoke (#144)
+    // can round-trip bytes through the real vtk binary without depending on
+    // a Unix `cat` being on the verify host's PATH. `cat` is not a registry
+    // key, so `vtk cat` takes the non-TTY passthrough path.
+    private static int Cat()
+    {
+        using var stdin = Console.OpenStandardInput();
+        using var stdout = Console.OpenStandardOutput();
+        stdin.CopyTo(stdout);
         return 0;
     }
 }
