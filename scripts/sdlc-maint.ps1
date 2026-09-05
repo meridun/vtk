@@ -429,7 +429,7 @@ $prs = @($prList | ForEach-Object {
 # Never touches any working tree's uncommitted state; never rebases or forces.
 # --------------------------------------------------------------------------
 $git = [ordered]@{ performed = $false; fetched = $false; devBefore = $null; devAfter = $null; devMoved = $false; devUpdateResult = 'skipped' }
-$publish = [ordered]@{ performed = $false; sha = $null; releaseDir = $null; flipped = $false; healthCheck = $null; migration = $null; gcRemoved = @(); gcLeft = @(); deployedSha = $null; devSha = $null; lagging = $false; result = 'skipped (deployed matches dev)' }
+$publish = [ordered]@{ performed = $false; sha = $null; releaseDir = $null; flipped = $false; healthCheck = $null; migration = $null; gcRemoved = @(); gcLeft = @(); deployedSha = $null; devSha = $null; lagging = $false; result = 'skipped (not evaluated)' }
 $worktrees = [ordered]@{ removed = @(); left = @(); pruned = $false }
 $branches = [ordered]@{ pruned = @(); left = @() }
 
