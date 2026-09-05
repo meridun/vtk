@@ -21,5 +21,15 @@ Bindings per the agentic-sdlc spec (`agentic-sdlc/docs/Composability.md`).
     (`dotnet publish dotnet/Vtk.Cli -c Release -o dotnet/Vtk.Cli/bin/smoke`; `VTK_SMOKE_BIN`
     overrides) · format: `dotnet format whitespace dotnet/Vtk.sln --verify-no-changes`
   - decision record: GitHub issues registry (no ADRs).
-- **Deterministic core:** none yet (label rituals in-prompt).
-- **Known deviations:** none declared.
+  - dependency audit (`<DEP_AUDIT_CMD>`): `dotnet list dotnet/Vtk.sln package --vulnerable
+    --include-transitive` — intake's per-pass sweep (one batch issue) + audit's manifest-diff
+    check. Migration knobs (`<MIGRATIONS_DIR>` &c.) **unbound** — no database.
+- **Deterministic core:** `scripts/sdlc-maint.ps1` — dispatcher Steps -1/0/0a (machine lock,
+  issue + PR snapshot with claim ages, git/worktree/publish maintenance) plus the
+  **native-dependency eligibility gate**, derived `blocked`/`ready` label plan + lint, and the
+  close-sweep work-list (pure math in `scripts/lib/SdlcDeps.psm1`, tested by
+  `scripts/tests/SdlcDeps.Tests.ps1`). Claim/release rituals in `scripts/sdlc-claim.ps1` /
+  `scripts/sdlc-release.ps1`. The script computes; the dispatcher writes.
+- **Known deviations:** the close sweep has no ack marker (the spec's `sweep --ack`) — it is
+  bounded by the 24h window and idempotent via the "blocker closed" comment, the spec's
+  CLI-less form.

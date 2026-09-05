@@ -132,11 +132,26 @@ needs the snapshot.
    before the swap (already `stage:build` or now `sdlc:wip` → skip), and skip the comment if
    the issue's newest `sdlc-dispatch:` conflict comment already names the same branch — another
    dispatcher got there first. Record for the digest.
-3. Never touch `sdlc:needs-human`, `sdlc:hold`, or any human-set state. Record reaps for the
+3. **Derived readiness labels (`deps`)** — blocking is read from GitHub's **native issue
+   dependencies**, never from labels or prose: the script's `issues.blocked[]` lists every
+   open issue with an OPEN `blockedBy` edge and its blockers, re-evaluated from live edge
+   state each cycle (a blocker whose PR merged, or that a human closed, unblocks its
+   dependents next cycle — no sweep, window or ack involved in gating). `deps.edits[]` is the
+   derived `blocked` / `ready` label plan (open blocker → `blocked`; every edge closed →
+   `ready`): apply each edit **verify-before-write** (re-read the issue's labels immediately
+   before; already converged → skip) so humans keep a readable readiness column the machine
+   never trusts. `deps.findings[]` go in the digest **verbatim and are never repaired**:
+   `label-only-blocked` (a `blocked` label with no edge — a stale label, or a cross-repo block
+   that must be `sdlc:hold` + prose; a human picks) and `cycle` (a dependency cycle among open
+   issues — nothing in it can become eligible until a human cuts an edge). If
+   `deps.edgeQuery` is `FAILED`, the blocked gate was **not** applied this cycle: record it in
+   the digest, apply no label edits, and don't spawn `stage:build`+ workers for items whose
+   body names an unmerged blocker until the next cycle can read edges again.
+4. Never touch `sdlc:needs-human`, `sdlc:hold`, or any human-set state. Record reaps for the
    digest.
 
-The digest's `issues` section (`snapshot`, `laneDepths`, `needsHuman`, `hold`) is the ONE issue
-snapshot that serves the whole cycle. Surface the script's `notes` (skipped ops, dirty
+The digest's `issues` section (`snapshot`, `laneDepths`, `needsHuman`, `hold`, `blocked`) is
+the ONE issue snapshot that serves the whole cycle. Surface the script's `notes` (skipped ops, dirty
 worktrees left, refused deletions) in your final digest; a failed health check
 (`publish.healthCheck.ok: false`) is a red flag to report prominently — prior release dirs
 survive GC for a manual junction flip back.
@@ -145,9 +160,13 @@ survive GC for a manual junction flip back.
 
 For each lane (intake, build, verify, audit, ship):
 
-1. Eligible = open, `stage:<lane>`, not `sdlc:wip` / `sdlc:needs-human` / `sdlc:hold`. Decide
-   from the digest's issue snapshot; re-query the lane fresh ONLY if an earlier worker this cycle
-   ADVANCEd an item into it. Zero eligible → skip the lane; record `<LANE>: skipped (empty)`.
+1. Eligible = open, `stage:<lane>`, not `sdlc:wip` / `sdlc:needs-human` / `sdlc:hold`, and
+   **not in `issues.blocked`** (any OPEN native blocker — the fourth ineligibility bucket,
+   left out of the candidate list exactly like a wip or parked item). Decide from the digest's
+   issue snapshot; re-query the lane fresh ONLY if an earlier worker this cycle ADVANCEd an
+   item into it (a re-queried item keeps its `blockers` from the snapshot — edges don't change
+   on an ADVANCE). Zero eligible → skip the lane; record `<LANE>: skipped (empty)`, or
+   `<LANE>: skipped (N blocked)` when blocking is the only reason.
 2. Otherwise spawn ONE subagent, `subagent_type: vtk-sdlc-worker`, with this prompt (substitute
    the lane, run-id, and candidate list): "You are an autonomous SDLC pipeline worker for the
    vtk project. Repository (local working directory): C:\Claude\vtk. Your run-id is
@@ -167,9 +186,13 @@ For each lane (intake, build, verify, audit, ship):
    killed seconds after it returns — a worker mid-test-suite or mid-push would be cut off. Each
    worker's final message is its deliverable; pull it when the batch completes — never re-spawn
    a finished worker to "resend" a result.
-   Exception: run intake before the batch when its merge sweep has pending merges to process,
-   and run a lane serially after the batch if it only became non-empty via an ADVANCE this
-   cycle. Such follow-on spawns are intentionally uncapped — a hot item may cascade through
+   Exception: run intake before the batch when the digest's `sweep` section is non-empty
+   (`sweep.empty: false` — issues closed in the last 24h that were blocking open work). The
+   eligibility gate already unblocks dependents from edge state without intake, so a skipped
+   sweep can no longer let a blocked item be claimed — but intake's close sweep is the only
+   thing that posts the "blocker landed" comments and updates the human mirrors, so run it
+   whenever closes are pending, even with zero `stage:intake` items. Also run a lane serially
+   after the batch if it only became non-empty via an ADVANCE this cycle. Such follow-on spawns are intentionally uncapped — a hot item may cascade through
    every remaining lane in one cycle (registry decision,
    [#80](https://github.com/meridun/vtk/issues/80)). Never spawn two workers for the same lane
    in one cycle. Other dispatch runs may have
@@ -192,7 +215,9 @@ For each lane (intake, build, verify, audit, ship):
 Finish with: machine-lock result (acquired / skipped — held by whom / stale-reaped); wip gate
 result (live locks left, stale locks reaped, reaps skipped on fresh claims); git + worktree
 maintenance (dev updated, binary published + flipped or kept, branches pruned/left, worktrees
-removed/left, conflicted PRs flagged, skipped ops, open-PR state); one line per lane, derived
+removed/left, conflicted PRs flagged, skipped ops, open-PR state); dependency state (blocked
+items with their open blockers, derived-label edits applied, `deps.findings` verbatim, edge
+query ok/FAILED, close-sweep pending or clear); one line per lane, derived
 from each worker's JSON result block (issue, outcome, next_stage — note any worker whose block
 was missing/malformed and required prose fallback); queue depths after the cycle; parked items
 and holds by issue number; token cost per lane plus cycle total. The machine lock was already
