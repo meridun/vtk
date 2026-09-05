@@ -137,7 +137,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   via `gh`: dry-run by default (`--yes` to create), `--min-bytes`/`--min-calls` thresholds
   (defaults 50 KiB / 3 calls, floors 4096 B / 2), and dedupe against open `Filter:` issues so
   re-running never refiles. Issue bodies carry family + call/byte counts only — never output
-  content.
+  content. `--since <N>d|<N>h|<ISO-8601 date>` (#140) windows the report (and the
+  `--file-issues` thresholds) to invocations logged at or after the bound (UTC); opt-in —
+  without it the output is unchanged. A `window: since <utc> (<spec>)` header line is printed
+  only when the flag is given; invalid or out-of-range specs exit 2 with usage.
 
 - **Cumulative savings + `vtk gain`** — aggregates the invocation log into total raw vs emitted
   bytes, bytes saved and savings %, overall and per command family (ranked by bytes saved).
@@ -178,8 +181,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   invocation log (match = redacted argv + ±5-minute window, consumed one-to-one), with the
   excluded count reported in the summary; when the log is unavailable the report is simply
   produced without the cross-reference. Ranked by observed output volume; `--sessions <dir>`
-  and `--top <N>` flags. Read-only like `learn`: no process spawning, no network, no disk
-  writes — the report goes to stdout only.
+  and `--top <N>` flags; `--since <N>d|<N>h|<ISO-8601 date>` (#140) skips session files not
+  modified since the bound and drops events stamped before it (undated events dropped and
+  counted), so history predating shipped fixes stops dominating the report — the window is
+  appended to the summary line, and bare `discover` is unchanged. Read-only like `learn`: no
+  process spawning, no network, no disk writes — the report goes to stdout only.
 - **Agent hooks + `vtk hooks`** — installs a pre-tool-call rewrite hook that routes plain
   `git`/`gh`/`npm`/`winget`/`choco`/`reg` — plus, for bash tool calls, `grep`/`ls`/`find` —
   shell tool calls through vtk at the agent's
@@ -210,6 +216,7 @@ vtk git status          # compact status; prints "OK <id>" when filtering clears
 vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
 vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
+vtk gaps --since 14d    # same report over a time window (<N>d, <N>h, or ISO-8601 date; UTC)
 vtk gaps --file-issues  # file recurring gap families as intake issues (dry-run; --yes to create)
 vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family,
                         # plus an approximate dollarized total (bytes/4 heuristic)
@@ -223,6 +230,7 @@ vtk learn --dry-run     # print the rules file without writing it
 vtk discover            # ranked missed-optimization report from session history
                         # (unwrapped = filter exists, use vtk; candidate = filter evidence)
 vtk discover --top 5    # limit the table to the top 5 opportunities
+vtk discover --since 14d # only sessions/events in the window (same forms as gaps --since)
 vtk install             # wire git/gh/npm/winget/choco/reg -> vtk into your shell
                         # rc/profile (bash + pwsh)
 vtk install --print     # print the wrapper block(s) without writing anything
