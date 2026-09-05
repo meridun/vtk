@@ -28,6 +28,12 @@
       sweep: issues closed in the last 24h -> the open issues they were
       blocking). A failed edge query degrades LOUDLY (`deps.edgeQuery:
       FAILED`, a note) to the label-only gate instead of aborting.
+    - Publish gate (issue #141): the dogfooding binary is published whenever
+      the DEPLOYED sha (the ~/tools/vtk junction's target under vtk-releases)
+      differs from dev, or is unknown — never merely when this run's
+      fast-forward moved dev. `publish.deployedSha` / `publish.devSha` /
+      `publish.lagging` are read-only and carried in -DataOnly output too;
+      the decision is pure math in scripts/lib/SdlcPublish.psm1.
 
     A third mode, -AppendTokens (issue #79), appends per-lane-pass token cost
     rows to the machine-local telemetry CSV ($ToolsDir\vtk-sdlc\tokens.csv)
@@ -423,9 +429,36 @@ $prs = @($prList | ForEach-Object {
 # Never touches any working tree's uncommitted state; never rebases or forces.
 # --------------------------------------------------------------------------
 $git = [ordered]@{ performed = $false; fetched = $false; devBefore = $null; devAfter = $null; devMoved = $false; devUpdateResult = 'skipped' }
-$publish = [ordered]@{ performed = $false; sha = $null; releaseDir = $null; flipped = $false; healthCheck = $null; migration = $null; gcRemoved = @(); gcLeft = @(); result = 'skipped (dev did not move)' }
+$publish = [ordered]@{ performed = $false; sha = $null; releaseDir = $null; flipped = $false; healthCheck = $null; migration = $null; gcRemoved = @(); gcLeft = @(); deployedSha = $null; devSha = $null; lagging = $false; result = 'skipped (deployed matches dev)' }
 $worktrees = [ordered]@{ removed = @(); left = @(); pruned = $false }
 $branches = [ordered]@{ pruned = @(); left = @() }
+
+Import-Module (Join-Path $PSScriptRoot 'lib\SdlcPublish.psm1') -Force
+function Read-PublishState {
+    # Read-only (issue #141): deployed sha = the ~/tools/vtk junction's target
+    # dir name under vtk-releases (unknown when missing / elsewhere); dev sha =
+    # `git rev-parse --short dev`. Safe in -DataOnly; re-read after 0a.2 and
+    # after a flip so the digest reports the post-maintenance state.
+    param([bool]$DevMoved = $false)
+    $linkTarget = $null
+    $vtkLink = Join-Path $ToolsDir 'vtk'
+    if (Test-Path $vtkLink) {
+        try {
+            $item = Get-Item $vtkLink -Force -ErrorAction Stop
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                $linkTarget = $item.LinkTarget
+                if ($linkTarget -is [array]) { $linkTarget = $linkTarget[0] }
+            }
+        } catch { $linkTarget = $null }
+    }
+    $publish.deployedSha = ConvertTo-DeployedSha -LinkTarget "$linkTarget" -ReleasesDir (Join-Path $ToolsDir 'vtk-releases')
+    $rev = Invoke-Git -ArgumentList @('rev-parse', '--short', 'dev')
+    $publish.devSha = if ($rev.Ok) { ($rev.Output -join '').Trim() } else { $null }
+    $plan = Get-PublishPlan -DeployedSha $publish.deployedSha -DevSha $publish.devSha -DevMoved $DevMoved
+    $publish.lagging = $plan.lagging
+    return $plan
+}
+$null = Read-PublishState
 
 if ($machineLock.acquired) {
     try {
@@ -461,9 +494,13 @@ if ($machineLock.acquired) {
         $git.devAfter = (Invoke-Git -ArgumentList @('rev-parse', 'dev')).Output -join ''
         $git.devMoved = ($git.devBefore -ne $git.devAfter)
 
-        # 0a.3 — dogfooding binary: versioned publish + junction flip.
-        if ($git.devMoved) {
-            $shortSha = ((Invoke-Git -ArgumentList @('rev-parse', '--short', 'dev')).Output -join '').Trim()
+        # 0a.3 — dogfooding binary: versioned publish + junction flip. Gated on
+        # DRIFT (deployed sha != dev, or unknown), not on whether this run moved
+        # dev (issue #141): a human pull between dispatches still gets deployed.
+        $publishPlan = Read-PublishState -DevMoved $git.devMoved
+        $publish.result = $publishPlan.reason
+        if ($publishPlan.publish) {
+            $shortSha = $publish.devSha
             $publish.sha = $shortSha
             $releasesDir = Join-Path $ToolsDir 'vtk-releases'
             $releaseDir = Join-Path $releasesDir $shortSha
@@ -575,6 +612,8 @@ if ($machineLock.acquired) {
                 }
             }
         }
+        # Re-read after the flip so deployedSha / lagging reflect the deployed state.
+        $null = Read-PublishState -DevMoved $git.devMoved
 
         # 0a.4 — worktree sweep: remove clean issue worktrees whose branch is
         # merged to dev, or upstream-gone with the issue closed.

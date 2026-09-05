@@ -154,7 +154,10 @@ The digest's `issues` section (`snapshot`, `laneDepths`, `needsHuman`, `hold`, `
 the ONE issue snapshot that serves the whole cycle. Surface the script's `notes` (skipped ops, dirty
 worktrees left, refused deletions) in your final digest; a failed health check
 (`publish.healthCheck.ok: false`) is a red flag to report prominently — prior release dirs
-survive GC for a manual junction flip back.
+survive GC for a manual junction flip back. So is `publish.lagging: true` after maintenance:
+the deployed binary (`publish.deployedSha`) still differs from dev (`publish.devSha`) — the
+publish is gated on that drift, not on whether this run moved dev, so a lag surviving the
+cycle means the build or flip failed (see `publish.result`).
 
 ### Per-lane dispatch
 
