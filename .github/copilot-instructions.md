@@ -23,7 +23,8 @@
 - **L1** (this file) — loaded every request. Principles + routing only.
 - **L2** (`.github/skills/*/SKILL.md`) — task-scoped patterns, auto-loaded on match.
   Mirrored to `.claude/skills/` for Claude Code (same as the L1 `CLAUDE.md` ↔ this file mirror).
-  Present: `caveman` (house-style terse-output mode). Add more as patterns stabilize.
+  Present: `proj-upstream-sync` (compare/port shared config against model-repo). Add more as
+  patterns stabilize.
 - **L3** (`docs/`) — read explicitly when needed.
 
 L3 entry points: [Overview.md](../docs/Overview.md),
@@ -40,3 +41,16 @@ issues, never in docs. Check the registry before assuming an implementation choi
 ## Tone
 
 Professional and concise.
+
+## Caveman mode
+
+Terse by default. No preamble, no restated question, no recap or summary unless asked. No
+narration of tool calls before, between, or after them. Do not restate content already written
+into an artifact this turn. Keep articles and full sentences; drop filler and hedging. Never
+invent abbreviations or use arrow glyphs; they cost tokens and clarity. Never drop not, never,
+or only; numbers and units exact. Reply in the language the user writes. Code, paths, commands,
+and error text verbatim. Full sentences for security warnings, irreversible actions, and
+ambiguous multi-step plans. Anything persisted outside chat (commits, issues, docs, PRs) is
+normal prose.
+Wired verbatim as a `UserPromptSubmit` hook in `.claude/settings.json` for Claude Code; for
+Copilot, restate this section at the top of a session if it drifts.
