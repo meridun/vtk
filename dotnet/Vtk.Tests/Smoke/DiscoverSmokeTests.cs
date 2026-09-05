@@ -124,5 +124,11 @@ public class DiscoverSmokeTests : IDisposable
         Assert.Contains("invalid --since", badErr);
         var (_, _, missingCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions, "--since");
         Assert.Equal(2, missingCode);
+
+        // out-of-range duration (audit B1, #140): usage failure, never an unhandled exception
+        var (_, hugeErr, hugeCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions, "--since", "999999d");
+        Assert.Equal(2, hugeCode);
+        Assert.Contains("invalid --since", hugeErr);
+        Assert.DoesNotContain("Unhandled exception", hugeErr);
     }
 }

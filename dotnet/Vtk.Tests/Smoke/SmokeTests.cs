@@ -222,6 +222,12 @@ public class SmokeTests : IDisposable
         var (_, badErr, badCode) = _h.Run(_h.Repo, "gaps", "--since", "nope");
         Assert.Equal(2, badCode);
         Assert.Contains("invalid --since", badErr);
+
+        // out-of-range duration (audit B1, #140): usage failure, never an unhandled exception
+        var (_, hugeErr, hugeCode) = _h.Run(_h.Repo, "gaps", "--since", "2147483647d");
+        Assert.Equal(2, hugeCode);
+        Assert.Contains("invalid --since", hugeErr);
+        Assert.DoesNotContain("Unhandled exception", hugeErr);
     }
 
     private static int CountOccurrences(string haystack, string needle)
