@@ -193,6 +193,37 @@ public class SmokeTests : IDisposable
         Assert.Equal(1, CountOccurrences(gapsOut3, "git"));
     }
 
+    [Fact]
+    public void GapsSinceWindow()
+    {
+        // #140 through the real binary: a just-logged no-filter gap is inside
+        // a trailing window and outside a future-dated one; the header prints
+        // only when the flag is given; a bad value is a usage failure.
+        var (_, code) = _h.RunNull(_h.Repo, "git", "rev-parse", "HEAD");
+        Assert.Equal(0, code);
+
+        var (bareOut, _, bareCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, bareCode);
+        Assert.Contains("git", bareOut);
+        Assert.DoesNotContain("window:", bareOut);
+
+        var (recentOut, _, recentCode) = _h.Run(_h.Repo, "gaps", "--since", "1h");
+        Assert.Equal(0, recentCode);
+        Assert.StartsWith("window: since ", recentOut);
+        Assert.Contains("(1h)", recentOut);
+        Assert.Contains("git", recentOut);
+
+        var (futureOut, _, futureCode) = _h.Run(_h.Repo, "gaps", "--since", "2099-01-01");
+        Assert.Equal(0, futureCode);
+        Assert.Contains("window: since 2099-01-01T00:00:00Z (2099-01-01)", futureOut);
+        Assert.Contains("no gap entries", futureOut);
+        Assert.DoesNotContain("git", futureOut);
+
+        var (_, badErr, badCode) = _h.Run(_h.Repo, "gaps", "--since", "nope");
+        Assert.Equal(2, badCode);
+        Assert.Contains("invalid --since", badErr);
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;

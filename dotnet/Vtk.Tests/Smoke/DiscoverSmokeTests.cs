@@ -88,4 +88,41 @@ public class DiscoverSmokeTests : IDisposable
         Assert.Equal(2, useCode);
         Assert.Contains("usage: vtk discover", useErr);
     }
+
+    [Fact]
+    public void SinceWindow()
+    {
+        // #140 through the real binary: a transcript last written before the
+        // window is skipped by the mtime pre-filter; inside the read file the
+        // one stamped event (2026-07-19T10:00:01Z) survives a window opening
+        // before it and the 5 undated events are dropped with a count.
+        CopyFixture("session_discover.jsonl", "old.jsonl");
+        File.SetLastWriteTimeUtc(Path.Combine(_sessions, "old.jsonl"), new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        CopyFixture("session_discover.jsonl", "new.jsonl");
+
+        var (winOut, _, winCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions, "--since", "2026-07-01");
+        Assert.Equal(0, winCode);
+        Assert.Contains("discover: 1 opportunities from 1 commands across 1 sessions; window since 2026-07-01T00:00:00Z (2026-07-01); 5 undated events dropped", winOut);
+        Assert.Matches(@"unwrapped\s+git status\s+1\s", winOut);
+        Assert.DoesNotContain("go-test", winOut);
+
+        // window opening after the stamp: dated event dropped, empty result is
+        // still exit 0 (the directory is not empty — not an environment error).
+        var (emptyOut, _, emptyCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions, "--since", "2026-07-19T10:00:02Z");
+        Assert.Equal(0, emptyCode);
+        Assert.Contains("no opportunities found (0 commands across 1 sessions; window since 2026-07-19T10:00:02Z (2026-07-19T10:00:02Z); 5 undated events dropped)", emptyOut);
+
+        // opt-in: no flag, no window note, both files read.
+        var (bareOut, _, bareCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions);
+        Assert.Equal(0, bareCode);
+        Assert.Contains("from 12 commands across 2 sessions", bareOut);
+        Assert.DoesNotContain("window", bareOut);
+
+        // malformed / missing value is a usage failure: exit 2
+        var (_, badErr, badCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions, "--since", "14w");
+        Assert.Equal(2, badCode);
+        Assert.Contains("invalid --since", badErr);
+        var (_, _, missingCode) = _h.Run(_h.Repo, "discover", "--sessions", _sessions, "--since");
+        Assert.Equal(2, missingCode);
+    }
 }
