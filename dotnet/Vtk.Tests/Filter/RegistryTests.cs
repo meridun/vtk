@@ -111,6 +111,20 @@ public class RegistryTests
         Assert.Equal(@"^cargo\b", byRegex.Name);
     }
 
+    /// <summary>mocha exits with its failure count, min(failures, 255): every code 0..255 is a report and filters (#138); both registry keys agree.</summary>
+    [Theory]
+    [InlineData("mocha")]
+    [InlineData("npx mocha")]
+    public void Default_Mocha_AllowsFailureCountExits(string key)
+    {
+        var r = Registry.Default();
+        Assert.True(r.TryLookup(key.Split(' '), out var entry));
+        Assert.Equal(key, entry.Name);
+        Assert.True(entry.Filters(0) && entry.Filters(1) && entry.Filters(2) && entry.Filters(255));
+        Assert.False(entry.Filters(256));
+        Assert.False(entry.Filters(-1));
+    }
+
     /// <summary>`gh run` dispatches both run-list tables and CI job logs (#96), on exit 0 and 1 (`--exit-status` forms).</summary>
     [Fact]
     public void Default_GhRun_AllowsExitZeroAndOne()

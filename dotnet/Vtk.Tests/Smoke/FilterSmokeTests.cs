@@ -250,16 +250,28 @@ public class MochaSmokeTests : IDisposable
         Assert.Contains("starts empty", shown);
     }
 
+    /// <summary>mocha exits its failure count (#138): a 2-failure run exits 2 and still folds, with parity.</summary>
     [Fact]
-    public void Exit2ConfigErrorStaysRawAllowlistPassthrough()
+    public void Exit2MultiFailureRunFoldsWithParity()
     {
         var (outp, err, code) = _h.RunFaked(_h.Repo, Code(2), "npx", "mocha");
-        Assert.Equal(2, code); // parity
-        SmokeAssert.NoOk(outp);
-        // Exit 2 is outside the {0,1} allowlist: raw output, no fold.
-        Assert.Contains("✔", outp);
-        Assert.Contains("starts empty", outp);
+        Assert.Equal(2, code); // parity: vtk returns mocha's own code
+        SmokeHarness.MustOkId(outp);
+        Assert.Contains("3 failing", outp);
+        Assert.Contains("1) cart", outp);
+        Assert.DoesNotContain("✔", outp);
         Assert.True(err == "", $"unexpected stderr: {err}");
+    }
+
+    /// <summary>A fatal/config error has no summary line: the content gate keeps it raw even though exit 1 is allowlisted (#138).</summary>
+    [Fact]
+    public void Exit1FatalNoSummaryStaysRaw()
+    {
+        var env = new Dictionary<string, string> { ["VTK_FAKE_MOCHA_FATAL"] = "1" };
+        var (outp, err, code) = _h.RunFaked(_h.Repo, env, "npx", "mocha");
+        Assert.Equal(1, code); // parity
+        SmokeAssert.NoOk(outp);
+        Assert.Contains("No test files found", outp + err);
     }
 }
 

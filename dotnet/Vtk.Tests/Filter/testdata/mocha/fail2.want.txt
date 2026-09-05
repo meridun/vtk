@@ -1,0 +1,23 @@
+5 passing (4ms)
+2 failing
+
+  1) orders
+       computes subtotal:
+
+      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+12 !== 11
+
+      + expected - actual
+
+      -12
+      +11
+      
+      at Context.<anonymous> (test\orders.test.js:6:40)
+      at process.processImmediate (node:internal/timers:504:21)
+
+  2) shipping
+       quotes a rate:
+     Error: rate service unavailable
+      at Context.<anonymous> (test\orders.test.js:12:37)
+      at process.processImmediate (node:internal/timers:504:21)
