@@ -63,4 +63,62 @@ public class StdinSmokeTests : IDisposable
         Assert.True(code == 0, $"exit {code}, want 0; stderr: {stderr}");
         Assert.Equal(head, stdout.Trim());
     }
+
+    [Fact]
+    public void InteractiveConsoleStdinUnderCapture_ChildSeesEofAndDoesNotHang()
+    {
+        if (!OperatingSystem.IsWindows())
+            return; // ConPTY is Windows-only
+
+        // The one cell that keeps the pre-#144 redirect-and-close: vtk's
+        // stdin is a real (pseudo) console but its stdout is redirected, so
+        // the child runs captured/counted and the user could never see a
+        // prompt. The ConPTY input pipe is held open and never written, so
+        // a child that inherited console stdin and read it (`cat`) would
+        // block until the harness timeout; with the close it sees EOF at
+        // once. `cat` covers RunPassthroughCounted(tty:false), `git status`
+        // covers RunCaptured.
+        File.WriteAllText(Path.Combine(_h.Repo, "file1.txt"), "line 1 content\ndirty\n");
+        var catOut = Path.Combine(_h.Home, "cat-out.txt");
+        var statusOut = Path.Combine(_h.Home, "status-out.txt");
+        var script = Path.Combine(_h.Home, "stdin-console.cmd");
+        File.WriteAllText(script,
+            "@echo off\r\n" +
+            $"\"{_h.Bin}\" cat > \"{catOut}\"\r\n" +
+            "echo CAT_EXIT=%ERRORLEVEL%\r\n" +
+            $"\"{_h.Bin}\" git status > \"{statusOut}\"\r\n" +
+            "echo STATUS_EXIT=%ERRORLEVEL%\r\n");
+
+        var env = new Dictionary<string, string>
+        {
+            ["LOCALAPPDATA"] = _h.Home,
+            ["XDG_CACHE_HOME"] = _h.Home,
+            ["HOME"] = _h.Home,
+            ["TERM"] = "dumb",
+            ["PATH"] = _h.FakeBinDir + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
+        };
+        string output;
+        try
+        {
+            (output, _) = ConPty.Run($"cmd.exe /d /c \"{script}\"", _h.Repo, env, TimeSpan.FromSeconds(60));
+        }
+        catch (TimeoutException ex)
+        {
+            Assert.Fail($"vtk (or its child) hung on console stdin under capture: {ex.Message}");
+            return;
+        }
+
+        Assert.Contains("CAT_EXIT=0", output);
+        Assert.Contains("STATUS_EXIT=0", output);
+        // cat saw EOF immediately: nothing forwarded from the console.
+        Assert.Equal("", File.ReadAllText(catOut));
+        // git status took the captured/filtered path (not tty bypass): the
+        // compact form, not the raw "On branch ..." prose.
+        var status = File.ReadAllText(statusOut);
+        Assert.Contains("file1.txt", status);
+        Assert.DoesNotContain("On branch", status);
+        var log = _h.InvocationLog();
+        Assert.Contains("\"filtered\":true", log);
+        Assert.DoesNotContain("\"tty\":true", log);
+    }
 }
