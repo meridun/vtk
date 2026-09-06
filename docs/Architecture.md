@@ -91,6 +91,11 @@ outgrows a screen.)
   `Registry.TryLookup` is split to [#152](https://github.com/meridun/vtk/issues/152)
   (`status`/`branch`/`add`/`commit`/`push`/`pull` only — `diff`/`show`/`log` excluded unless
   #137 telemetry says otherwise) — [#135](https://github.com/meridun/vtk/issues/135)
+- Spool id hashes **(cwd, argv)**, not argv alone (option A — amends #2): the provenance header
+  carries `# cwd:` (path text only, through `Redact` like `# cmd:`), and `vtk show` prints a
+  one-line stderr warning when the header cwd differs from the caller's cwd and still prints
+  the output (no refusal, no `--force`), so concurrent worktree workers no longer clobber each
+  other's entries — [#136](https://github.com/meridun/vtk/issues/136)
 
 ## Pipeline
 
