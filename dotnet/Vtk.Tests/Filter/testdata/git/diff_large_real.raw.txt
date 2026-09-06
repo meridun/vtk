@@ -1,0 +1,2060 @@
+diff --git a/dotnet/Vtk.Core/Filter/Fold.cs b/dotnet/Vtk.Core/Filter/Fold.cs
+new file mode 100644
+index 0000000..f785d4b
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Fold.cs
+@@ -0,0 +1,109 @@
++// The generic size-floored success fold (#93, registry option C), shared by
++// the wrapper families that route through it: `npm run` (#93/#120) and
++// `powershell -File <script>` (#131). Success output at or above the byte
++// floor folds behind `OK <id>` with a short summary tail inline; below it —
++// and on any failure — output stays inline, so terse load-bearing runs pass
++// through automatically with no exempt list. The CLI runner owns the
++// exit-code gate, the spool, and the telemetry; everything here is pure.
++using System.Text.RegularExpressions;
++
++namespace Vtk.Core.Filter;
++
++public static partial class Fold
++{
++    /// <summary>
++    /// Absolute byte floor a successful body must reach before it folds
++    /// behind `OK &lt;id&gt;` (#93, option C; shared with `powershell -File`,
++    /// #131). Far above the #52 savings bar, so a fold always clears that
++    /// bar too.
++    /// </summary>
++    public const int FloorBytes = 64 * 1024;
++
++    /// <summary>Maximum number of trailing lines <see cref="Tail"/> keeps inline.</summary>
++    public const int TailMaxLines = 5;
++
++    /// <summary>Maximum total size (chars) of the tail <see cref="Tail"/> keeps inline.</summary>
++    public const int TailMaxBytes = 512;
++
++    /// <summary>
++    /// Maximum number of summary lines <see cref="Tail"/> pins above the
++    /// positional tail (#134, option B). Their bytes count inside
++    /// <see cref="TailMaxBytes"/>.
++    /// </summary>
++    public const int PinnedMaxLines = 3;
++
++    // Runner summary lines that carry the verdict regardless of where they
++    // sit (#134): mocha "  N passing (12ms)" / "N failing" / "N pending"
++    // (mirrors Mocha.SummaryRe), jest "Tests:  1 failed, 5 passed, 6 total",
++    // eslint "✖ 3 problems (3 errors, 0 warnings)". Content-sniffed
++    // dispatch is deliberately not what this is — the fold stays a fold.
++    [GeneratedRegex(@"^\s*\d+\s+(passing|failing|pending)\b|^\s*Tests:\s.*\b\d+\s+(passed|failed)\b|^\W*\d+\s+problems?\b")]
++    private static partial Regex SummaryRe();
++
++    /// <summary>
++    /// The generic "summary stays inline" slice of a folded body: its last
++    /// lines — where CLI tools put their summaries — capped at
++    /// <see cref="TailMaxLines"/> lines and <see cref="TailMaxBytes"/>
++    /// chars, preceded by up to <see cref="PinnedMaxLines"/> runner summary
++    /// lines pinned from above that positional tail (#134) — so a mocha
++    /// "N passing" line followed by trailing console noise survives the
++    /// fold. Pinned lines take budget priority; the positional tail fills
++    /// what remains, and the whole result never exceeds
++    /// <see cref="TailMaxBytes"/>. Trailing blank lines are dropped first;
++    /// lines are taken from the end while both caps hold, so an oversized
++    /// final line yields "" (a bare `OK &lt;id&gt;` fold). Lines are emitted
++    /// verbatim and in original order; nothing is moved or duplicated.
++    /// Pure — the full body is always recoverable from the spool.
++    /// </summary>
++    public static string Tail(string body)
++    {
++        var lines = body.Split('\n');
++        var end = lines.Length;
++        while (end > 0 && lines[end - 1].Trim() == "") end--;
++
++        // Positional boundary with the full budget fixes which lines are
++        // "above the tail" and therefore pin candidates.
++        var start0 = PositionalStart(lines, end, TailMaxBytes);
++
++        // Pin the summary lines nearest the tail, newest first, while they
++        // fit; +1 each for the newline joining them to what follows.
++        var pinned = new List<int>();
++        var pinnedBytes = 0;
++        for (var i = start0 - 1; i >= 0 && pinned.Count < PinnedMaxLines; i--)
++        {
++            if (!SummaryRe().IsMatch(lines[i])) continue;
++            var cost = lines[i].Length + 1;
++            if (pinnedBytes + cost > TailMaxBytes) break;
++            pinnedBytes += cost;
++            pinned.Add(i);
++        }
++        pinned.Reverse();
++
++        // The remaining budget is never larger than the full one, so the
++        // recomputed boundary is at or after start0: no pinned line can
++        // also fall inside the positional tail.
++        var start = pinned.Count == 0 ? start0 : PositionalStart(lines, end, TailMaxBytes - pinnedBytes);
++
++        var kept = new List<string>(pinned.Count + (end - start));
++        foreach (var i in pinned) kept.Add(lines[i]);
++        for (var i = start; i < end; i++) kept.Add(lines[i]);
++        return kept.Count == 0 ? "" : string.Join("\n", kept);
++    }
++
++    // The index of the first line of the positional tail: lines are taken
++    // from `end` backwards while both the line cap and `budget` hold.
++    private static int PositionalStart(string[] lines, int end, int budget)
++    {
++        var start = end;
++        var total = 0;
++        while (start > 0 && end - start < TailMaxLines)
++        {
++            // +1 for the joining newline on every line after the first.
++            var cost = lines[start - 1].Length + (start == end ? 0 : 1);
++            if (total + cost > budget) break;
++            total += cost;
++            start--;
++        }
++        return start;
++    }
++}
+diff --git a/dotnet/Vtk.Core/Filter/Gh.cs b/dotnet/Vtk.Core/Filter/Gh.cs
+index 96d6689..c66f4f8 100644
+--- a/dotnet/Vtk.Core/Filter/Gh.cs
++++ b/dotnet/Vtk.Core/Filter/Gh.cs
+@@ -1,14 +1,17 @@
+ // The GitHub CLI (`gh`) filter family: pure functions that compact the
+-// tab-separated human-format output of `gh` list subcommands. Raw output in,
+-// compact output out; returning the input unchanged means "nothing to elide".
++// tab-separated human-format output of `gh` list subcommands and the CI job
++// logs of `gh run view --log` / `--log-failed`. Raw output in, compact
++// output out; returning the input unchanged means "nothing to elide".
+ //
+ // `gh` list commands emit tab-separated rows when their output is not a TTY
+ // (which is always the case under vtk's capture). `--json` forms are emitted
+ // as a JSON object/array and are passed through structurally intact.
+-// Port of internal/filter/gh/gh.go.
++// Port of internal/filter/gh/gh.go; CI-log fold added per #96.
++using System.Text.RegularExpressions;
++
+ namespace Vtk.Core.Filter;
+ 
+-public static class Gh
++public static partial class Gh
+ {
+     // isNum reports whether s is a non-empty run of ASCII digits — the
+     // leading field of an issue/PR list row. `gh issue view` / `gh pr view`
+@@ -131,4 +134,170 @@ public static class Gh
+         }
+         return string.Join("\n", outLines);
+     }
++
++    /// <summary>
++    /// The `gh run` family dispatcher: routes CI job logs (`gh run view
++    /// --log` / `--log-failed`) to the log fold and run-list tables to
++    /// RunList, by content shape — the registry key ("gh run") cannot see
++    /// the sub-subcommand. Anything unrecognized (run-view summaries,
++    /// `gh run watch`, error text) passes through unchanged.
++    /// </summary>
++    public static string Run(string raw)
++    {
++        if (IsJson(raw)) return raw;
++        if (TryRunLogFold(raw, out var folded)) return folded;
++        return RunList(raw);
++    }
++
++    // A CI log row's content field: an ISO-8601 timestamp (fractional
++    // seconds, Z suffix) followed by the log line. The first row of a job's
++    // log carries a UTF-8 BOM ahead of the timestamp (observed in real
++    // `gh run view --log` captures).
++    [GeneratedRegex(@"^﻿?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z? ?")]
++    private static partial Regex LogTimestampRe();
++
++    // A definitive failure marker inside a step's log: an Actions error
++    // annotation, or the runner's nonzero exit summary when the annotation
++    // is absent.
++    [GeneratedRegex(@"^Process completed with exit code [1-9]")]
++    private static partial Regex ExitCodeRe();
++
++    // ANSI escape sequences (colors etc.) in kept log lines. The raw spool
++    // keeps them; the compact view doesn't need them.
++    [GeneratedRegex(@"\x1b\[[0-9;]*[A-Za-z]")]
++    private static partial Regex AnsiRe();
++
++    // gh renders this placeholder when it cannot map log lines to step
++    // names (upstream behavior on current gh; step metadata is often
++    // unavailable). It carries no information, so fold labels omit it.
++    private const string UnknownStep = "UNKNOWN STEP";
++
++    // One (job, step) run of consecutive log lines. Job == null is the
++    // pseudo-section holding non-log lines (e.g. interleaved stderr), kept
++    // verbatim in position.
++    private sealed class LogSection
++    {
++        public string? Job;
++        public string Step = "";
++        public readonly List<string> Lines = new(); // prefix-stripped content
++        public bool HasError;
++    }
++
++    /// <summary>
++    /// Detects and folds `gh run view --log` / `--log-failed` output: rows
++    /// of "job\tstep\t&lt;timestamp&gt; content". Consecutive (job, step)
++    /// sections without a failure marker fold to one "OK &lt;label&gt; (n
++    /// lines)" line (keeping ##[warning] lines); sections with a marker
++    /// (##[error] or a nonzero exit summary) stay inline under a FAIL
++    /// header, with the job/step/timestamp prefixes and ANSI codes
++    /// stripped. When no section carries a marker (e.g. --log-failed for a
++    /// job that died without an error annotation) the tail of the log is
++    /// kept so the failure evidence stays visible. Returns false when the
++    /// input is not log-shaped (caller passes through).
++    /// </summary>
++    internal static bool TryRunLogFold(string raw, out string folded)
++    {
++        folded = "";
++        var lines = raw.Split('\n');
++        var end = lines.Length;
++        if (end > 0 && lines[end - 1] == "") end--; // trailing newline artifact
++
++        var sections = new List<LogSection>();
++        LogSection? cur = null;
++        int logRows = 0, nonEmpty = 0;
++        var tail = new List<string>(); // stripped log content, in order
++
++        for (var i = 0; i < end; i++)
++        {
++            var line = lines[i];
++            if (line.Trim() == "") continue;
++            nonEmpty++;
++
++            string? job = null, step = null, content = null;
++            var t1 = line.IndexOf('\t');
++            if (t1 > 0)
++            {
++                var t2 = line.IndexOf('\t', t1 + 1);
++                if (t2 > t1 + 1)
++                {
++                    var rest = line[(t2 + 1)..];
++                    var m = LogTimestampRe().Match(rest);
++                    if (m.Success)
++                    {
++                        job = line[..t1];
++                        step = line[(t1 + 1)..t2];
++                        content = rest[m.Length..];
++                    }
++                }
++            }
++
++            if (job is null)
++            {
++                // Not a log row (interleaved stderr &c.): keep verbatim.
++                if (cur is null || cur.Job is not null)
++                {
++                    cur = new LogSection { Job = null };
++                    sections.Add(cur);
++                }
++                cur.Lines.Add(line);
++                continue;
++            }
++
++            logRows++;
++            content = AnsiRe().Replace(content!, "");
++            tail.Add(content);
++            if (cur is null || cur.Job != job || cur.Step != step)
++            {
++                cur = new LogSection { Job = job, Step = step! };
++                sections.Add(cur);
++            }
++            cur.Lines.Add(content);
++            if (content.Contains("##[error]") || ExitCodeRe().IsMatch(content))
++                cur.HasError = true;
++        }
++
++        // Engage only on unambiguous log output: enough rows, and nearly all
++        // of the input shaped like one. Anything else is not ours to touch.
++        if (logRows < 10 || logRows < nonEmpty * 0.9) return false;
++
++        var anyError = sections.Any(s => s.HasError);
++        var outLines = new List<string>();
++        foreach (var s in sections)
++        {
++            if (s.Job is null)
++            {
++                outLines.AddRange(s.Lines);
++                continue;
++            }
++            var label = s.Step == "" || s.Step == UnknownStep ? s.Job : s.Job + " · " + s.Step;
++            if (s.HasError)
++            {
++                outLines.Add($"FAIL {label} ({s.Lines.Count} lines)");
++                outLines.AddRange(s.Lines);
++            }
++            else
++            {
++                outLines.Add($"OK {label} ({s.Lines.Count} lines)");
++                foreach (var l in s.Lines)
++                {
++                    if (l.Contains("##[warning]")) outLines.Add("  " + l);
++                }
++            }
++        }
++
++        if (!anyError)
++        {
++            // No definitive failure marker anywhere. For --log-failed this
++            // means a job died without an ##[error] annotation (observed:
++            // network timeouts) — keep the log tail so the evidence stays
++            // inline; the full raw is recoverable via the spool.
++            var n = Math.Min(20, tail.Count);
++            outLines.Add("");
++            outLines.Add($"last {n} log lines:");
++            outLines.AddRange(tail.Skip(tail.Count - n));
++        }
++
++        folded = string.Join("\n", outLines);
++        return true;
++    }
+ }
+diff --git a/dotnet/Vtk.Core/Filter/GitOptions.cs b/dotnet/Vtk.Core/Filter/GitOptions.cs
+new file mode 100644
+index 0000000..9bd4a51
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/GitOptions.cs
+@@ -0,0 +1,79 @@
++// Git global-option normalization for filter resolution (#152). Real
++// traffic arrives as `git -C <dir> status`, `git -c k=v commit`,
++// `git --no-pager branch`, `git --git-dir=... push`: the subcommand is not
++// argv[1], so the "git <sub>" pair keys miss and the call passes through as
++// a no-filter gap. Strip rewrites the argv to `git <sub> ...` for *key
++// selection and aggregation only* — the executed command line is always the
++// original argv, so exit-code parity and command side effects are untouched.
++//
++// Pure: argv in, argv out. No process spawning, no filesystem access. Which
++// subcommands may engage a filter through the normalized form is dispatch
++// policy and lives in Registry, not here.
++namespace Vtk.Core.Filter;
++
++public static class GitOptions
++{
++    // Global options that take their value as the next token.
++    private static readonly HashSet<string> ValueOptions = new(StringComparer.Ordinal)
++    {
++        "-C", "-c", "--git-dir", "--work-tree",
++    };
++
++    // Global options that take their value inline as --opt=value.
++    private static readonly string[] InlineValueOptions = { "--git-dir=", "--work-tree=" };
++
++    // Global flags with no value.
++    private static readonly HashSet<string> Flags = new(StringComparer.Ordinal)
++    {
++        "--no-pager", "-P", "-p", "--paginate",
++    };
++
++    /// <summary>
++    /// Strips known git global options (<c>-C &lt;dir&gt;</c>, <c>-c &lt;k=v&gt;</c>,
++    /// <c>--no-pager</c>/<c>-P</c>, <c>-p</c>/<c>--paginate</c>,
++    /// <c>--git-dir[=&lt;path&gt;]</c>, <c>--work-tree[=&lt;path&gt;]</c>) that
++    /// sit between <c>git</c> and its subcommand, returning
++    /// <c>["git", &lt;sub&gt;, ...]</c>. Returns the original argv when it is not
++    /// a git invocation, nothing was stripped, an unrecognized <c>-</c> token
++    /// precedes the subcommand, a value-taking option has no value, or no
++    /// subcommand follows — when in doubt, don't normalize.
++    /// </summary>
++    public static string[] Strip(IReadOnlyList<string> argv)
++    {
++        var original = argv as string[] ?? argv.ToArray();
++        if (argv.Count < 3 || argv[0] != "git") return original;
++
++        var i = 1;
++        while (i < argv.Count)
++        {
++            var tok = argv[i];
++            if (Flags.Contains(tok))
++            {
++                i++;
++            }
++            else if (ValueOptions.Contains(tok))
++            {
++                if (i + 1 >= argv.Count) return original; // option without its value
++                i += 2;
++            }
++            else if (InlineValueOptions.Any(p => tok.StartsWith(p, StringComparison.Ordinal)))
++            {
++                i++;
++            }
++            else if (tok.StartsWith('-'))
++            {
++                return original; // unknown global option: don't guess
++            }
++            else
++            {
++                break; // the subcommand
++            }
++        }
++        if (i == 1 || i >= argv.Count) return original;
++
++        var result = new string[argv.Count - i + 1];
++        result[0] = argv[0];
++        for (var k = i; k < argv.Count; k++) result[k - i + 1] = argv[k];
++        return result;
++    }
++}
+diff --git a/dotnet/Vtk.Core/Filter/Mocha.cs b/dotnet/Vtk.Core/Filter/Mocha.cs
+index acb4b8e..a79a653 100644
+--- a/dotnet/Vtk.Core/Filter/Mocha.cs
++++ b/dotnet/Vtk.Core/Filter/Mocha.cs
+@@ -9,9 +9,11 @@
+ // the spec tree, keeps the summary lines, and keeps the failure-detail
+ // blocks verbatim.
+ //
+-// mocha reports test failures via exit 1 — that output is exactly what we
+-// want to compact. The registry declares mocha's exit-code allowlist as
+-// {0, 1} (exit 2+ is a mocha/config error and stays raw).
++// mocha's exit code is its failure count, min(failures, 255) — a run with N
++// failing specs exits N, and that output is exactly what we want to compact.
++// The registry therefore allowlists 0..255 (#138); fatal/config errors carry
++// no summary line and pass through unchanged below, so content — not exit
++// code — is what keeps them raw.
+ // Port of internal/filter/mocha/mocha.go.
+ using System.Text.RegularExpressions;
+ 
+diff --git a/dotnet/Vtk.Core/Filter/Npm.cs b/dotnet/Vtk.Core/Filter/Npm.cs
+index 717dad5..9b95521 100644
+--- a/dotnet/Vtk.Core/Filter/Npm.cs
++++ b/dotnet/Vtk.Core/Filter/Npm.cs
+@@ -73,4 +73,42 @@ public static class Npm
+ 
+         return new StripResult(string.Join("\n", rest), inner, true);
+     }
++
++    // ---- size-floored fold (#93, registry option C) -------------------------
++    //
++    // Modern npm (>= 11) emits the run banner only on a TTY, so under vtk's
++    // pipe capture the inner tool is often undiscoverable. When the inner
++    // tool is unrecognized (or there is no banner at all), successful output
++    // folds behind `OK <id>` only above a generous absolute byte floor;
++    // below it — and on any failure — output stays inline, so terse
++    // load-bearing scripts (`npm run sdlc`) pass through automatically with
++    // no exempt list. The mechanism (floor, tail caps, tail slice) lives in
++    // <see cref="Fold"/>, shared with `powershell -File` (#131); the aliases
++    // below keep npm's original public surface. The CLI runner owns the
++    // exit-code gate, the spool, and the telemetry; the helpers here are pure.
++
++    /// <summary>
++    /// Absolute byte floor a successful unrecognized-inner `npm run` body
++    /// must reach before it folds behind `OK &lt;id&gt;` (#93, option C).
++    /// Alias of <see cref="Fold.FloorBytes"/>.
++    /// </summary>
++    public const int FoldFloorBytes = Fold.FloorBytes;
++
++    /// <summary>
++    /// Registry-style identity for the fold pseudo-filter. Telemetry records
++    /// it as the invocation reason when the fold path engages (both the
++    /// above-floor fold and the below-floor intentional near-passthrough),
++    /// so `npm run` stops inflating the gap table without ever being
++    /// silently unlogged. A static identifier, never output content.
++    /// </summary>
++    public const string FoldName = "npm-run-fold";
++
++    /// <summary>Maximum number of trailing lines <see cref="FoldTail"/> keeps inline. Alias of <see cref="Fold.TailMaxLines"/>.</summary>
++    public const int FoldTailMaxLines = Fold.TailMaxLines;
++
++    /// <summary>Maximum total size (chars) of the tail <see cref="FoldTail"/> keeps inline. Alias of <see cref="Fold.TailMaxBytes"/>.</summary>
++    public const int FoldTailMaxBytes = Fold.TailMaxBytes;
++
++    /// <summary>The shared fold tail slice — see <see cref="Fold.Tail"/>.</summary>
++    public static string FoldTail(string body) => Fold.Tail(body);
+ }
+diff --git a/dotnet/Vtk.Core/Filter/PowershellFile.cs b/dotnet/Vtk.Core/Filter/PowershellFile.cs
+new file mode 100644
+index 0000000..2205d3a
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/PowershellFile.cs
+@@ -0,0 +1,65 @@
++// The dispatch predicate for `powershell -File <script>` / `pwsh -File
++// <script>` (#131). Measured traffic for the powershell family is 100%
++// `-File <script>` test-runner invocations (zero cmdlet/`-Command` calls),
++// so there is no output shape to reshape — instead successful script output
++// routes through the shared size-floored fold (Fold, #93 option C
++// mechanism): success at or above the floor folds behind `OK <id>` with the
++// raw spooled; failures and small outputs stay inline.
++//
++// Everything here is pure argv inspection: no process spawning, no
++// filesystem access. The CLI runner owns capture, the exit-code gate, the
++// spool, and the telemetry.
++namespace Vtk.Core.Filter;
++
++public static class PowershellFile
++{
++    /// <summary>
++    /// Registry-style identity for the powershell fold pseudo-filter.
++    /// Telemetry records it as the invocation reason when the fold path
++    /// engages (both the above-floor fold and the below-floor intentional
++    /// near-passthrough), so `powershell -File` stops inflating the gap
++    /// table without ever being silently unlogged. A static identifier,
++    /// never output content (invariant 3).
++    /// </summary>
++    public const string FoldName = "powershell-file-fold";
++
++    /// <summary>
++    /// Reports whether argv is a `powershell`/`pwsh` script-file invocation
++    /// the fold path handles: the host name (case-insensitive, optional
++    /// `.exe`) followed by an explicit `-File` parameter (case-insensitive)
++    /// with a script token after it. `-Command`/`-EncodedCommand` before the
++    /// `-File` vetoes the match — everything after those is command text,
++    /// not host parameters. Other tokens (host flags and their values,
++    /// e.g. `-ExecutionPolicy Bypass`) are skipped, so the measured shape
++    /// `powershell -ExecutionPolicy Bypass -File &lt;script&gt;` matches. A bare
++    /// trailing `-File`, positional-script spellings, and anything that is
++    /// not powershell/pwsh fall through to normal passthrough.
++    /// </summary>
++    public static bool Matches(IReadOnlyList<string> argv)
++    {
++        if (argv.Count < 3) return false; // host + -File + script, minimum
++
++        var host = argv[0];
++        if (host.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
++            host = host[..^4];
++        if (!host.Equals("powershell", StringComparison.OrdinalIgnoreCase) &&
++            !host.Equals("pwsh", StringComparison.OrdinalIgnoreCase))
++        {
++            return false;
++        }
++
++        for (var i = 1; i < argv.Count; i++)
++        {
++            if (argv[i].Equals("-Command", StringComparison.OrdinalIgnoreCase) ||
++                argv[i].Equals("-EncodedCommand", StringComparison.OrdinalIgnoreCase))
++            {
++                return false;
++            }
++            if (argv[i].Equals("-File", StringComparison.OrdinalIgnoreCase))
++            {
++                return i + 1 < argv.Count;
++            }
++        }
++        return false;
++    }
++}
+diff --git a/dotnet/Vtk.Core/Filter/Prefix.cs b/dotnet/Vtk.Core/Filter/Prefix.cs
+new file mode 100644
+index 0000000..28f1aee
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Prefix.cs
+@@ -0,0 +1,77 @@
++// Transparent-launcher prefix unwrap for filter resolution (#97). Launchers
++// like cross-env and npx run their trailing command unchanged, so real
++// traffic arrives as `cross-env VAR=x mocha ...` and never matches the
++// mocha filter. Unwrap strips those prefixes for *matching and telemetry
++// attribution only* — the executed command line is always the original argv,
++// so exit-code parity and command side effects are untouched.
++//
++// Pure: argv in, argv out. No process spawning, no filesystem access.
++using System.Text.RegularExpressions;
++
++namespace Vtk.Core.Filter;
++
++public static class Prefix
++{
++    // Shell/cross-env environment assignment: NAME=value as a single token.
++    private static readonly Regex EnvAssignRe = new(@"^[A-Za-z_][A-Za-z0-9_]*=", RegexOptions.Compiled);
++
++    // npx flags that leave the trailing command transparent. Anything else
++    // (e.g. -p/--package, -c/--call) changes what runs, so unwrap stops.
++    private static readonly HashSet<string> NpxTransparentFlags = new(StringComparer.Ordinal)
++    {
++        "--yes", "-y", "--no-install",
++    };
++
++    /// <summary>
++    /// Strips transparent launcher prefixes from argv until a fixpoint:
++    /// `cross-env VAR=x [...] &lt;cmd&gt;`, `npx [--yes] &lt;cmd&gt;`, and bare
++    /// leading `VAR=x [...] &lt;cmd&gt;` shapes all yield &lt;cmd&gt;'s argv.
++    /// Degenerate shapes (nothing after the prefix, an npx flag that is not
++    /// transparent) return the argv unchanged from that point — when in
++    /// doubt, don't unwrap. Returns the original array when nothing was
++    /// stripped.
++    /// </summary>
++    public static string[] Unwrap(string[] argv)
++    {
++        var i = 0;
++        var progressed = true;
++        while (progressed && i < argv.Length)
++        {
++            progressed = false;
++
++            // Bare env assignments: VAR=x [VAR2=y ...] <cmd>
++            while (i < argv.Length && EnvAssignRe.IsMatch(argv[i]))
++            {
++                i++;
++                progressed = true;
++            }
++            if (i >= argv.Length)
++            {
++                // Assignments only, no command: nothing to match — keep original.
++                return argv;
++            }
++
++            if (argv[i] == "cross-env")
++            {
++                var j = i + 1;
++                while (j < argv.Length && EnvAssignRe.IsMatch(argv[j])) j++;
++                if (j >= argv.Length) return argv; // no inner command: keep original
++                i = j;
++                progressed = true;
++            }
++            else if (argv[i] == "npx")
++            {
++                var j = i + 1;
++                while (j < argv.Length && NpxTransparentFlags.Contains(argv[j])) j++;
++                // Unwrap only when the next token is a plain command; an
++                // unrecognized flag means npx may run something other than
++                // that token, so stop with the npx form intact (the exact
++                // "npx eslint"/"npx mocha" registry keys still apply).
++                if (j >= argv.Length || argv[j].StartsWith('-')) break;
++                i = j;
++                progressed = true;
++            }
++        }
++        return i == 0 ? argv : argv[i..];
++    }
++}
+diff --git a/dotnet/Vtk.Core/Filter/Registry.cs b/dotnet/Vtk.Core/Filter/Registry.cs
+index f3b1042..0bf9293 100644
+--- a/dotnet/Vtk.Core/Filter/Registry.cs
++++ b/dotnet/Vtk.Core/Filter/Registry.cs
+@@ -2,6 +2,9 @@
+ // Filters take raw captured output and return a compacted form; they never
+ // spawn processes or touch the filesystem (docs/Architecture.md invariant 4).
+ // Port of internal/filter/filter.go.
++using System.Text.RegularExpressions;
++using Vtk.Core.Filter.Toml;
++
+ namespace Vtk.Core.Filter;
+ 
+ /// <summary>A pure filter: raw captured output in, compacted output out. Returning the input unchanged means "nothing to elide".</summary>
+@@ -20,14 +23,29 @@ public sealed class Entry
+     public required FilterFunc Fn { get; init; }
+     public required IReadOnlySet<int> ExitCodes { get; init; }
+ 
++    /// <summary>
++    /// The filter's registry identity — the exact key ("gh run") or the
++    /// declarative filter's name. Telemetry records it as the invocation
++    /// reason when the filter engages (#96), so `filtered=true` entries name
++    /// the filter that ran. A static identifier, never output content
++    /// (invariant 3).
++    /// </summary>
++    public string Name { get; init; } = "";
++
+     /// <summary>Reports whether this entry is allowed to run for the given child exit code.</summary>
+     public bool Filters(int code) => ExitCodes.Contains(code);
+ }
+ 
+-/// <summary>Maps "cmd" or "cmd subcommand" keys to filter entries.</summary>
++/// <summary>
++/// Maps "cmd" or "cmd subcommand" keys to filter entries, with a
++/// regex-matched fallback list for declarative TOML filters. Regex entries
++/// are consulted only after the exact-key map misses, so the hand-written
++/// families keep precedence and their behavior is unchanged (#40/#61).
++/// </summary>
+ public sealed class Registry
+ {
+     private readonly Dictionary<string, Entry> _entries = new();
++    private readonly List<(Regex Re, Entry Entry)> _regexes = new();
+ 
+     /// <summary>Binds a key ("git status", "ls", ...) to a filter that runs only on a clean (exit 0) child.</summary>
+     public void Register(string key, FilterFunc fn) => RegisterCodes(key, fn, 0);
+@@ -36,14 +54,47 @@ public sealed class Registry
+     public void RegisterCodes(string key, FilterFunc fn, params int[] codes)
+     {
+         if (codes.Length == 0) codes = new[] { 0 };
+-        _entries[key] = new Entry { Fn = fn, ExitCodes = new HashSet<int>(codes) };
++        _entries[key] = new Entry { Name = key, Fn = fn, ExitCodes = new HashSet<int>(codes) };
++    }
++
++    /// <summary>
++    /// Binds a regex (matched against the full command string, argv joined by
++    /// spaces) to a filter running for the given child exit codes. No codes
++    /// means exit 0 only. Regex entries are the declarative-filter path and
++    /// are checked only after the exact-key map misses.
++    /// </summary>
++    public void RegisterRegex(Regex re, FilterFunc fn, params int[] codes) =>
++        RegisterRegexNamed(re.ToString(), re, fn, codes);
++
++    /// <summary>RegisterRegex with an explicit filter name for telemetry (declarative TOML filters carry their def name).</summary>
++    public void RegisterRegexNamed(string name, Regex re, FilterFunc fn, params int[] codes)
++    {
++        if (codes.Length == 0) codes = new[] { 0 };
++        _regexes.Add((re, new Entry { Name = name, Fn = fn, ExitCodes = new HashSet<int>(codes) }));
+     }
+ 
+     /// <summary>
+-    /// Matches argv against the registry: "argv[0] argv[1]" first, then bare
+-    /// "argv[0]". Invocations whose second token is a flag (e.g.
+-    /// `git -C dir status`) intentionally miss and fall through to
+-    /// passthrough — the gap log shows whether that pattern is worth handling.
++    /// git subcommands that may resolve through the global-option-normalized
++    /// pair key (#152): `git -C dir status` → "git status". diff/show/log are
++    /// excluded — their folds are recovered most of the time, so normalizing
++    /// them would add recovery round trips; they stay passthrough (and keep
++    /// gap-logging) unless #137 telemetry says otherwise.
++    /// </summary>
++    public static readonly IReadOnlySet<string> GitNormalizedSubcommands = new HashSet<string>(StringComparer.Ordinal)
++    {
++        "status", "branch", "add", "commit", "push", "pull",
++    };
++
++    /// <summary>
++    /// Matches argv against the registry: "argv[0] argv[1]" first, then — for
++    /// git only — the same pair key after stripping known global options
++    /// (`git -C dir status` → "git status", GitOptions.Strip) when the
++    /// subcommand is in GitNormalizedSubcommands, then bare "argv[0]", then
++    /// (only if all miss) the regex fallback list against the full command
++    /// string. Other flag-second invocations miss the exact keys; a regex
++    /// filter may still claim them if its pattern matches. A total miss falls
++    /// through to passthrough — the gap log shows whether that pattern is
++    /// worth handling.
+     /// </summary>
+     public bool TryLookup(IReadOnlyList<string> argv, out Entry entry)
+     {
+@@ -54,14 +105,36 @@ public sealed class Registry
+             entry = byPair;
+             return true;
+         }
++        if (argv[0] == "git")
++        {
++            var stripped = GitOptions.Strip(argv);
++            if (stripped.Length >= 2 && GitNormalizedSubcommands.Contains(stripped[1])
++                && _entries.TryGetValue(stripped[0] + " " + stripped[1], out var byNormalized))
++            {
++                entry = byNormalized;
++                return true;
++            }
++        }
+         if (_entries.TryGetValue(argv[0], out var byName))
+         {
+             entry = byName;
+             return true;
+         }
++        var cmd = string.Join(" ", argv);
++        foreach (var (re, byRegex) in _regexes)
++        {
++            if (re.IsMatch(cmd))
++            {
++                entry = byRegex;
++                return true;
++            }
++        }
+         return false;
+     }
+ 
++    /// <summary>mocha exits with its failure count (min(failures, 255)), so every code in 0..255 is a report, not a failure (#138).</summary>
++    private static readonly int[] MochaExitCodes = Enumerable.Range(0, 256).ToArray();
++
+     /// <summary>The registry with all shipped filter families wired in. Empty until filters are ported (task #2+).</summary>
+     public static Registry Default()
+     {
+@@ -79,16 +152,25 @@ public sealed class Registry
+         // point to compact. Exit 2+ is a fatal/config error and stays raw.
+         r.RegisterCodes("eslint", Eslint.Filter, 0, 1);
+         r.RegisterCodes("npx eslint", Eslint.Filter, 0, 1);
+-        // mocha reports test failures via exit 1; that failing run is exactly
+-        // what to compact (fold passing specs, keep failures). Exit 2+ is a
+-        // mocha/config error and stays raw.
+-        r.RegisterCodes("mocha", Mocha.Filter, 0, 1);
+-        r.RegisterCodes("npx mocha", Mocha.Filter, 0, 1);
++        // mocha's exit code is its failure count, min(failures, 255) (#138):
++        // a run with N failing specs exits N, and that failing run is exactly
++        // what to compact (fold passing specs, keep failures). Allow the whole
++        // 0..255 range; fatal/config errors carry no "N passing/failing"
++        // summary and Mocha.Filter already returns those byte-identical, so
++        // content — not exit code — is the gate for the raw path.
++        r.RegisterCodes("mocha", Mocha.Filter, MochaExitCodes);
++        r.RegisterCodes("npx mocha", Mocha.Filter, MochaExitCodes);
+         // gh list families: TSV human output on success (exit 0). `gh --json`
+         // forms hit the same keys but pass through structurally intact.
+         r.Register("gh issue", Gh.IssueList);
+         r.Register("gh pr", Gh.PrList);
+-        r.Register("gh run", Gh.RunList);
++        // `gh run` dispatches by content shape: run-list tables and CI job
++        // logs (`run view --log` / `--log-failed`, #96). Exit 1 is in the
++        // allowlist for the report-style `--exit-status` forms, which
++        // propagate a failed run's conclusion while emitting exactly the log
++        // worth folding; nonzero API/usage errors have no log/table shape
++        // and pass through via the shape guards.
++        r.RegisterCodes("gh run", Gh.Run, 0, 1);
+         // files/search family: clean-run-only (grep exit 1 = no matches = no
+         // output worth compacting; find/ls nonzero exits keep raw error output).
+         r.Register("ls", Files.Ls);
+@@ -104,6 +186,23 @@ public sealed class Registry
+         r.Register("dbmate down", Dbmate.Migrate);
+         r.Register("dbmate migrate", Dbmate.Migrate);
+         r.Register("dbmate rollback", Dbmate.Migrate);
++        // Declarative TOML filters (embedded at build) register on the regex
++        // path, so they coexist with the hand-written families above without
++        // shadowing any exact key. The embedded defs are
++        // parse/validate/fixture-checked by the TomlFilter tests; a load
++        // error here would mean a corrupt binary, so skip them and keep the
++        // hand-written families working rather than fail the whole registry.
++        try
++        {
++            foreach (var d in TomlFilter.Load())
++            {
++                r.RegisterRegexNamed(d.Name, d.Match, d.Fn, d.ExitCodes);
++            }
++        }
++        catch
++        {
++            // degrade: exact-key families stay available
++        }
+         return r;
+     }
+ }
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/README.md b/dotnet/Vtk.Core/Filter/Toml/Defs/README.md
+new file mode 100644
+index 0000000..10e356e
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/README.md
+@@ -0,0 +1,44 @@
++# Declarative TOML filters
++
++One `*.toml` file per filter. Each is embedded at build (`EmbeddedResource` in
++`Vtk.Core.csproj`), compiled into a pure `FilterFunc`, and registered into the
++filter dispatch alongside the hand-written C# filter families. Use TOML for
++tools whose output can be compacted by dropping/keeping lines and capping
++length; keep C# for reformatters that regex-stripping can't do (spec-tree
++folding, per-rule rollups).
++
++## Schema
++
++| field | type | purpose |
++|---|---|---|
++| `name` | string (required) | filter id, used in registration + errors |
++| `match_command` | regex string (required) | matched against the full command string (`argv` joined by spaces) |
++| `exit_codes` | int array | child exit codes on which the filter runs (default `[0]`; report-style tools add e.g. `1`) |
++| `strip_ansi` | bool | strip ANSI/SGR escape sequences before matching |
++| `filter_stderr` | bool | **not supported yet** — the runner merges stdout+stderr before a filter runs, so this is rejected at load until stream separation lands (issue #40) |
++| `strip_lines_matching` | regex array | drop any line matching one of these |
++| `keep_lines_matching` | regex array | keep only lines matching one of these (applied before `strip_lines_matching`) |
++| `[[replace]]` | `{pattern, replacement}` | regex substitution across the whole output |
++| `[[match_output]]` | `{pattern, message}` | if `pattern` matches anywhere, the whole output collapses to `message` (short-circuit) |
++| `truncate_lines_at` | int | cap each line at N chars, appending `...` |
++| `max_lines` | int | cap total lines, appending `... (N more lines)` |
++| `on_empty` | string | message emitted when filtering leaves the output blank |
++| `[[tests.<name>]]` | `{input, expected}` | inline fixtures, run under `dotnet test` |
++
++## Pipeline order
++
++`strip_ansi` → `match_output` → `keep_lines_matching` → `strip_lines_matching` →
++`replace` → `truncate_lines_at` → `max_lines` → `on_empty`.
++
++If the pipeline elides nothing, the raw input is returned unchanged and vtk
++passes it through untouched (no `OK <id>`), exactly like a hand-written filter
++that finds nothing to compact.
++
++## Invariants
++
++- **Exit-code parity:** `exit_codes` only gates whether the filter runs vs. raw
++  passthrough; vtk always returns the child's own exit code.
++- **Failures emit raw:** default `exit_codes = [0]` keeps error output verbatim.
++- **Fixtures required:** every filter ships `[[tests.<name>]]` cases (captured
++  real output preferred; scrub anything sensitive before committing). The test
++  harness runs them all and fails the build on any mismatch or bad regex.
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/cargo.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/cargo.toml
+new file mode 100644
+index 0000000..90024b7
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/cargo.toml
+@@ -0,0 +1,49 @@
++# cargo build/check/test/run/clippy — strip per-crate progress chatter, keep
++# warnings, errors, and the Finished summary. rtk's canonical "data not code"
++# example: a whole tool family covered by regex line-stripping, no filter class.
++#
++# exit_codes defaults to {0}: a clean build/warning run is exit 0 and gets
++# compacted; a compile error exits 101 and passes through raw (failures always
++# emit raw — Architecture.md invariant 1).
++
++name = "cargo"
++match_command = '^cargo (build|check|test|run|clippy)\b'
++
++strip_lines_matching = [
++  '^\s*(Compiling|Checking|Downloading|Downloaded|Updating|Installing|Fresh|Adding|Removing|Blocking|Locking) ',
++]
++
++[[tests.build_progress]]
++input = """
++   Compiling libc v0.2.169
++   Compiling proc-macro2 v1.0.92
++   Compiling unicode-ident v1.0.14
++    Checking myapp v0.1.0 (/home/u/myapp)
++    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.21s
++"""
++expected = """
++    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.21s
++"""
++
++[[tests.warning_kept]]
++input = """
++   Compiling myapp v0.1.0 (/home/u/myapp)
++warning: unused variable: `count`
++ --> src/main.rs:4:9
++  |
++4 |     let count = 0;
++  |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_count`
++  |
++warning: `myapp` (bin "myapp") generated 1 warning
++    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s
++"""
++expected = """
++warning: unused variable: `count`
++ --> src/main.rs:4:9
++  |
++4 |     let count = 0;
++  |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_count`
++  |
++warning: `myapp` (bin "myapp") generated 1 warning
++    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s
++"""
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/choco.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/choco.toml
+new file mode 100644
+index 0000000..92a367a
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/choco.toml
+@@ -0,0 +1,130 @@
++# choco install/upgrade/uninstall/outdated — strip the version banner,
++# download/progress spam, and validation/hash chatter; keep package results,
++# versions, warnings, and errors (#106, child of epic #47).
++#
++# Capture note: captured on choco v2.3.0 from a non-admin shell (no writable
++# choco dirs, so a real elevated install is not reproducible on the capture
++# host). `choco outdated` and `choco install jq -y --noop` are real exit-0
++# runs — the noop still performs the real package download, so the
++# `\rProgress: Downloading ... 27%..100%` redraw frames and the
++# "Downloading package from source" line are genuine bytes. Progress frames
++# are \r-separated and share one \n-line, so `^\r?Progress: ` drops the whole
++# frame sequence (same precedent as winget.toml). The elevated-install
++# transcript fixture below is constructed from choco's documented output for
++# the `Download of ... completed.` / `Hashes match.` / license-acceptance
++# patterns not reproducible non-admin.
++#
++# exit_codes defaults to {0}: a failed install/upgrade exits non-zero and
++# passes through raw (failures always emit raw — Architecture.md invariant 1).
++
++name = "choco"
++match_command = '^choco (install|upgrade|uninstall|outdated)\b'
++
++strip_lines_matching = [
++  '^Chocolatey v\d',
++  '^\r?Progress: ',
++  '^\s*Downloading ',
++  "^\\s*from 'http",
++  '^Download of .* completed\.',
++  '^Hashes match\.',
++  '^By installing, you accept licenses',
++  '^ Output is package name \| current version \| available version \| pinned\?',
++]
++
++# Real capture (trimmed rows): `choco outdated`, choco v2.3.0 (LF form here;
++# the CRLF byte-exact original is the ChocoTomlTests golden fixture).
++[[tests.outdated]]
++input = '''
++Chocolatey v2.3.0
++Outdated Packages
++ Output is package name | current version | available version | pinned?
++
++chocolatey|2.3.0|2.7.3|false
++python|3.12.3|3.14.6|false
++vcredist140|14.40.33810|14.51.36247|false
++
++Chocolatey has determined 8 package(s) are outdated.
++'''
++expected = '''
++Outdated Packages
++
++chocolatey|2.3.0|2.7.3|false
++python|3.12.3|3.14.6|false
++vcredist140|14.40.33810|14.51.36247|false
++
++Chocolatey has determined 8 package(s) are outdated.
++'''
++
++# Real capture (trimmed — the noop script dump is elided): `choco install jq
++# -y --noop`, choco v2.3.0. The Progress frames line begins with a bare \r
++# and carries \r-separated redraw frames.
++[[tests.install_noop]]
++input = """
++Chocolatey v2.3.0
++_ Chocolatey:ChocolateyInstallCommand - Noop Mode _
++Chocolatey would have used NuGet to install packages (if they are not already installed):
++jq
++Downloading package from source 'https://community.chocolatey.org/api/v2/'
++\rProgress: Downloading jq 1.8.1... 27%\rProgress: Downloading jq 1.8.1... 79%\rProgress: Downloading jq 1.8.1... 100%
++
++jq v1.8.1 [Approved] - Likely broken for FOSS users (due to download location changes)
++"""
++expected = """
++_ Chocolatey:ChocolateyInstallCommand - Noop Mode _
++Chocolatey would have used NuGet to install packages (if they are not already installed):
++jq
++
++jq v1.8.1 [Approved] - Likely broken for FOSS users (due to download location changes)
++"""
++
++# Constructed elevated-install transcript (see header note) — covers the
++# license-acceptance, download-detail, and hash-chatter patterns; results,
++# shim notice, install location, and summary are kept.
++[[tests.admin_install]]
++input = '''
++Chocolatey v2.3.0
++Installing the following packages:
++jq
++By installing, you accept licenses for the packages.
++Progress: Downloading jq 1.8.1... 100%
++
++jq v1.8.1 [Approved]
++jq package files install completed. Performing other installation steps.
++Downloading jq 64 bit
++  from 'https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-windows-amd64.exe'
++Download of jq-windows-amd64.exe (1.71 MB) completed.
++Hashes match.
++ShimGen has successfully created a shim for jq.exe
++ The install of jq was successful.
++  Software installed to 'C:\ProgramData\chocolatey\lib\jq\tools'
++
++Chocolatey installed 1/1 packages.
++ See the log for details (C:\ProgramData\chocolatey\logs\chocolatey.log).
++'''
++expected = '''
++Installing the following packages:
++jq
++
++jq v1.8.1 [Approved]
++jq package files install completed. Performing other installation steps.
++ShimGen has successfully created a shim for jq.exe
++ The install of jq was successful.
++  Software installed to 'C:\ProgramData\chocolatey\lib\jq\tools'
++
++Chocolatey installed 1/1 packages.
++ See the log for details (C:\ProgramData\chocolatey\logs\chocolatey.log).
++'''
++
++# Real capture (trimmed rows): `choco outdated --limit-output` suppresses the
++# banner and legend — nothing matches, so the output passes through unchanged.
++[[tests.limit_output_passthrough]]
++input = '''
++chocolatey|2.3.0|2.7.3|false
++python|3.12.3|3.14.6|false
++visualstudio-installer|2.0.3|2.0.7|false
++'''
++expected = '''
++chocolatey|2.3.0|2.7.3|false
++python|3.12.3|3.14.6|false
++visualstudio-installer|2.0.3|2.0.7|false
++'''
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/dotnet.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/dotnet.toml
+new file mode 100644
+index 0000000..424b0e8
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/dotnet.toml
+@@ -0,0 +1,91 @@
++# dotnet build/test — strip MSBuild restore/compile progress and the VSTest
++# banner; keep compiler/analyzer warnings, the Build succeeded summary
++# (warning/error counts + elapsed), and the Passed!/Failed! test summary line
++# verbatim. vtk's own C#/.NET dev loop, flagged by `vtk discover` (#121);
++# same "data not code" strip-def pattern as cargo.toml (#61).
++#
++# Capture note: vtk captures the child via pipes, so MSBuild uses the classic
++# console logger (no terminal-logger rendering, no ANSI). Captured lines are
++# CRLF and the pipeline splits on \n only, so each line keeps a trailing \r —
++# end-anchored patterns use \r?$. MSBuild prints warnings twice on a green
++# build (inline + again after "Build succeeded."); both copies are kept —
++# deduping needs positional context a line-strip def doesn't have, and
++# warnings are signal, not chatter.
++#
++# exit_codes defaults to {0}: compile errors and failing tests exit non-zero
++# and pass through raw (failures always emit raw — Architecture.md
++# invariant 1).
++
++name = "dotnet"
++match_command = '^dotnet (build|test)\b'
++
++strip_lines_matching = [
++  '^\s*Determining projects to restore\.\.\.\r?$',
++  '^\s*All projects are up-to-date for restore\.\r?$',
++  '^\s*Restored .+ \(in .+\)\.\r?$',
++  '^\s+\S+ -> .+\.(dll|exe)\r?$',
++  '^Test run for .+\r?$',
++  '^VSTest version .+\r?$',
++  '^Starting test execution, please wait\.\.\.\r?$',
++  '^A total of \d+ test files matched the specified pattern\.\r?$',
++  '^\s*$',
++]
++
++# Real captures from vtk's own solution (dotnet 9 SDK / VSTest 17.14.1,
++# pipe-redirected). LF form here; the CRLF byte-exact originals are the
++# DotnetTomlTests golden fixtures.
++
++[[tests.test_green]]
++input = '''
++  Determining projects to restore...
++  All projects are up-to-date for restore.
++  Vtk.Core -> C:\Claude\vtk\dotnet\Vtk.Core\bin\Debug\net9.0\Vtk.Core.dll
++  Vtk.Tests -> C:\Claude\vtk\dotnet\Vtk.Tests\bin\Debug\net9.0\Vtk.Tests.dll
++Test run for C:\Claude\vtk\dotnet\Vtk.Tests\bin\Debug\net9.0\Vtk.Tests.dll (.NETCoreApp,Version=v9.0)
++VSTest version 17.14.1 (x64)
++
++Starting test execution, please wait...
++A total of 1 test files matched the specified pattern.
++
++Passed!  - Failed:     0, Passed:    23, Skipped:     0, Total:    23, Duration: 236 ms - Vtk.Tests.dll (net9.0)
++'''
++expected = '''Passed!  - Failed:     0, Passed:    23, Skipped:     0, Total:    23, Duration: 236 ms - Vtk.Tests.dll (net9.0)'''
++
++[[tests.build_clean]]
++input = '''
++  Determining projects to restore...
++  All projects are up-to-date for restore.
++  Vtk.Core -> C:\Claude\vtk\dotnet\Vtk.Core\bin\Debug\net9.0\Vtk.Core.dll
++
++Build succeeded.
++    0 Warning(s)
++    0 Error(s)
++
++Time Elapsed 00:00:01.08
++'''
++expected = '''Build succeeded.
++    0 Warning(s)
++    0 Error(s)
++Time Elapsed 00:00:01.08'''
++
++[[tests.warnings_kept]]
++input = '''
++  Determining projects to restore...
++  Restored C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj (in 1.15 sec).
++C:\Claude\vtk\dotnet\Vtk.Tests\Runner\ProcessRunnerTests.cs(54,29): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj]
++  Vtk.Tests -> C:\Claude\vtk\dotnet\Vtk.Tests\bin\Debug\net9.0\Vtk.Tests.dll
++
++Build succeeded.
++
++C:\Claude\vtk\dotnet\Vtk.Tests\Runner\ProcessRunnerTests.cs(54,29): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj]
++    1 Warning(s)
++    0 Error(s)
++
++Time Elapsed 00:00:05.63
++'''
++expected = '''C:\Claude\vtk\dotnet\Vtk.Tests\Runner\ProcessRunnerTests.cs(54,29): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj]
++Build succeeded.
++C:\Claude\vtk\dotnet\Vtk.Tests\Runner\ProcessRunnerTests.cs(54,29): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Claude\vtk\dotnet\Vtk.Tests\Vtk.Tests.csproj]
++    1 Warning(s)
++    0 Error(s)
++Time Elapsed 00:00:05.63'''
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/gcc.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/gcc.toml
+new file mode 100644
+index 0000000..e79f37f
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/gcc.toml
+@@ -0,0 +1,88 @@
++# gcc/g++ — strip include-chain preambles, blank/bare-pipe spacer lines, and
++# clang-style "N warnings/errors generated" summaries; keep every diagnostic
++# (warning/error/note lines, source excerpts, carets). Ported from rtk's
++# gcc.toml (rtk-ai/rtk, issue #41) with one fix: rtk's match pattern
++# `^g(cc|\+\+)\b` can never match `g++` (no word boundary between `+` and a
++# space), so the alternation is anchored on a space/end instead.
++#
++# exit_codes defaults to {0}: a warning-laden build still exits 0 and gets
++# compacted; a compile/link error exits 1 and passes through raw (failures
++# always emit raw — Architecture.md invariant 1, cargo.toml precedent).
++
++name = "gcc"
++match_command = '^(gcc|g\+\+)( |$)'
++strip_ansi = true
++
++strip_lines_matching = [
++  '^\s*$',
++  '^\s+\|\s*$',
++  '^In file included from ',
++  '^\s+from ',
++  '^\d+ warnings? generated',
++  '^\d+ errors? generated',
++]
++
++max_lines = 50
++on_empty = "gcc: ok"
++
++# Real capture: `gcc -Wall -Wextra -c app.c` with a three-deep unused-helper
++# include chain, gcc (MinGW-W64) 16.1.0 output redirected — the same pipe
++# capture vtk uses. The byte-exact original is the LongTailTomlTests golden
++# fixture (testdata/longtail/gcc.*).
++[[tests.warning_include_chain]]
++input = """
++app.c: In function 'main':
++app.c:5:9: warning: unused variable 'count' [-Wunused-variable]
++    5 |     int count = 0;
++      |         ^~~~~
++In file included from app.c:2:
++util2.h: At top level:
++util2.h:4:12: warning: 'unused_helper' defined but not used [-Wunused-function]
++    4 | static int unused_helper(void) { return 42; }
++      |            ^~~~~~~~~~~~~
++In file included from util2.h:3:
++mid.h:4:12: warning: 'mid_helper' defined but not used [-Wunused-function]
++    4 | static int mid_helper(void) { return 2; }
++      |            ^~~~~~~~~~
++In file included from mid.h:3:
++deep.h:3:12: warning: 'deep_helper' defined but not used [-Wunused-function]
++    3 | static int deep_helper(void) { return 1; }
++      |            ^~~~~~~~~~~
++"""
++expected = """
++app.c: In function 'main':
++app.c:5:9: warning: unused variable 'count' [-Wunused-variable]
++    5 |     int count = 0;
++      |         ^~~~~
++util2.h: At top level:
++util2.h:4:12: warning: 'unused_helper' defined but not used [-Wunused-function]
++    4 | static int unused_helper(void) { return 42; }
++      |            ^~~~~~~~~~~~~
++mid.h:4:12: warning: 'mid_helper' defined but not used [-Wunused-function]
++    4 | static int mid_helper(void) { return 2; }
++      |            ^~~~~~~~~~
++deep.h:3:12: warning: 'deep_helper' defined but not used [-Wunused-function]
++    3 | static int deep_helper(void) { return 1; }
++      |            ^~~~~~~~~~~"""
++
++# Adapted from rtk's clang-style fixture: multi-line include chain
++# (continuation "from" lines) and trailing warning-count summary stripped.
++[[tests.clang_chain_and_summary]]
++input = """
++In file included from /usr/include/stdio.h:42:
++                 from main.c:1:
++main.c:15:12: warning: unused variable 'x' [-Wunused-variable]
++    int x = 42;
++        ^
++2 warnings generated.
++"""
++expected = """
++main.c:15:12: warning: unused variable 'x' [-Wunused-variable]
++    int x = 42;
++        ^"""
++
++# A clean compile writes nothing; the on_empty marker says so explicitly
++# (rtk's fixture).
++[[tests.clean_compile]]
++input = ""
++expected = "gcc: ok"
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/hadolint.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/hadolint.toml
+new file mode 100644
+index 0000000..37216f7
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/hadolint.toml
+@@ -0,0 +1,38 @@
++# hadolint — strip blank spacer lines and cap pathological line lengths;
++# keep every Dockerfile finding verbatim. Ported from rtk's hadolint.toml
++# (rtk-ai/rtk, issue #41).
++#
++# exit_codes {0, 1}: hadolint reports rule violations via exit 1 — a report,
++# not a failure (eslint/mocha precedent, decision #7), so that output is
++# exactly what to compact. Other exits (unreadable Dockerfile, bad usage)
++# stay raw. Exit-code parity is untouched either way.
++
++name = "hadolint"
++match_command = '^hadolint\b'
++exit_codes = [0, 1]
++strip_ansi = true
++
++strip_lines_matching = [
++  '^\s*$',
++]
++
++truncate_lines_at = 120
++max_lines = 40
++
++# rtk's fixture.
++[[tests.findings]]
++input = """
++Dockerfile:3 DL3008 warning: Pin versions in apt-get install
++Dockerfile:5 DL3009 info: Delete apt-get lists after installing
++
++Dockerfile:8 DL4006 warning: Set SHELL option -o pipefail before RUN with pipe
++"""
++expected = """
++Dockerfile:3 DL3008 warning: Pin versions in apt-get install
++Dockerfile:5 DL3009 info: Delete apt-get lists after installing
++Dockerfile:8 DL4006 warning: Set SHELL option -o pipefail before RUN with pipe"""
++
++# rtk's clean-run fixture.
++[[tests.clean_passthrough]]
++input = ""
++expected = ""
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/make.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/make.toml
+new file mode 100644
+index 0000000..6b5090f
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/make.toml
+@@ -0,0 +1,75 @@
++# make — strip recursive-make bookkeeping (Entering/Leaving directory,
++# numbered sub-make chatter, "Nothing to be done") and blank lines; keep
++# recipe echoes and every compiler/tool diagnostic. Ported from rtk's
++# make.toml (rtk-ai/rtk, issue #41) with the patterns corrected against a
++# real GNU make capture: chatter lines are always prefixed `make:` or
++# `make[N]:` (rtk's bare `^Nothing to be done` never matches real output),
++# and top-level `make -C` prints unnumbered Entering/Leaving lines. On
++# Windows, vtk resolves the child via PATHEXT and spawns `make.EXE`, and GNU
++# make strips only a lowercase `.exe` from its program name — so chatter
++# arrives prefixed `make.EXE[N]:`; each prefixed pattern tolerates an
++# optional case-insensitive `.exe` (#41 verify bounce, 2026-08-10).
++#
++# exit_codes defaults to {0}: a failed recipe exits 2 and passes through raw
++# (failures always emit raw — Architecture.md invariant 1). `make[N]: ***`
++# error lines only occur on those nonzero exits, so stripping by the
++# `make[N]:` prefix never touches a displayed failure.
++
++name = "make"
++match_command = '^make\b'
++
++strip_lines_matching = [
++  '^make((?i:\.exe))?(\[\d+\])?: (Entering|Leaving) directory ',
++  '^make((?i:\.exe))?\[\d+\]:',
++  '^make((?i:\.exe))?: Nothing to be done for',
++  '^\s*$',
++]
++
++max_lines = 50
++on_empty = "make: ok"
++
++# Adapted from rtk's fixture; the real recursive-make capture (mingw32-make
++# 4.x, `mingw32-` prefix and host paths scrubbed) is the LongTailTomlTests
++# golden fixture (testdata/longtail/make.*).
++[[tests.submake_chatter]]
++input = """
++make[1]: Entering directory '/home/user/proj'
++gcc -O2 -c foo.c -o foo.o
++make[1]: Leaving directory '/home/user/proj'
++"""
++expected = """
++gcc -O2 -c foo.c -o foo.o"""
++
++# Top-level `make -C` chatter is unnumbered; a run that was all bookkeeping
++# collapses to the on_empty marker.
++[[tests.nothing_to_do]]
++input = """
++make: Entering directory '/home/user/proj/sub'
++make: Nothing to be done for 'all'.
++make: Leaving directory '/home/user/proj/sub'
++"""
++expected = "make: ok"
++
++# Unscrubbed vtk-wrapped Windows shape: PATHEXT resolution spawns `make.EXE`,
++# so chatter is prefixed `make.EXE[N]:`/`make.EXE:` (regression pin for the
++# #41 verify bounce — the scrubbed golden capture masked this).
++[[tests.windows_exe_prefix]]
++input = """
++make.EXE[1]: Entering directory 'C:/work/proj/sub'
++gcc -Wall -c main.c -o main.o
++make.EXE[1]: Leaving directory 'C:/work/proj/sub'
++make.EXE: Nothing to be done for 'all'.
++"""
++expected = """
++gcc -Wall -c main.c -o main.o"""
++
++# rtk's blank-line fixture.
++[[tests.blank_lines]]
++input = """
++gcc -O2 foo.c
++
++gcc -O2 bar.c
++"""
++expected = """
++gcc -O2 foo.c
++gcc -O2 bar.c"""
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/shellcheck.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/shellcheck.toml
+new file mode 100644
+index 0000000..0787ed9
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/shellcheck.toml
+@@ -0,0 +1,44 @@
++# shellcheck — strip the blank spacer lines between findings; keep every
++# finding verbatim (source excerpt + caret + SC code). Ported from rtk's
++# shellcheck.toml (rtk-ai/rtk, issue #41).
++#
++# exit_codes {0, 1}: shellcheck reports "issues found" via exit 1 — a report,
++# not a failure, so that output is exactly what to compact (eslint/mocha
++# precedent, decision #7). Exit 2+ (unprocessable files, bad invocation)
++# stays raw. Exit-code parity is untouched either way.
++
++name = "shellcheck"
++match_command = '^shellcheck\b'
++exit_codes = [0, 1]
++strip_ansi = true
++
++strip_lines_matching = [
++  '^\s*$',
++]
++
++max_lines = 50
++
++# rtk's multi-warning fixture.
++[[tests.findings]]
++input = """
++In script.sh line 3:
++if [[ $1 == "" ]]
++     ^-- SC2236: Use -z instead of ! -n.
++
++In script.sh line 7:
++echo $var
++     ^-- SC2086: Double quote to prevent globbing.
++
++"""
++expected = """
++In script.sh line 3:
++if [[ $1 == "" ]]
++     ^-- SC2236: Use -z instead of ! -n.
++In script.sh line 7:
++echo $var
++     ^-- SC2086: Double quote to prevent globbing."""
++
++# rtk's clean-run fixture: no findings, nothing printed, nothing invented.
++[[tests.clean_passthrough]]
++input = ""
++expected = ""
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/terraform-plan.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/terraform-plan.toml
+new file mode 100644
+index 0000000..157d743
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/terraform-plan.toml
+@@ -0,0 +1,68 @@
++# terraform plan — strip state-refresh chatter, state-lock notices,
++# unchanged-resource comments, and blank lines; keep the action list, change
++# details, and the Plan:/No changes summary. Ported from rtk's
++# terraform-plan.toml (rtk-ai/rtk, issue #41) with one addition: modern
++# terraform (0.14+) prefixes refresh lines with the resource address
++# ("aws_vpc.main: Refreshing state... [id=...]"), which rtk's line-start
++# pattern misses; both forms are stripped.
++#
++# exit_codes defaults to {0}: a failed plan exits 1 and passes through raw
++# (failures always emit raw — Architecture.md invariant 1). The
++# `-detailed-exitcode` form's exit 2 ("changes present") is left raw too
++# until gap-log evidence justifies adding it.
++
++name = "terraform-plan"
++match_command = '^terraform plan\b'
++strip_ansi = true
++
++strip_lines_matching = [
++  '^Refreshing state',
++  '^\S+: Refreshing state\.\.\.',
++  '^\s*#.*unchanged',
++  '^\s*$',
++  '^Acquiring state lock',
++  '^Releasing state lock',
++]
++
++max_lines = 80
++on_empty = "terraform plan: no changes detected"
++
++# Adapted from rtk's fixture, extended to the modern resource-prefixed
++# refresh format.
++[[tests.plan_with_changes]]
++input = """
++Acquiring state lock. This may take a few moments...
++aws_vpc.main: Refreshing state... [id=vpc-0a1b2c3d]
++aws_subnet.public[0]: Refreshing state... [id=subnet-1111]
++aws_subnet.public[1]: Refreshing state... [id=subnet-2222]
++aws_security_group.web: Refreshing state... [id=sg-0f9e8d7c]
++aws_instance.web: Refreshing state... [id=i-0123456789abcdef0]
++Releasing state lock. This may take a few moments...
++
++Terraform will perform the following actions:
++
++  # aws_instance.web will be updated in-place
++  ~ resource "aws_instance" "web" {
++        id            = "i-0123456789abcdef0"
++      ~ instance_type = "t3.micro" -> "t3.small"
++    }
++
++Plan: 0 to add, 1 to change, 0 to destroy.
++"""
++expected = """
++Terraform will perform the following actions:
++  # aws_instance.web will be updated in-place
++  ~ resource "aws_instance" "web" {
++        id            = "i-0123456789abcdef0"
++      ~ instance_type = "t3.micro" -> "t3.small"
++    }
++Plan: 0 to add, 1 to change, 0 to destroy."""
++
++# rtk's no-changes fixture (old line-start refresh format).
++[[tests.no_changes]]
++input = """
++Refreshing state... [id=vpc-abc]
++No changes. Your infrastructure matches the configuration.
++"""
++expected = """
++No changes. Your infrastructure matches the configuration."""
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/winget.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/winget.toml
+new file mode 100644
+index 0000000..1ee6732
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/winget.toml
+@@ -0,0 +1,84 @@
++# winget install/upgrade/uninstall/download — strip license-agreement
++# boilerplate, download/verification chatter, and progress-bar/spinner frames;
++# keep "Found <pkg> Version <v>", result lines (Successfully installed /
++# uninstalled, alias + PATH notices), upgrade tables, and everything else
++# (#105, child of epic #47).
++#
++# Capture note: winget v1.29 suppresses spinner/progress rendering when stdout
++# is redirected (vtk captures the child via pipes), so real captures are
++# boilerplate + result lines. The bar/backspace patterns are kept for older
++# winget versions that spill `█▒` frames and backspace spinners into
++# redirected output; \r-separated redraw frames share one \n-line, so a
++# per-line match drops the whole frame sequence.
++#
++# exit_codes defaults to {0}: a failed install/upgrade exits non-zero and
++# passes through raw (failures always emit raw — Architecture.md invariant 1).
++
++name = "winget"
++match_command = '^winget (install|upgrade|uninstall|download)\b'
++
++strip_lines_matching = [
++  '^This application is licensed to you by its owner\.',
++  '^Microsoft is not responsible for, nor does it grant any licenses to, third-party packages\.',
++  '^\s*Downloading ',
++  '^Successfully verified installer hash',
++  '^Starting package (install|uninstall)\.\.\.',
++  '[█▒]',
++  '\x08',
++]
++
++# Real capture: `winget install --id jqlang.jq`, winget v1.29.280 (LF form
++# here; the CRLF byte-exact original is the WingetTomlTests golden fixture).
++[[tests.install]]
++input = """
++Found jq [jqlang.jq] Version 1.8.2
++This application is licensed to you by its owner.
++Microsoft is not responsible for, nor does it grant any licenses to, third-party packages.
++Downloading https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-windows-amd64.exe
++Successfully verified installer hash
++Starting package install...
++Path environment variable modified; restart your shell to use the new value.
++Command line alias added: "jq"
++Successfully installed
++"""
++expected = """
++Found jq [jqlang.jq] Version 1.8.2
++Path environment variable modified; restart your shell to use the new value.
++Command line alias added: "jq"
++Successfully installed
++"""
++
++# Real capture (trimmed rows): `winget upgrade --include-unknown` — a listing
++# has nothing to strip and must pass through unchanged.
++[[tests.upgrade_table_passthrough]]
++input = """
++Name              Id                 Version Available Source
++-------------------------------------------------------------
++Git               Git.Git            2.45.2  2.55.0.3  winget
++GitHub CLI        GitHub.cli         2.86.0  2.96.0    winget
++Python Launcher   Python.Launcher    3.12.3  3.13.5    winget
++28 upgrades available.
++"""
++expected = """
++Name              Id                 Version Available Source
++-------------------------------------------------------------
++Git               Git.Git            2.45.2  2.55.0.3  winget
++GitHub CLI        GitHub.cli         2.86.0  2.96.0    winget
++Python Launcher   Python.Launcher    3.12.3  3.13.5    winget
++28 upgrades available.
++"""
++
++# Regression case for the defensive progress patterns — constructed from
++# winget's known bar/spinner rendering (not observed in v1.29 redirected
++# captures; see header note).
++[[tests.progress_spam]]
++input = """
++Found jq [jqlang.jq] Version 1.8.2
++  -\b\\\b|\b/\b
++  ██████████████████████████████  5.00 MB / 5.00 MB
++Successfully installed
++"""
++expected = """
++Found jq [jqlang.jq] Version 1.8.2
++Successfully installed
++"""
+diff --git a/dotnet/Vtk.Core/Filter/Toml/Defs/yamllint.toml b/dotnet/Vtk.Core/Filter/Toml/Defs/yamllint.toml
+new file mode 100644
+index 0000000..7127a5d
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/Defs/yamllint.toml
+@@ -0,0 +1,49 @@
++# yamllint — strip the blank spacer lines between per-file sections and cap
++# pathological line lengths; keep every finding row verbatim. Ported from
++# rtk's yamllint.toml (rtk-ai/rtk, issue #41).
++#
++# exit_codes {0, 1, 2}: yamllint's documented return codes are 0 (clean or
++# warnings), 1 (errors found), and 2 (warnings found, only under --strict) —
++# 1 and 2 are findings reports, not tool failures (eslint/mocha precedent,
++# decision #7), so their output is exactly what to compact. Any other exit
++# stays raw; exit-code parity is untouched either way.
++
++name = "yamllint"
++match_command = '^yamllint\b'
++exit_codes = [0, 1, 2]
++strip_ansi = true
++
++strip_lines_matching = [
++  '^\s*$',
++]
++
++max_lines = 50
++truncate_lines_at = 120
++
++# Adapted from rtk's fixture, extended to the multi-file layout (yamllint
++# separates per-file sections with a blank line).
++[[tests.findings]]
++input = """
++config.yml
++  3:1     warning  missing document start "---"  (document-start)
++  5:12    error    too many spaces inside braces  (braces)
++
++  8:1     error    wrong indentation: expected 2 but found 4  (indentation)
++
++deploy.yml
++  1:1     warning  missing document start "---"  (document-start)
++  12:81   error    line too long (92 > 80 characters)  (line-length)
++"""
++expected = """
++config.yml
++  3:1     warning  missing document start "---"  (document-start)
++  5:12    error    too many spaces inside braces  (braces)
++  8:1     error    wrong indentation: expected 2 but found 4  (indentation)
++deploy.yml
++  1:1     warning  missing document start "---"  (document-start)
++  12:81   error    line too long (92 > 80 characters)  (line-length)"""
++
++# rtk's clean-run fixture.
++[[tests.clean_passthrough]]
++input = ""
++expected = ""
+diff --git a/dotnet/Vtk.Core/Filter/Toml/TomlFilter.cs b/dotnet/Vtk.Core/Filter/Toml/TomlFilter.cs
+new file mode 100644
+index 0000000..a812722
+--- /dev/null
++++ b/dotnet/Vtk.Core/Filter/Toml/TomlFilter.cs
+@@ -0,0 +1,420 @@
++// Declarative TOML filter definitions compiled into pure filter functions
++// (raw captured output in, compact output out — the same contract as the
++// hand-written C# filter families). Most tools only need to drop
++// progress/noise lines and cap length; expressing that as ~20 lines of TOML
++// with inline fixtures — instead of a bespoke filter class per tool — is the
++// enabler for long-tail coverage (issue #40, ported from Go per #61).
++//
++// A compiled filter is a plain FilterFunc; this file never references the
++// filter registry (the registry consumes Load()) and never spawns processes
++// or touches the filesystem beyond the build-time embed
++// (docs/Architecture.md invariant 4). Definitions live in Defs/*.toml and
++// are embedded at build; Load parses, validates, and compiles them.
++using System.Text.RegularExpressions;
++using Tomlyn.Model;
++
++namespace Vtk.Core.Filter.Toml;
++
++/// <summary>A regex substitution applied across the whole output.</summary>
++public sealed record ReplaceRule(string Pattern, string Replacement);
++
++/// <summary>Collapses the entire output to Message when Pattern matches anywhere in it (rtk's match_output).</summary>
++public sealed record ShortCircuit(string Pattern, string Message);
++
++/// <summary>One inline test case: raw Input in, expected compact Expected out.</summary>
++public sealed record Fixture(string Input, string Expected);
++
++/// <summary>
++/// The parsed TOML filter definition (rtk's schema, verified against the
++/// issue #40 field table). Zero-value fields are inert, so a minimal filter
++/// is just name + match_command + one line operation.
++/// </summary>
++public sealed class Spec
++{
++    public string Name { get; set; } = "";
++    public string MatchCommand { get; set; } = "";
++    public List<int> ExitCodesList { get; set; } = new();
++
++    public bool StripAnsi { get; set; }
++    public bool FilterStderr { get; set; }
++
++    public List<string> StripLinesMatching { get; set; } = new();
++    public List<string> KeepLinesMatching { get; set; } = new();
++
++    public List<ReplaceRule> Replace { get; set; } = new();
++    public List<ShortCircuit> MatchOutput { get; set; } = new();
++
++    public int TruncateLinesAt { get; set; }
++    public int MaxLines { get; set; }
++    public string OnEmpty { get; set; } = "";
++
++    public Dictionary<string, List<Fixture>> Tests { get; set; } = new();
++
++    /// <summary>
++    /// Reports whether the Spec is well-formed and buildable, throwing
++    /// otherwise. It rejects definitions that cannot be honored faithfully
++    /// rather than degrading them silently — a silent semantic change would
++    /// violate the wrapper's transparency contract.
++    /// </summary>
++    public void Validate()
++    {
++        if (string.IsNullOrWhiteSpace(Name))
++            throw new FormatException("name is required");
++        if (string.IsNullOrWhiteSpace(MatchCommand))
++            throw new FormatException($"{Name}: match_command is required");
++        if (FilterStderr)
++        {
++            // By the time a FilterFunc runs, the runner has already merged the
++            // child's stdout and stderr into one string (Vtk.Cli/App.cs), so
++            // the stream a FilterFunc sees is undivided and stderr cannot be
++            // dropped here. Honoring filter_stderr needs runner-side stream
++            // separation; until that lands, reject it rather than pretend to
++            // apply it (issue #40).
++            throw new FormatException($"{Name}: filter_stderr is not supported yet (needs runner stream separation; see issue #40)");
++        }
++        if (TruncateLinesAt < 0)
++            throw new FormatException($"{Name}: truncate_lines_at must be >= 0");
++        if (MaxLines < 0)
++            throw new FormatException($"{Name}: max_lines must be >= 0");
++        CompilePipeline(); // surfaces a bad regex as a build/test-time error
++    }
++
++    /// <summary>
++    /// Validates the Spec and returns a Compiled filter. The returned Fn is a
++    /// pure function; matching noise is elided per the pipeline and, if
++    /// nothing is elided, the input is returned unchanged so the caller
++    /// passes it through raw.
++    /// </summary>
++    public Compiled Compile()
++    {
++        Validate();
++        Regex match;
++        try
++        {
++            match = new Regex(MatchCommand);
++        }
++        catch (ArgumentException ex)
++        {
++            throw new FormatException($"{Name}: match_command \"{MatchCommand}\": {ex.Message}");
++        }
++        var c = CompilePipeline();
++        return new Compiled
++        {
++            Name = Name,
++            Match = match,
++            Fn = MakeFn(c),
++            ExitCodes = ExitCodes(),
++        };
++    }
++
++    /// <summary>The child exit codes this filter may run on, defaulting to {0} (clean run only), matching Register's default in the filter registry.</summary>
++    internal int[] ExitCodes() => ExitCodesList.Count == 0 ? new[] { 0 } : ExitCodesList.ToArray();
++
++    /// <summary>Pre-built regexes for one Spec's pipeline.</summary>
++    private sealed class Pipeline
++    {
++        public List<Regex> StripLines = new();
++        public List<Regex> KeepLines = new();
++        public List<(Regex Re, string With)> Replace = new();
++        public List<(Regex Re, string Msg)> MatchOutput = new();
++    }
++
++    /// <summary>Pre-builds every regex in the pipeline, surfacing a bad pattern as a build/test-time error instead of a runtime exception.</summary>
++    private Pipeline CompilePipeline()
++    {
++        var c = new Pipeline();
++        List<Regex> Build(List<string> pats, string field)
++        {
++            var outList = new List<Regex>(pats.Count);
++            foreach (var p in pats)
++            {
++                try { outList.Add(new Regex(p)); }
++                catch (ArgumentException ex) { throw new FormatException($"{Name}: {field} \"{p}\": {ex.Message}"); }
++            }
++            return outList;
++        }
++        c.StripLines = Build(StripLinesMatching, "strip_lines_matching");
++        c.KeepLines = Build(KeepLinesMatching, "keep_lines_matching");
++        foreach (var r in Replace)
++        {
++            try { c.Replace.Add((new Regex(r.Pattern), r.Replacement)); }
++            catch (ArgumentException ex) { throw new FormatException($"{Name}: replace \"{r.Pattern}\": {ex.Message}"); }
++        }
++        foreach (var m in MatchOutput)
++        {
++            try { c.MatchOutput.Add((new Regex(m.Pattern), m.Message)); }
++            catch (ArgumentException ex) { throw new FormatException($"{Name}: match_output \"{m.Pattern}\": {ex.Message}"); }
++        }
++        return c;
++    }
++
++    // Matches CSI/SGR escape sequences (colors, cursor moves) so strip_ansi
++    // can drop terminal styling before line matching.
++    private static readonly Regex AnsiRe = new("\x1b\\[[0-9;?]*[ -/]*[@-~]", RegexOptions.Compiled);
++
++    /// <summary>
++    /// Builds the display pipeline closure. Order: strip_ansi →
++    /// match_output short-circuit → keep_lines → strip_lines → replace →
++    /// truncate_lines_at → max_lines → on_empty.
++    /// </summary>
++    private FilterFunc MakeFn(Pipeline c)
++    {
++        return raw =>
++        {
++            var output = raw;
++            if (StripAnsi)
++            {
++                output = AnsiRe.Replace(output, "");
++            }
++
++            // Short-circuit: if any match_output pattern hits, the whole
++            // output collapses to its message.
++            foreach (var (re, msg) in c.MatchOutput)
++            {
++                if (re.IsMatch(output)) return msg;
++            }
++
++            if (c.KeepLines.Count > 0 || c.StripLines.Count > 0)
++            {
++                var lines = output.Split('\n');
++                var kept = new List<string>(lines.Length);
++                foreach (var ln in lines)
++                {
++                    if (c.KeepLines.Count > 0 && !AnyMatch(c.KeepLines, ln)) continue;
++                    if (AnyMatch(c.StripLines, ln)) continue;
++                    kept.Add(ln);
++                }
++                output = string.Join('\n', kept);
++            }
++
++            foreach (var (re, with) in c.Replace)
++            {
++                output = re.Replace(output, with);
++            }
++
++            if (TruncateLinesAt > 0)
++            {
++                var lines = output.Split('\n');
++                for (var i = 0; i < lines.Length; i++)
++                {
++                    if (lines[i].Length > TruncateLinesAt)
++                        lines[i] = lines[i][..TruncateLinesAt] + "...";
++                }
++                output = string.Join('\n', lines);
++            }
++
++            if (MaxLines > 0)
++            {
++                var lines = output.Split('\n');
++                if (lines.Length > MaxLines)
++                {
++                    var more = lines.Length - MaxLines;
++                    output = string.Join('\n', lines[..MaxLines]) + $"\n... ({more} more lines)";
++                }
++            }
++
++            if (OnEmpty != "" && string.IsNullOrWhiteSpace(output))
++            {
++                return OnEmpty;
++            }
++            return output;
++        };
++    }
++
++    private static bool AnyMatch(List<Regex> res, string s)
++    {
++        foreach (var re in res)
++        {
++            if (re.IsMatch(s)) return true;
++        }
++        return false;
++    }
++}
++
++/// <summary>A validated, ready-to-run TOML filter: its match regex, the display filter, and the child exit codes it may run on.</summary>
++public sealed class Compiled
++{
++    public required string Name { get; init; }
++    public required Regex Match { get; init; }
++    public required FilterFunc Fn { get; init; }
++    public required int[] ExitCodes { get; init; }
++}
++
++public static class TomlFilter
++{
++    /// <summary>
++    /// Decodes a single TOML filter definition. It is strict: unknown keys
++    /// are rejected so a typo in a filter file fails loudly at build/test
++    /// time rather than silently disabling an operation. Key mapping is done
++    /// by hand over Tomlyn's generic model so strictness is enforced by this
++    /// code, not by library binding behavior.
++    /// </summary>
++    public static Spec Parse(string data)
++    {
++        var table = Tomlyn.Toml.ToModel(data); // throws TomlException on bad syntax
++        var s = new Spec();
++        var unknown = new List<string>();
++        foreach (var (key, value) in table)
++        {
++            switch (key)
++            {
++                case "name": s.Name = AsString(key, value); break;
++                case "match_command": s.MatchCommand = AsString(key, value); break;
++                case "exit_codes": s.ExitCodesList = AsIntList(key, value); break;
++                case "strip_ansi": s.StripAnsi = AsBool(key, value); break;
++                case "filter_stderr": s.FilterStderr = AsBool(key, value); break;
++                case "strip_lines_matching": s.StripLinesMatching = AsStringList(key, value); break;
++                case "keep_lines_matching": s.KeepLinesMatching = AsStringList(key, value); break;
++                case "replace":
++                    s.Replace = AsTableList(key, value, t => new ReplaceRule(
++                        TableString(t, "replace", "pattern"), TableString(t, "replace", "replacement")));
++                    break;
++                case "match_output":
++                    s.MatchOutput = AsTableList(key, value, t => new ShortCircuit(
++                        TableString(t, "match_output", "pattern"), TableString(t, "match_output", "message")));
++                    break;
++                case "truncate_lines_at": s.TruncateLinesAt = AsInt(key, value); break;
++                case "max_lines": s.MaxLines = AsInt(key, value); break;
++                case "on_empty": s.OnEmpty = AsString(key, value); break;
++                case "tests": s.Tests = ParseTests(value); break;
++                default: unknown.Add(key); break;
++            }
++        }
++        if (unknown.Count > 0)
++            throw new FormatException($"unknown key(s): {string.Join(", ", unknown)}");
++        return s;
++    }
++
++    private static Dictionary<string, List<Fixture>> ParseTests(object value)
++    {
++        if (value is not TomlTable tests)
++            throw new FormatException("tests: expected a table of [[tests.<name>]] arrays");
++        var result = new Dictionary<string, List<Fixture>>();
++        foreach (var (group, groupValue) in tests)
++        {
++            if (groupValue is not TomlTableArray fixtures)
++                throw new FormatException($"tests.{group}: expected an array of tables");
++            var list = new List<Fixture>(fixtures.Count);
++            foreach (var fx in fixtures)
++            {
++                list.Add(new Fixture(
++                    TableString(fx, $"tests.{group}", "input"),
++                    TableString(fx, $"tests.{group}", "expected")));
++            }
++            result[group] = list;
++        }
++        return result;
++    }
++
++    private static string AsString(string key, object value) =>
++        value as string ?? throw new FormatException($"{key}: expected a string");
++
++    private static bool AsBool(string key, object value) =>
++        value is bool b ? b : throw new FormatException($"{key}: expected a bool");
++
++    private static int AsInt(string key, object value) =>
++        value is long l ? checked((int)l) : throw new FormatException($"{key}: expected an integer");
++
++    private static List<string> AsStringList(string key, object value)
++    {
++        if (value is not TomlArray arr)
++            throw new FormatException($"{key}: expected an array of strings");
++        var list = new List<string>(arr.Count);
++        foreach (var item in arr)
++            list.Add(item as string ?? throw new FormatException($"{key}: expected an array of strings"));
++        return list;
++    }
++
++    private static List<int> AsIntList(string key, object value)
++    {
++        if (value is not TomlArray arr)
++            throw new FormatException($"{key}: expected an array of integers");
++        var list = new List<int>(arr.Count);
++        foreach (var item in arr)
++        {
++            if (item is not long l) throw new FormatException($"{key}: expected an array of integers");
++            list.Add(checked((int)l));
++        }
++        return list;
++    }
++
++    private static List<T> AsTableList<T>(string key, object value, Func<TomlTable, T> map)
++    {
++        if (value is not TomlTableArray arr)
++            throw new FormatException($"{key}: expected an array of tables ([[{key}]])");
++        var list = new List<T>(arr.Count);
++        foreach (var t in arr) list.Add(map(t));
++        return list;
++    }
++
++    private static string TableString(TomlTable t, string ctx, string key) =>
++        t.TryGetValue(key, out var v) && v is string s
++            ? s
++            : throw new FormatException($"{ctx}: missing or non-string \"{key}\"");
++
++    private const string ResourcePrefix = "Vtk.Core.Filter.Toml.Defs.";
++
++    private static IEnumerable<(string File, string Data)> EmbeddedDefs()
++    {
++        var asm = typeof(TomlFilter).Assembly;
++        var names = asm.GetManifestResourceNames()
++            .Where(n => n.StartsWith(ResourcePrefix, StringComparison.Ordinal)
++                     && n.EndsWith(".toml", StringComparison.Ordinal))
++            .OrderBy(n => n, StringComparer.Ordinal);
++        foreach (var name in names)
++        {
++            using var stream = asm.GetManifestResourceStream(name)
++                ?? throw new InvalidOperationException($"{name}: missing embedded resource");
++            using var reader = new StreamReader(stream);
++            yield return (name[ResourcePrefix.Length..], reader.ReadToEnd());
++        }
++    }
++
++    /// <summary>
++    /// Parses, validates, and compiles every embedded filter definition,
++    /// returning them sorted by resource name for deterministic registration
++    /// order. Any bad definition is a hard error — a broken filter file must
++    /// fail the build/tests, not ship disabled.
++    /// </summary>
++    public static List<Compiled> Load()
++    {
++        var result = new List<Compiled>();
++        foreach (var (file, data) in EmbeddedDefs())
++        {
++            try
++            {
++                result.Add(Parse(data).Compile());
++            }
++            catch (Exception ex)
++            {
++                throw new FormatException($"{file}: {ex.Message}", ex);
++            }
++        }
++        return result;
++    }
++
++    /// <summary>
++    /// Parses and validates every embedded definition, returning the raw
++    /// Specs (with their inline fixtures) keyed by file name so a test
++    /// harness can exercise each filter's declared cases. Compilation errors
++    /// surface here too.
++    /// </summary>
++    public static Dictionary<string, Spec> Specs()
++    {
++        var result = new Dictionary<string, Spec>();
++        foreach (var (file, data) in EmbeddedDefs())
++        {
++            try
++            {
++                var spec = Parse(data);
++                spec.Validate();
++                result[file] = spec;
++            }
++            catch (Exception ex)
++            {
++                throw new FormatException($"{file}: {ex.Message}", ex);
++            }
++        }
++        return result;
++    }
++}
