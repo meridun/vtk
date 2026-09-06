@@ -64,5 +64,11 @@ raw bytes emitted — the top of that list is the next filter to write. Covered-
 invocations (tty-bypass, nonzero-exit, filter-panic, spool-fail) are excluded, as are
 spawn-fail entries — a child that never started (unresolvable command, self-flag typo) is
 logged but is not a coverage gap, so junk argv never ranks a family; panicking filters
-surface separately in the DEGRADED section. This table
+surface separately in the DEGRADED section. Families are keyed `argv[0] argv[1]` for commands
+that own a registered pair key (`git`, `gh`, `npx`, `dbmate`), after normalizing known git global
+options (`-C <dir>`, `-c k=v`, `--no-pager`, `--git-dir`), and `argv[0]` otherwise — so a
+multiplexer names its actual missing subcommand (`git rev-parse`, `gh api`) rather than one
+undifferentiated family; `--file-issues` reports a family that already resolves in the registry
+as a *dispatch gap* line instead of proposing a `Filter:` issue, and dedupes open `Filter:` titles
+at the same grain (`vtk gain` keeps the `argv[0]` grain). This table
 should be re-prioritized from real gap data once vtk is in daily use.

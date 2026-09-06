@@ -137,6 +137,43 @@ public class StoreTests : IDisposable
         Assert.Equal(150, ls.RawBytes);
     }
 
+    /// <summary>
+    /// #139: the family key is the caller's function over the redacted
+    /// command line — `vtk gaps` passes a pair-aware key so git's unfiltered
+    /// subcommands aggregate apart, while the default stays the first token.
+    /// The window and the non-gap exclusions are unchanged by the key.
+    /// </summary>
+    [Fact]
+    public void Gaps_UsesCallerFamilyKey_DefaultStaysFirstToken()
+    {
+        static string PairKey(string cmd)
+        {
+            var argv = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return argv[0] == "git" && argv.Length >= 2 ? argv[0] + " " + argv[1] : argv[0];
+        }
+        var now = DateTime.UtcNow;
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse HEAD", RawBytes = 100, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse --show-toplevel", RawBytes = 100, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git fetch origin", RawBytes = 50, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git status", RawBytes = 999, Filtered = true });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git worktree list", RawBytes = 999, Reason = Store.ReasonNonzeroExit });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "ls -la", RawBytes = 10, Reason = Store.ReasonNoFilter });
+
+        var byPair = _store.Gaps(null, PairKey);
+        Assert.Equal(
+            new[] { ("git rev-parse", 2, 200L), ("git fetch", 1, 50L), ("ls", 1, 10L) },
+            byPair.Select(g => (g.Family, g.Calls, g.RawBytes)));
+
+        var byFirst = _store.Gaps();
+        Assert.Equal(
+            new[] { ("git", 3, 250L), ("ls", 1, 10L) },
+            byFirst.Select(g => (g.Family, g.Calls, g.RawBytes)));
+
+        // Filing thresholds apply to the pair-grained totals.
+        Assert.Equal(new[] { "git rev-parse" }, _store.FileIssueGaps(150, 2, null, PairKey).Select(g => g.Family));
+        Assert.Equal(new[] { "git" }, _store.FileIssueGaps(150, 2).Select(g => g.Family));
+    }
+
     [Fact]
     public void Gaps_ExcludesSpawnFailEntries()
     {

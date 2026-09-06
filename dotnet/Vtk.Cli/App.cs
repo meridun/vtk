@@ -761,7 +761,8 @@ public static class Program
         if (o.Since is { } win)
             Console.Out.WriteLine($"window: since {SinceSpec.Format(win)} ({sinceSpec})");
 
-        if (!fileIssues) return PrintGapsReport(st, o.Since);
+        var reg = Registry.Default();
+        if (!fileIssues) return PrintGapsReport(st, o.Since, reg);
 
         // Sane floors: below-floor thresholds clamp up (anti-spam guard) so
         // an over-eager invocation can't file trivial gaps.
@@ -775,14 +776,14 @@ public static class Program
             Console.Error.WriteLine($"vtk gaps: --min-calls {o.MinCalls} below floor; using {GapsIssues.FloorMinCalls}");
             o.MinCalls = GapsIssues.FloorMinCalls;
         }
-        return GapsIssues.Run(st, o);
+        return GapsIssues.Run(st, o, reg);
     }
 
-    /// <summary>Emits the human-facing coverage-gap and degraded-filter tables (the default `vtk gaps` output).</summary>
-    private static int PrintGapsReport(Store st, DateTime? since)
+    /// <summary>Emits the human-facing coverage-gap and degraded-filter tables (the default `vtk gaps` output), keyed per Registry.GapFamily (#139).</summary>
+    private static int PrintGapsReport(Store st, DateTime? since, Registry reg)
     {
-        var gaps = st.Gaps(since);
-        var degraded = st.Degraded(since);
+        var gaps = st.Gaps(since, reg.GapFamily);
+        var degraded = st.Degraded(since, reg.GapFamily);
 
         if (gaps.Count == 0 && degraded.Count == 0)
         {

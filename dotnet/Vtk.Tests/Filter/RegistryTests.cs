@@ -34,6 +34,56 @@ public class RegistryTests
         Assert.False(r.TryLookup(new[] { "unknown" }, out _));
     }
 
+    /// <summary>Only exact "cmd sub" keys make a command pair-keyed; bare keys and regex entries do not.</summary>
+    [Fact]
+    public void PairKeyedCommands_ListsFirstTokensOfPairKeysOnly()
+    {
+        var r = new Registry();
+        r.Register("git status", s => s);
+        r.Register("git log", s => s);
+        r.Register("ls", s => s);
+        r.RegisterRegex(new Regex(@"^cargo (build|test)\b"), s => s);
+
+        Assert.Equal(new HashSet<string> { "git" }, r.PairKeyedCommands);
+    }
+
+    [Fact]
+    public void Default_PairKeyedCommands_CoverShippedMultiplexers()
+    {
+        var pairs = Registry.Default().PairKeyedCommands;
+        Assert.Superset(new HashSet<string> { "git", "gh", "npx", "dbmate" }, new HashSet<string>(pairs));
+        Assert.DoesNotContain("ls", pairs);
+        Assert.DoesNotContain("mocha", pairs);
+    }
+
+    /// <summary>
+    /// #139: the `vtk gaps` family key is "argv[0] argv[1]" for pair-keyed
+    /// commands (after git global-option normalization) and argv[0] for
+    /// everything else, so a multiplexer names its actual missing subcommand.
+    /// </summary>
+    [Theory]
+    [InlineData("git rev-parse --show-toplevel", "git rev-parse")]
+    [InlineData("git fetch origin", "git fetch")]
+    [InlineData("git -C ../wt rev-parse HEAD", "git rev-parse")]
+    [InlineData("git --no-pager diff --stat", "git diff")]
+    [InlineData("git -c core.quotepath=off --no-pager log -1", "git log")]
+    [InlineData("git -C", "git -C")]           // option without its value: not normalized
+    [InlineData("git --bare status", "git --bare")] // unknown global option: don't guess
+    [InlineData("git", "git")]
+    [InlineData("gh api repos/o/r", "gh api")]
+    [InlineData("gh -R o/r issue list", "gh -R")]
+    [InlineData("npx tsc --noEmit", "npx tsc")]
+    [InlineData("dbmate wait", "dbmate wait")]
+    [InlineData("ls -la", "ls")]
+    [InlineData("mocha test/x.js", "mocha")]
+    [InlineData("cargo build --release", "cargo")]
+    [InlineData("  ls  -la ", "ls")]
+    [InlineData("", "")]
+    public void Default_GapFamily_PairKeysMultiplexersOnly(string cmd, string want)
+    {
+        Assert.Equal(want, Registry.Default().GapFamily(cmd));
+    }
+
     [Fact]
     public void Entry_FiltersOnlyAllowlistedExitCodes()
     {

@@ -247,6 +247,32 @@ public class SmokeTests : IDisposable
         Assert.DoesNotContain("Unhandled exception", hugeErr);
     }
 
+    [Fact]
+    public void GapsKeysPairFamiliesAfterGitGlobalOptions()
+    {
+        // #139 through the real binary: unfiltered git subcommands aggregate
+        // under `git <sub>` (never one undifferentiated `git` row), known git
+        // global options are normalized before the subcommand is chosen, and
+        // a filtered subcommand never ranks. `vtk gain` keeps the argv[0] grain.
+        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "rev-parse", "HEAD").code);
+        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "-C", ".", "rev-parse", "HEAD").code);
+        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "--no-pager", "log", "-1").code);
+        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "status").code);
+
+        var (gapsOut, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.Matches(@"(?m)^git rev-parse\s+2\s", gapsOut);
+        Assert.Matches(@"(?m)^git log\s+1\s", gapsOut);
+        Assert.DoesNotMatch(@"(?m)^git\s+\d", gapsOut);
+        Assert.DoesNotContain("git status", gapsOut);
+        Assert.DoesNotContain("--no-pager", gapsOut);
+
+        var (gainOut, _, gainCode) = _h.Run(_h.Repo, "gain");
+        Assert.Equal(0, gainCode);
+        Assert.Matches(@"(?m)^git\s+4\s", gainOut);
+        Assert.DoesNotContain("git rev-parse", gainOut);
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;

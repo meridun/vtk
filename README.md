@@ -146,13 +146,20 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   invocation log names which filter handled each call; `vtk gaps`
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
+  Families are keyed `argv[0] argv[1]` for commands with a registered pair key (`git`, `gh`,
+  `npx`, `dbmate`; known git global options such as `-C <dir>` / `--no-pager` are normalized
+  first) and `argv[0]` otherwise, so a multiplexer's row names the missing subcommand
+  (`git rev-parse`, `gh api`) rather than one umbrella `git` (#139); `vtk gain` keeps the
+  `argv[0]` grain.
   A child that never started (unresolvable command, self-flag typo) still exits 127 and is
   still logged, but under `spawn-fail` — it never ranks a gap family.
   `vtk gaps --file-issues` (#61) turns recurring gap families into `stage:intake` filter issues
   via `gh`: dry-run by default (`--yes` to create), `--min-bytes`/`--min-calls` thresholds
   (defaults 50 KiB / 3 calls, floors 4096 B / 2), and dedupe against open `Filter:` issues so
   re-running never refiles. Issue bodies carry family + call/byte counts only — never output
-  content. `--since <N>d|<N>h|<ISO-8601 date>` (#140) windows the report (and the
+  content; for pair-keyed commands the title carries the subcommand (`Filter: git rev-parse`),
+  and a family that already resolves in the registry prints as a `dispatch gap` line instead of
+  a proposed filter (#139). `--since <N>d|<N>h|<ISO-8601 date>` (#140) windows the report (and the
   `--file-issues` thresholds) to invocations logged at or after the bound (UTC); opt-in —
   without it the output is unchanged. A `window: since <utc> (<spec>)` header line is printed
   only when the flag is given; invalid or out-of-range specs exit 2 with usage.
