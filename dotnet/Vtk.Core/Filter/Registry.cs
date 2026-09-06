@@ -74,12 +74,27 @@ public sealed class Registry
     }
 
     /// <summary>
-    /// Matches argv against the registry: "argv[0] argv[1]" first, then bare
-    /// "argv[0]", then (only if both miss) the regex fallback list against
-    /// the full command string. Invocations whose second token is a flag
-    /// (e.g. `git -C dir status`) miss the exact keys; a regex filter may
-    /// still claim them if its pattern matches. A total miss falls through to
-    /// passthrough — the gap log shows whether that pattern is worth handling.
+    /// git subcommands that may resolve through the global-option-normalized
+    /// pair key (#152): `git -C dir status` → "git status". diff/show/log are
+    /// excluded — their folds are recovered most of the time, so normalizing
+    /// them would add recovery round trips; they stay passthrough (and keep
+    /// gap-logging) unless #137 telemetry says otherwise.
+    /// </summary>
+    public static readonly IReadOnlySet<string> GitNormalizedSubcommands = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "status", "branch", "add", "commit", "push", "pull",
+    };
+
+    /// <summary>
+    /// Matches argv against the registry: "argv[0] argv[1]" first, then — for
+    /// git only — the same pair key after stripping known global options
+    /// (`git -C dir status` → "git status", GitOptions.Strip) when the
+    /// subcommand is in GitNormalizedSubcommands, then bare "argv[0]", then
+    /// (only if all miss) the regex fallback list against the full command
+    /// string. Other flag-second invocations miss the exact keys; a regex
+    /// filter may still claim them if its pattern matches. A total miss falls
+    /// through to passthrough — the gap log shows whether that pattern is
+    /// worth handling.
     /// </summary>
     public bool TryLookup(IReadOnlyList<string> argv, out Entry entry)
     {
@@ -89,6 +104,16 @@ public sealed class Registry
         {
             entry = byPair;
             return true;
+        }
+        if (argv[0] == "git")
+        {
+            var stripped = GitOptions.Strip(argv);
+            if (stripped.Length >= 2 && GitNormalizedSubcommands.Contains(stripped[1])
+                && _entries.TryGetValue(stripped[0] + " " + stripped[1], out var byNormalized))
+            {
+                entry = byNormalized;
+                return true;
+            }
         }
         if (_entries.TryGetValue(argv[0], out var byName))
         {
