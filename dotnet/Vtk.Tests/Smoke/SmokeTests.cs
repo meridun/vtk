@@ -106,11 +106,12 @@ public class SmokeTests : IDisposable
         Assert.Contains("AWS_SECRET_ACCESS_KEY=[REDACTED]", meta);
 
         // spooled content is redacted. The mutation is deliberately large so the
-        // raw diff clears the #52 savings bar (>=256 bytes AND >=20%): a summarized
-        // diff still spools + emits OK, keeping the redaction path exercised.
+        // raw diff clears the #135 hunk-fold floor (Fold.FloorBytes, 64 KiB; below
+        // it hunks pass through unspooled) and thus also the #52 savings bar: a
+        // summarized diff spools + emits OK, keeping the redaction path exercised.
         var file2Lines = new List<string> { "line 2 content", "Authorization: Bearer sk-live-abc123" };
-        for (var i = 0; i < 20; i++)
-            file2Lines.Add($"padding line {i}: extra tracked content to grow the raw diff well past the savings floor");
+        for (var i = 0; i < 800; i++)
+            file2Lines.Add($"padding line {i}: extra tracked content to grow the raw diff well past the fold floor");
         File.WriteAllText(Path.Combine(_h.Repo, "file2.txt"), string.Join('\n', file2Lines) + "\n");
         var (diff2Out, _, diff2Code) = _h.Run(_h.Repo, "git", "diff");
         Assert.Equal(0, diff2Code);
