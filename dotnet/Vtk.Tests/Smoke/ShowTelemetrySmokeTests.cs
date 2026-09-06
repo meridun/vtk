@@ -99,6 +99,48 @@ public class ShowTelemetrySmokeTests : IDisposable
     }
 
     [Fact]
+    public void ShowWithBadPatternKeepsExit2AndLogsNoRow()
+    {
+        var (outp, _, code) = _h.RunFaked(_h.Repo, Code(1), "eslint", "src/");
+        Assert.Equal(1, code);
+        var id = SmokeHarness.MustOkId(outp);
+
+        var (_, err, showCode) = _h.Run(_h.Repo, "show", id, "--grep", "(");
+        Assert.Equal(2, showCode);
+        Assert.Contains("bad pattern", err);
+        Assert.Empty(ShowRows());
+        Assert.DoesNotContain("\"grep\"", _h.InvocationLog());
+    }
+
+    [Fact]
+    public void ShowJoinsOnlyTheMostRecentFoldOfItsId()
+    {
+        // Two identical folds share an id (hash of the command line); one
+        // show afterwards recovers the later fold only, so the earlier one
+        // stays unrecovered in both reports.
+        var (first, _, c1) = _h.RunFaked(_h.Repo, Code(1), "eslint", "src/");
+        Assert.Equal(1, c1);
+        var (second, _, c2) = _h.RunFaked(_h.Repo, Code(1), "eslint", "src/");
+        Assert.Equal(1, c2);
+        var id = SmokeHarness.MustOkId(first);
+        Assert.Equal(id, SmokeHarness.MustOkId(second));
+
+        var (_, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        var showOut = Field(OutBytesRe, Assert.Single(ShowRows()));
+
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        var line = Assert.Single(gaps.Split('\n'), l => l.StartsWith("eslint "));
+        Assert.Equal(new[] { "eslint", "2", "1", "50.0%", showOut.ToString() }, line.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+
+        var (gain, _, gainCode) = _h.Run(_h.Repo, "gain");
+        Assert.Equal(0, gainCode);
+        Assert.Contains("over 2 calls", gain);
+        Assert.Contains($"after {showOut} bytes recovered via vtk show (1 folds)", gain);
+    }
+
+    [Fact]
     public void ShowOfUnknownIdLogsNothingAndKeepsExitCode()
     {
         var (_, err, code) = _h.Run(_h.Repo, "show", "dead");
