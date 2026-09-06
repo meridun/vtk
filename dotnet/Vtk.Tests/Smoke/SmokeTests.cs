@@ -45,6 +45,22 @@ public class SmokeTests : IDisposable
         var (_, _, missingCode) = _h.Run(_h.Repo, "show", "dead");
         Assert.Equal(1, missingCode);
 
+        // #136: the header carries the cwd; a same-directory show is silent,
+        // a cross-directory show warns on stderr and still prints (exit 0).
+        Assert.Contains("# cwd: " + _h.Repo, showOut);
+        Assert.DoesNotContain("was written from", err1 + _h.Run(_h.Repo, "show", statusId).stderr);
+        var (xOut, xErr, xCode) = _h.Run(_h.Home, "show", statusId);
+        Assert.Equal(0, xCode);
+        Assert.Contains("modified:", xOut);
+        Assert.Contains($"vtk show: spool {statusId} was written from {_h.Repo}", xErr);
+
+        // #136: the same command from another directory gets its own id.
+        var otherRepo = Path.Combine(_h.Home, "other-repo");
+        SmokeHarness.Git(_h.Home, "init", "-q", "other-repo");
+        var (siblingOut, _, _) = _h.Run(otherRepo, "git", "status");
+        Assert.DoesNotContain("OK " + statusId, siblingOut);
+        Assert.Contains("modified:", _h.Run(_h.Repo, "show", statusId).stdout);
+
         // exit-code parity on failure with identical output
         var rawOtherOut = "";
         var rawOtherCode = 0;
@@ -106,11 +122,12 @@ public class SmokeTests : IDisposable
         Assert.Contains("AWS_SECRET_ACCESS_KEY=[REDACTED]", meta);
 
         // spooled content is redacted. The mutation is deliberately large so the
-        // raw diff clears the #52 savings bar (>=256 bytes AND >=20%): a summarized
-        // diff still spools + emits OK, keeping the redaction path exercised.
+        // raw diff clears the #135 hunk-fold floor (Fold.FloorBytes, 64 KiB; below
+        // it hunks pass through unspooled) and thus also the #52 savings bar: a
+        // summarized diff spools + emits OK, keeping the redaction path exercised.
         var file2Lines = new List<string> { "line 2 content", "Authorization: Bearer sk-live-abc123" };
-        for (var i = 0; i < 20; i++)
-            file2Lines.Add($"padding line {i}: extra tracked content to grow the raw diff well past the savings floor");
+        for (var i = 0; i < 800; i++)
+            file2Lines.Add($"padding line {i}: extra tracked content to grow the raw diff well past the fold floor");
         File.WriteAllText(Path.Combine(_h.Repo, "file2.txt"), string.Join('\n', file2Lines) + "\n");
         var (diff2Out, _, diff2Code) = _h.Run(_h.Repo, "git", "diff");
         Assert.Equal(0, diff2Code);
@@ -228,6 +245,32 @@ public class SmokeTests : IDisposable
         Assert.Equal(2, hugeCode);
         Assert.Contains("invalid --since", hugeErr);
         Assert.DoesNotContain("Unhandled exception", hugeErr);
+    }
+
+    [Fact]
+    public void GapsKeysPairFamiliesAfterGitGlobalOptions()
+    {
+        // #139 through the real binary: unfiltered git subcommands aggregate
+        // under `git <sub>` (never one undifferentiated `git` row), known git
+        // global options are normalized before the subcommand is chosen, and
+        // a filtered subcommand never ranks. `vtk gain` keeps the argv[0] grain.
+        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "rev-parse", "HEAD").code);
+        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "-C", ".", "rev-parse", "HEAD").code);
+        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "--no-pager", "log", "-1").code);
+        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "status").code);
+
+        var (gapsOut, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.Matches(@"(?m)^git rev-parse\s+2\s", gapsOut);
+        Assert.Matches(@"(?m)^git log\s+1\s", gapsOut);
+        Assert.DoesNotMatch(@"(?m)^git\s+\d", gapsOut);
+        Assert.DoesNotContain("git status", gapsOut);
+        Assert.DoesNotContain("--no-pager", gapsOut);
+
+        var (gainOut, _, gainCode) = _h.Run(_h.Repo, "gain");
+        Assert.Equal(0, gainCode);
+        Assert.Matches(@"(?m)^git\s+4\s", gainOut);
+        Assert.DoesNotContain("git rev-parse", gainOut);
     }
 
     private static int CountOccurrences(string haystack, string needle)

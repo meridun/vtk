@@ -1,0 +1,6 @@
+751056c fix(fold): pin runner summary lines above the positional fold tail (#134)
+dotnet/Vtk.Core/Filter/Fold.cs | +63 -7
+dotnet/Vtk.Tests/Filter/FoldTests.cs | +109 -1
+dotnet/Vtk.Tests/Filter/testdata/npm/test_unit_noise_real.raw.txt | +1462 -0
+dotnet/Vtk.Tests/Filter/testdata/npm/test_unit_noise_real.want.txt | +6 -0
+4 files, +1640 -8

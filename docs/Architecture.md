@@ -148,11 +148,14 @@ vtk show 2e3f             →   full captured output (provenance header first)
 vtk show 2e3f --grep pat  →   just the matching lines
 ```
 
-- **ID** = first 4 hex chars of a checksum of the command line. Rerunning the same command
-  overwrites its own spool file — the spool holds "latest output per distinct command," which
-  also caps its size naturally.
-- **Provenance header** — full command + timestamp at the top of each spool file, printed by
-  `vtk show`, so a residual hash collision is visible rather than silently serving wrong output.
+- **ID** = first 4 hex chars of a checksum of (cwd, command line). Rerunning the same command
+  from the same directory overwrites its own spool file — the spool holds "latest output per
+  distinct (directory, command)," which also caps its size naturally; the same command in a
+  sibling worktree gets its own entry rather than clobbering this one.
+- **Provenance header** — full command + cwd + timestamp at the top of each spool file, printed
+  by `vtk show`, so a residual hash collision is visible rather than silently serving wrong
+  output. When the header cwd differs from the caller's, `vtk show` warns on stderr and still
+  prints (cross-directory recovery is deliberate, not an error).
 - **Writes** are temp-file + atomic rename: no locks, safe under parallel vtk invocations,
   readers never see a partial file.
 - **Eviction** — TTL sweep (~1h) on each invocation, so secret-bearing output does not persist

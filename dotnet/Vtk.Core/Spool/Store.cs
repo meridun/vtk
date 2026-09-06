@@ -50,18 +50,27 @@ public sealed class Store
 
     private string SpoolDir => Path.Combine(_dir, "spool");
 
-    /// <summary>The spool ID for a command line: first 4 hex chars of a SHA-256 checksum. Rerunning the same command overwrites its own entry.</summary>
-    public static string Id(IReadOnlyList<string> argv)
+    /// <summary>
+    /// The spool ID for a command line run from <paramref name="cwd"/>:
+    /// first 4 hex chars of a SHA-256 checksum over (cwd, argv). Rerunning
+    /// the same command from the same directory overwrites its own entry;
+    /// the same command from another directory (a sibling worktree, #136)
+    /// gets its own entry instead of clobbering this one.
+    /// </summary>
+    public static string Id(string cwd, IReadOnlyList<string> argv)
     {
-        var sum = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join(" ", argv)));
+        var sum = SHA256.HashData(Encoding.UTF8.GetBytes(cwd + "\n" + string.Join(" ", argv)));
         return Convert.ToHexStringLower(sum)[..4];
     }
 
-    /// <summary>Spools raw output for argv: redaction pass, provenance header, temp-file + atomic-rename write. Returns the retrieval ID.</summary>
-    public string Write(IReadOnlyList<string> argv, string raw, DateTime now)
+    private const string CwdHeaderPrefix = "# cwd: ";
+
+    /// <summary>Spools raw output for argv run from cwd: redaction pass, provenance header (cmd, cwd, time), temp-file + atomic-rename write. Returns the retrieval ID.</summary>
+    public string Write(string cwd, IReadOnlyList<string> argv, string raw, DateTime now)
     {
-        var id = Id(argv);
+        var id = Id(cwd, argv);
         var content = "# vtk spool\n# cmd: " + Redact(string.Join(" ", argv)) +
+            "\n" + CwdHeaderPrefix + Redact(cwd) +
             "\n# time: " + now.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") + "\n\n" + Redact(raw);
 
         var tmpName = Path.Combine(SpoolDir, id + ".tmp-" + Path.GetRandomFileName());
@@ -100,6 +109,23 @@ public sealed class Store
         if (!IdRe.IsMatch(id))
             throw new ArgumentException($"invalid spool id \"{id}\"");
         return File.ReadAllText(Path.Combine(SpoolDir, id + SpoolExt));
+    }
+
+    /// <summary>
+    /// The directory recorded in a spool entry's provenance header, or null
+    /// when the header carries none (entries written before #136). Reads the
+    /// header block only — stops at the first blank line, never the body.
+    /// </summary>
+    public static string? HeaderCwd(string content)
+    {
+        foreach (var line in content.Split('\n'))
+        {
+            var l = line.TrimEnd('\r');
+            if (l.Length == 0) return null;
+            if (l.StartsWith(CwdHeaderPrefix, StringComparison.Ordinal))
+                return l[CwdHeaderPrefix.Length..];
+        }
+        return null;
     }
 
     /// <summary>Opportunistically deletes spool entries (and stale temp files) older than ttl. Errors are ignored: best-effort by design.</summary>
@@ -192,18 +218,19 @@ public sealed class Store
     /// Aggregates true coverage gaps (no registry match) by command family,
     /// sorted by total raw bytes descending. <paramref name="since"/> (UTC,
     /// #140) restricts the read to rows logged at or after that time; null
-    /// reads all history.
+    /// reads all history. <paramref name="family"/> (#139) maps a redacted
+    /// command line to its family key; null keeps the first token.
     /// </summary>
-    public List<GapSummary> Gaps(DateTime? since = null) => Aggregate(inv =>
+    public List<GapSummary> Gaps(DateTime? since = null, Func<string, string>? family = null) => Aggregate(inv =>
     {
         if (inv.Filtered) return false;
         if (inv.Reason == "") return !inv.TTY; // legacy entry, pre-reason
         return inv.Reason == ReasonNoFilter;
-    }, since);
+    }, since, family);
 
-    /// <summary>Aggregates filter-panic invocations by command family, optionally windowed (#140).</summary>
-    public List<GapSummary> Degraded(DateTime? since = null) =>
-        Aggregate(inv => inv.Reason == ReasonFilterPanic, since);
+    /// <summary>Aggregates filter-panic invocations by command family, optionally windowed (#140) and under a caller-supplied family key (#139).</summary>
+    public List<GapSummary> Degraded(DateTime? since = null, Func<string, string>? family = null) =>
+        Aggregate(inv => inv.Reason == ReasonFilterPanic, since, family);
 
     /// <summary>
     /// Returns coverage-gap families eligible for auto-filed intake issues
@@ -214,9 +241,11 @@ public sealed class Store
     /// filter issue. Sorted by raw bytes descending. Read-only over metadata
     /// (invariant 3): byte counts and redacted command families only, never
     /// output content. <paramref name="since"/> (UTC, #140) windows the
-    /// measurement; null reads all history.
+    /// measurement; null reads all history. <paramref name="family"/> (#139)
+    /// maps a redacted command line to its family key; null keeps the first
+    /// token.
     /// </summary>
-    public List<GapSummary> FileIssueGaps(long minBytes, int minCalls, DateTime? since = null)
+    public List<GapSummary> FileIssueGaps(long minBytes, int minCalls, DateTime? since = null, Func<string, string>? family = null)
     {
         var all = Aggregate(inv =>
         {
@@ -225,7 +254,7 @@ public sealed class Store
                 ? !inv.TTY // legacy entry, pre-reason
                 : inv.Reason == ReasonNoFilter;
             return isGap && !IsMachineReadable(inv.Cmd);
-        }, since);
+        }, since, family);
         return all.Where(g => g.RawBytes >= minBytes && g.Calls >= minCalls).ToList();
     }
 
@@ -260,20 +289,24 @@ public sealed class Store
     /// Family rollup over the invocation log. The window (#140) is a row
     /// predicate on <see cref="Invocation.Time"/> only — undated rows are
     /// excluded whenever a window is set — and never touches the family key.
+    /// The family key (#139) is the caller's function over the redacted
+    /// command line, defaulting to its first token; `vtk gaps` passes the
+    /// registry's pair-aware key, `vtk gain` keeps the first token.
     /// </summary>
-    private List<GapSummary> Aggregate(Func<Invocation, bool> match, DateTime? since)
+    private List<GapSummary> Aggregate(Func<Invocation, bool> match, DateTime? since, Func<string, string>? family)
     {
+        family ??= FirstToken;
         var agg = new Dictionary<string, GapSummary>();
         foreach (var inv in Invocations())
         {
             if (!SinceSpec.InWindow(inv.Time, since)) continue;
             if (!match(inv)) continue;
-            var family = FirstToken(inv.Cmd);
-            if (family == "") continue;
-            if (!agg.TryGetValue(family, out var g))
+            var fam = family(inv.Cmd);
+            if (fam == "") continue;
+            if (!agg.TryGetValue(fam, out var g))
             {
-                g = new GapSummary { Family = family };
-                agg[family] = g;
+                g = new GapSummary { Family = fam };
+                agg[fam] = g;
             }
             g.Calls++;
             g.RawBytes += inv.RawBytes;

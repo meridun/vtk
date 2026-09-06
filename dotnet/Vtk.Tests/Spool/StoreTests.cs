@@ -16,21 +16,63 @@ public class StoreTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
+    /// <summary>Directory the entries in these tests are "run from" (#136: cwd is part of the key).</summary>
+    private const string Cwd = "/proj";
+
     [Fact]
     public void WriteThenRead_RoundTrips()
     {
         var argv = new[] { "git", "status" };
-        var id = _store.Write(argv, "some raw output\n", DateTime.UtcNow);
+        var id = _store.Write(Cwd, argv, "some raw output\n", DateTime.UtcNow);
         var content = _store.Read(id);
         Assert.Contains("# vtk spool", content);
         Assert.Contains("git status", content);
+        Assert.Contains("# cwd: " + Cwd + "\n", content);
         Assert.Contains("some raw output", content);
+        Assert.Equal(Cwd, Store.HeaderCwd(content));
+    }
+
+    [Theory]
+    [InlineData("/proj", "/proj", true)]
+    [InlineData("/proj", "/proj-wt-1", false)]
+    [InlineData("/proj/a", "/proj/b", false)]
+    public void Id_KeysOnCwdAndArgv(string cwdA, string cwdB, bool same)
+    {
+        // #136: the same command from two worktrees must not share an entry;
+        // the same command from the same directory still overwrites its own.
+        var argv = new[] { "npm", "run", "test:unit" };
+        Assert.Equal(same, Store.Id(cwdA, argv) == Store.Id(cwdB, argv));
+        Assert.Matches("^[0-9a-f]{4}$", Store.Id(cwdA, argv));
+    }
+
+    [Fact]
+    public void Write_SameArgvFromTwoCwds_KeepsBothEntries()
+    {
+        var argv = new[] { "npm", "test" };
+        var idA = _store.Write("/wt/1", argv, "output from wt 1\n", DateTime.UtcNow);
+        var idB = _store.Write("/wt/2", argv, "output from wt 2\n", DateTime.UtcNow);
+        Assert.NotEqual(idA, idB);
+        Assert.Contains("output from wt 1", _store.Read(idA));
+        Assert.Contains("output from wt 2", _store.Read(idB));
+    }
+
+    [Theory]
+    [InlineData("# vtk spool\n# cmd: git status\n# cwd: /wt/1\n# time: 2026-09-06T00:00:00Z\n\nbody\n", "/wt/1")]
+    [InlineData("# vtk spool\n# cmd: git status\n# cwd: C:\\Claude\\vtk-wt\\136\n# time: 2026-09-06T00:00:00Z\n\nbody\n", "C:\\Claude\\vtk-wt\\136")]
+    [InlineData("# vtk spool\n# cmd: git status\n# time: 2026-09-06T00:00:00Z\n\n# cwd: /not/the/header\n", null)]
+    [InlineData("# vtk spool\r\n# cmd: git status\r\n# cwd: /wt/1\r\n# time: 2026-09-06T00:00:00Z\r\n\r\nbody\r\n", "/wt/1")]
+    public void HeaderCwd_ReadsHeaderOnly(string content, string? expected)
+    {
+        // Legacy (pre-#136) entries carry no cwd line → null, so `vtk show`
+        // stays silent on them; a `# cwd:` in the body is never mistaken for
+        // the header.
+        Assert.Equal(expected, Store.HeaderCwd(content));
     }
 
     [Fact]
     public void Write_RedactsSecrets()
     {
-        var id = _store.Write(new[] { "curl" }, "Authorization: Bearer sekret123\n", DateTime.UtcNow);
+        var id = _store.Write(Cwd, new[] { "curl" }, "Authorization: Bearer sekret123\n", DateTime.UtcNow);
         var content = _store.Read(id);
         Assert.DoesNotContain("sekret123", content);
         Assert.Contains("[REDACTED]", content);
@@ -48,7 +90,7 @@ public class StoreTests : IDisposable
         if (!OperatingSystem.IsWindows()) return;
 
         var argv = new[] { "git", "log" };
-        var id = _store.Write(argv, "first\n", DateTime.UtcNow);
+        var id = _store.Write(Cwd, argv, "first\n", DateTime.UtcNow);
         var dest = Path.Combine(_dir, "spool", id + ".txt");
 
         var lockFs = new FileStream(dest, FileMode.Open, FileAccess.Read, FileShare.None);
@@ -59,7 +101,7 @@ public class StoreTests : IDisposable
         });
         try
         {
-            var id2 = _store.Write(argv, "second\n", DateTime.UtcNow);
+            var id2 = _store.Write(Cwd, argv, "second\n", DateTime.UtcNow);
             Assert.Equal(id, id2);
         }
         finally
@@ -93,6 +135,43 @@ public class StoreTests : IDisposable
         Assert.Equal("ls", ls.Family);
         Assert.Equal(2, ls.Calls);
         Assert.Equal(150, ls.RawBytes);
+    }
+
+    /// <summary>
+    /// #139: the family key is the caller's function over the redacted
+    /// command line — `vtk gaps` passes a pair-aware key so git's unfiltered
+    /// subcommands aggregate apart, while the default stays the first token.
+    /// The window and the non-gap exclusions are unchanged by the key.
+    /// </summary>
+    [Fact]
+    public void Gaps_UsesCallerFamilyKey_DefaultStaysFirstToken()
+    {
+        static string PairKey(string cmd)
+        {
+            var argv = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return argv[0] == "git" && argv.Length >= 2 ? argv[0] + " " + argv[1] : argv[0];
+        }
+        var now = DateTime.UtcNow;
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse HEAD", RawBytes = 100, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse --show-toplevel", RawBytes = 100, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git fetch origin", RawBytes = 50, Reason = Store.ReasonNoFilter });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git status", RawBytes = 999, Filtered = true });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "git worktree list", RawBytes = 999, Reason = Store.ReasonNonzeroExit });
+        _store.LogInvocation(new Invocation { Time = now, Cmd = "ls -la", RawBytes = 10, Reason = Store.ReasonNoFilter });
+
+        var byPair = _store.Gaps(null, PairKey);
+        Assert.Equal(
+            new[] { ("git rev-parse", 2, 200L), ("git fetch", 1, 50L), ("ls", 1, 10L) },
+            byPair.Select(g => (g.Family, g.Calls, g.RawBytes)));
+
+        var byFirst = _store.Gaps();
+        Assert.Equal(
+            new[] { ("git", 3, 250L), ("ls", 1, 10L) },
+            byFirst.Select(g => (g.Family, g.Calls, g.RawBytes)));
+
+        // Filing thresholds apply to the pair-grained totals.
+        Assert.Equal(new[] { "git rev-parse" }, _store.FileIssueGaps(150, 2, null, PairKey).Select(g => g.Family));
+        Assert.Equal(new[] { "git" }, _store.FileIssueGaps(150, 2).Select(g => g.Family));
     }
 
     [Fact]
@@ -464,7 +543,7 @@ public class StoreTests : IDisposable
     [Fact]
     public void Sweep_RemovesEntriesOlderThanTtl()
     {
-        var id = _store.Write(new[] { "git", "status" }, "raw", DateTime.UtcNow);
+        var id = _store.Write(Cwd, new[] { "git", "status" }, "raw", DateTime.UtcNow);
         var spoolPath = Path.Combine(_dir, "spool", id + ".txt");
         File.SetLastWriteTimeUtc(spoolPath, DateTime.UtcNow.AddHours(-2));
 

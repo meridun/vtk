@@ -25,7 +25,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   Global options ahead of the subcommand (`-C <dir>`, `-c <k=v>`, `--no-pager`/`-P`,
   `-p`/`--paginate`, `--git-dir[=<path>]`, `--work-tree[=<path>]`) still engage the filter for
   `status`, `branch`, `add`, `commit`, `push`, `pull`; `diff`, `show`, `log` behind a global
-  option pass through unfiltered (#152).
+  option pass through unfiltered (#152). Hunk-shaped `git diff` / `git show` output below 64 KiB
+  (the shared fold floor) passes through byte-identical — agents run these to read the hunks, so
+  folding them only cost a `vtk show` round trip; at or above the floor the per-file stats shape
+  plus an `OK <id>` recovery line still applies (#135). `--stat` / `--numstat` and `show -s`
+  shapes are unchanged.
 - **eslint filter** — `eslint`, `npx eslint` (direct invocations): problems rolled up by rule id,
   top example per rule, `✖ N problems` summary preserved. Measured 41–99% on fixtures. Report-style
   exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
@@ -47,7 +51,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   terse, load-bearing scripts like `npm run sdlc` are never touched), and failures are never
   folded — nonzero exits keep their full output inline. Unfolded gaps are attributed to the
   inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
-  npm. The full raw output, banner included, stays recoverable via `vtk show`. Measured 44–58%
+  npm. When the inner filter exists and ran but had nothing to elide (a mocha crash before
+  any spec, say), the invocation is logged as filtered under that filter's name — the same
+  attribution the direct path uses (#153) — so `vtk gaps` never proposes a filter that already
+  shipped. The full raw output, banner included, stays recoverable via `vtk show`. Measured 44–58%
   on banner-strip/delegation fixtures and ≈99.8% on a 122 KB folded run; savings compound with
   the inner filter's on large reports. Aliases behave byte-identically to their `npm run`
   spellings; off-TTY `npm start` buffers output until exit (same as `npm run start`), and on a
@@ -132,7 +139,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   line. Measured 5–85% on fixtures (green test 85%, clean build 69%, warning-heavy build 5%);
   red builds and failing tests (non-zero exit) pass through raw with exit-code parity intact.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
-  redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
+  redaction), keyed per (directory, command) so sibling worktrees never clobber each other;
+  `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only, and a one-line
+  stderr warning flags a read from a directory other than the one that wrote it.
   Each successful `show` is itself logged (#137) as a metadata-only row (`reason=show`, the
   spool id, spool size, bytes emitted, and whether `--grep` was used as a boolean — the
   pattern text is never written); output and exit codes of `show` are unchanged.
@@ -143,13 +152,20 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   invocation log names which filter handled each call; `vtk gaps`
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
+  Families are keyed `argv[0] argv[1]` for commands with a registered pair key (`git`, `gh`,
+  `npx`, `dbmate`; known git global options such as `-C <dir>` / `--no-pager` are normalized
+  first) and `argv[0]` otherwise, so a multiplexer's row names the missing subcommand
+  (`git rev-parse`, `gh api`) rather than one umbrella `git` (#139); `vtk gain` keeps the
+  `argv[0]` grain.
   A child that never started (unresolvable command, self-flag typo) still exits 127 and is
   still logged, but under `spawn-fail` — it never ranks a gap family.
   `vtk gaps --file-issues` (#61) turns recurring gap families into `stage:intake` filter issues
   via `gh`: dry-run by default (`--yes` to create), `--min-bytes`/`--min-calls` thresholds
   (defaults 50 KiB / 3 calls, floors 4096 B / 2), and dedupe against open `Filter:` issues so
   re-running never refiles. Issue bodies carry family + call/byte counts only — never output
-  content. `--since <N>d|<N>h|<ISO-8601 date>` (#140) windows the report (and the
+  content; for pair-keyed commands the title carries the subcommand (`Filter: git rev-parse`),
+  and a family that already resolves in the registry prints as a `dispatch gap` line instead of
+  a proposed filter (#139). `--since <N>d|<N>h|<ISO-8601 date>` (#140) windows the report (and the
   `--file-issues` thresholds) to invocations logged at or after the bound (UTC); opt-in —
   without it the output is unchanged. A `window: since <utc> (<spec>)` header line is printed
   only when the flag is given; invalid or out-of-range specs exit 2 with usage.

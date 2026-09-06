@@ -224,7 +224,7 @@ public static class Program
             // Banner stripped but the inner tool has no filter: emit the
             // banner-stripped body (already a saving) and log the gap under
             // the inner tool's family so `vtk gaps` prioritizes the real tool.
-            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode);
+            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode, filterName: null);
         }
         if (!entry.Filters(result.ExitCode))
         {
@@ -241,10 +241,12 @@ public static class Program
         }
         // Compare the compacted output against the raw the agent would
         // otherwise see: if the inner filter did not shrink the body, still
-        // prefer the banner-stripped body when that alone is a saving.
+        // prefer the banner-stripped body when that alone is a saving. The
+        // filter ran and elided nothing, so the row is attributed to it
+        // (filtered=true, its name) — not a coverage gap (#153).
         if (compact.Length >= strip.Body.Length)
         {
-            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode);
+            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode, entry.Name);
         }
         if (!ClearsSavingsBar(raw.Length, compact.Length))
         {
@@ -260,7 +262,7 @@ public static class Program
         string id;
         try
         {
-            id = st.Write(strip.Inner, raw, DateTime.UtcNow);
+            id = st.Write(Directory.GetCurrentDirectory(), strip.Inner, raw, DateTime.UtcNow);
         }
         catch
         {
@@ -282,9 +284,16 @@ public static class Program
     /// raw under an ID for recovery; otherwise it is a plain passthrough.
     /// Attribution is always to the inner tool's family. Any spool failure
     /// degrades to full raw so no output is ever lost.
+    /// <paramref name="filterName"/> is the inner filter that ran and elided
+    /// nothing (logged filtered=true under its name, matching the direct
+    /// path's "nothing elided" row), or null when the inner tool has no
+    /// filter (logged filtered=false, no-filter: a real coverage gap) (#153).
     /// </summary>
-    private static int EmitNpmBody(Store st, string[] inner, string raw, string body, int code)
+    private static int EmitNpmBody(Store st, string[] inner, string raw, string body, int code, string? filterName)
     {
+        var filtered = filterName != null;
+        var reason = filterName ?? Store.ReasonNoFilter;
+
         // Unrecognized inner tool with a successful, floor-clearing body:
         // the size-floored fold (#93, option C) beats banner-only stripping.
         // A fold failure falls through to the pre-fold behavior below (which
@@ -294,29 +303,30 @@ public static class Program
 
         if (body.Length >= raw.Length)
         {
-            // No saving from stripping the banner: emit the raw and gap-log
-            // the inner family so the tool still surfaces in `vtk gaps`.
+            // No saving from stripping the banner: emit the raw, logged
+            // under the inner family so the tool still surfaces in `vtk gaps`
+            // when it has no filter.
             Console.Out.Write(raw);
             if (raw != "" && !raw.EndsWith('\n')) Console.Out.WriteLine();
-            LogInvocation(st, inner, raw.Length, raw.Length, filtered: false, tty: false, Store.ReasonNoFilter);
+            LogInvocation(st, inner, raw.Length, raw.Length, filtered, tty: false, reason);
             return code;
         }
 
         if (!ClearsSavingsBar(raw.Length, body.Length))
         {
             // Banner stripping saved bytes but below the savings bar (#52):
-            // emit the body inline, no spool, no `OK`. Still a coverage gap
-            // for the inner tool, logged with the bytes the body saved.
+            // emit the body inline, no spool, no `OK`. Logged with the bytes
+            // the body saved; a coverage gap only when no inner filter exists.
             Console.Out.Write(body);
             if (body != "" && !body.EndsWith('\n')) Console.Out.WriteLine();
-            LogInvocation(st, inner, raw.Length, body.Length, filtered: false, tty: false, Store.ReasonNoFilter);
+            LogInvocation(st, inner, raw.Length, body.Length, filtered, tty: false, reason);
             return code;
         }
 
         string id;
         try
         {
-            id = st.Write(inner, raw, DateTime.UtcNow);
+            id = st.Write(Directory.GetCurrentDirectory(), inner, raw, DateTime.UtcNow);
         }
         catch
         {
@@ -332,9 +342,9 @@ public static class Program
             if (!body.EndsWith('\n')) Console.Out.WriteLine();
         }
         Console.Out.WriteLine($"OK {id}");
-        // Banner stripped but no inner filter ran: this is still a coverage
-        // gap for the inner tool, recorded with the bytes the body saved.
-        LogInvocation(st, inner, raw.Length, body.Length, filtered: false, tty: false, Store.ReasonNoFilter, spoolId: id);
+        // Banner stripped; recorded with the bytes the body saved. A coverage
+        // gap for the inner tool only when it has no filter.
+        LogInvocation(st, inner, raw.Length, body.Length, filtered, tty: false, reason, spoolId: id);
         return code;
     }
 
@@ -408,7 +418,7 @@ public static class Program
         string id;
         try
         {
-            id = st.Write(spoolArgv, raw, DateTime.UtcNow);
+            id = st.Write(Directory.GetCurrentDirectory(), spoolArgv, raw, DateTime.UtcNow);
         }
         catch
         {
@@ -508,7 +518,7 @@ public static class Program
         string id;
         try
         {
-            id = st.Write(args, raw, DateTime.UtcNow);
+            id = st.Write(Directory.GetCurrentDirectory(), args, raw, DateTime.UtcNow);
         }
         catch
         {
@@ -599,6 +609,22 @@ public static class Program
     private static bool IsTTY() => !Console.IsOutputRedirected;
 
     /// <summary>
+    /// Path-text equality for the `vtk show` cwd check (#136): full paths,
+    /// trailing separators trimmed, case-insensitive on Windows. Text only —
+    /// never touches the filesystem, so a vanished directory still compares.
+    /// </summary>
+    internal static bool SameDirectory(string a, string b)
+    {
+        static string Norm(string p)
+        {
+            try { p = Path.GetFullPath(p); } catch { /* keep the text as-is */ }
+            return p.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return string.Equals(Norm(a), Norm(b), cmp);
+    }
+
+    /// <summary>
     /// Prints a spooled entry (provenance header first), optionally narrowed
     /// to `--grep` matches. Every successful read appends one metadata-only
     /// row to the invocation log (#137): `reason=show`, `raw_bytes` = spool
@@ -644,6 +670,16 @@ public static class Program
         string content;
         try { content = st.Read(id); }
         catch { Console.Error.WriteLine($"vtk: no spool entry {id} (expired or never spooled)"); return 1; }
+
+        // The id keys on (cwd, argv) (#136), so a cross-directory read is
+        // deliberate recovery, not a clobber — warn on stderr, still print.
+        var headerCwd = Store.HeaderCwd(content);
+        if (headerCwd is not null)
+        {
+            var here = Directory.GetCurrentDirectory();
+            if (!SameDirectory(headerCwd, here))
+                Console.Error.WriteLine($"vtk show: spool {id} was written from {headerCwd} (current dir {here})");
+        }
 
         if (pat == "")
         {
@@ -762,7 +798,8 @@ public static class Program
         if (o.Since is { } win)
             Console.Out.WriteLine($"window: since {SinceSpec.Format(win)} ({sinceSpec})");
 
-        if (!fileIssues) return PrintGapsReport(st, o.Since);
+        var reg = Registry.Default();
+        if (!fileIssues) return PrintGapsReport(st, o.Since, reg);
 
         // Sane floors: below-floor thresholds clamp up (anti-spam guard) so
         // an over-eager invocation can't file trivial gaps.
@@ -776,7 +813,7 @@ public static class Program
             Console.Error.WriteLine($"vtk gaps: --min-calls {o.MinCalls} below floor; using {GapsIssues.FloorMinCalls}");
             o.MinCalls = GapsIssues.FloorMinCalls;
         }
-        return GapsIssues.Run(st, o);
+        return GapsIssues.Run(st, o, reg);
     }
 
     /// <summary>Header line of the recovered-folds section of `vtk gaps` (#137). Smoke tests split the report on it.</summary>
@@ -784,15 +821,16 @@ public static class Program
 
     /// <summary>
     /// Emits the human-facing coverage-gap and degraded-filter tables (the
-    /// default `vtk gaps` output), then the recovered-folds section (#137)
-    /// whenever the window holds any fold: per fold identity, how many
-    /// folds the agent pulled back with `vtk show` and what that cost. A
-    /// high rate marks a filter that suppresses what the agent wanted.
+    /// default `vtk gaps` output, keyed per Registry.GapFamily, #139), then
+    /// the recovered-folds section (#137) whenever the window holds any
+    /// fold: per fold identity, how many folds the agent pulled back with
+    /// `vtk show` and what that cost. A high rate marks a filter that
+    /// suppresses what the agent wanted.
     /// </summary>
-    private static int PrintGapsReport(Store st, DateTime? since)
+    private static int PrintGapsReport(Store st, DateTime? since, Registry reg)
     {
-        var gaps = st.Gaps(since);
-        var degraded = st.Degraded(since);
+        var gaps = st.Gaps(since, reg.GapFamily);
+        var degraded = st.Degraded(since, reg.GapFamily);
         var recovered = st.Recovered(since);
 
         if (gaps.Count == 0 && degraded.Count == 0)
