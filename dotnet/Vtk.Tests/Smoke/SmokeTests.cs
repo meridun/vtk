@@ -45,6 +45,22 @@ public class SmokeTests : IDisposable
         var (_, _, missingCode) = _h.Run(_h.Repo, "show", "dead");
         Assert.Equal(1, missingCode);
 
+        // #136: the header carries the cwd; a same-directory show is silent,
+        // a cross-directory show warns on stderr and still prints (exit 0).
+        Assert.Contains("# cwd: " + _h.Repo, showOut);
+        Assert.DoesNotContain("was written from", err1 + _h.Run(_h.Repo, "show", statusId).stderr);
+        var (xOut, xErr, xCode) = _h.Run(_h.Home, "show", statusId);
+        Assert.Equal(0, xCode);
+        Assert.Contains("modified:", xOut);
+        Assert.Contains($"vtk show: spool {statusId} was written from {_h.Repo}", xErr);
+
+        // #136: the same command from another directory gets its own id.
+        var otherRepo = Path.Combine(_h.Home, "other-repo");
+        SmokeHarness.Git(_h.Home, "init", "-q", "other-repo");
+        var (siblingOut, _, _) = _h.Run(otherRepo, "git", "status");
+        Assert.DoesNotContain("OK " + statusId, siblingOut);
+        Assert.Contains("modified:", _h.Run(_h.Repo, "show", statusId).stdout);
+
         // exit-code parity on failure with identical output
         var rawOtherOut = "";
         var rawOtherCode = 0;
