@@ -102,6 +102,14 @@ outgrows a screen.)
   folds" section of `vtk gaps`** (placement (a) — no new subcommand, nothing under `discover`,
   keeps the #44 layering), and `vtk gain` gains a **net** column (gross − recovered bytes)
   beside today's gross figure; one issue, one branch — [#137](https://github.com/meridun/vtk/issues/137)
+- `vtk gaps` / `--file-issues` key gap families by **`argv[0] argv[1]`** when `argv[0]` has any
+  registered pair key in `Registry.Default()` (option A; `vtk gain` keeps `argv[0]`), after
+  normalizing known git global options (`-C <dir>`, `-c k=v`, `--no-pager`, `--git-dir`) so
+  `git --no-pager diff` aggregates under `git diff`; families that already resolve in the
+  registry print as a *dispatch gap* line instead of a proposed `Filter:` issue (Q3 option B);
+  the dispatch fix itself is [#152](https://github.com/meridun/vtk/issues/152) and the npm
+  inner-delegation attribution bug is [#153](https://github.com/meridun/vtk/issues/153) —
+  [#139](https://github.com/meridun/vtk/issues/139)
 
 ## Pipeline
 
