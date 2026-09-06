@@ -170,6 +170,16 @@ public sealed class Store
     // invocation is still logged — fallback always logs — but it is not a
     // coverage gap, so it must not rank a family in `vtk gaps` (#118).
     public const string ReasonSpawnFail = "spawn-fail";
+    // A `vtk show <id>` read-back (#137): not a wrap invocation, so it is
+    // neither a coverage gap nor countable savings — it is the recovery
+    // signal the fold→show join reads.
+    public const string ReasonShow = "show";
+
+    /// <summary>
+    /// A `vtk show` this long after the fold that produced its id counts as
+    /// a recovery of that fold (#137): the agent undid the elision.
+    /// </summary>
+    public static readonly TimeSpan RecoveryWindow = TimeSpan.FromMinutes(10);
 
     private string MetaPath => Path.Combine(_dir, "invocations.jsonl");
 
@@ -308,20 +318,123 @@ public sealed class Store
         return outList;
     }
 
-    /// <summary>Reports whether an invocation contributes real byte counts to the savings roll-up.</summary>
+    /// <summary>
+    /// Reports whether an invocation contributes real byte counts to the
+    /// savings roll-up. `vtk show` rows (#137) are excluded: they are
+    /// read-backs, not wrapped commands, and enter `vtk gain` only through
+    /// the recovered-bytes join.
+    /// </summary>
     private static bool Countable(Invocation inv)
     {
         if (inv.TTY) return false;
+        if (inv.Reason == ReasonShow) return false;
         return inv.Reason != ReasonTTYBypass;
     }
 
-    /// <summary>Aggregates cumulative token savings from the invocation log. Backs `vtk gain`.</summary>
+    /// <summary>Reports whether a row emitted `OK &lt;id&gt;` — a fold whose raw is recoverable via `vtk show`.</summary>
+    private static bool IsFold(Invocation inv) =>
+        inv.SpoolId is { Length: > 0 } && inv.Reason != ReasonShow;
+
+    /// <summary>
+    /// The fold→show join (#137), computed offline over the log. For each
+    /// `show` row, the most recent prior fold row (log order) carrying the
+    /// same spool id is its fold; the show recovers that fold when it lands
+    /// inside <see cref="RecoveryWindow"/> after it. Returns, per fold row
+    /// (by index into <paramref name="rows"/>), the show rows that recovered
+    /// it. A show joins at most one fold; folds with no show are absent.
+    /// </summary>
+    internal static Dictionary<int, List<Invocation>> JoinShows(IReadOnlyList<Invocation> rows)
+    {
+        var latestFold = new Dictionary<string, int>();
+        var joined = new Dictionary<int, List<Invocation>>();
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var inv = rows[i];
+            if (IsFold(inv))
+            {
+                latestFold[inv.SpoolId!] = i;
+                continue;
+            }
+            if (inv.Reason != ReasonShow || inv.SpoolId is not { Length: > 0 } id) continue;
+            if (!latestFold.TryGetValue(id, out var fi)) continue;
+            var delta = inv.Time.ToUniversalTime() - rows[fi].Time.ToUniversalTime();
+            if (delta < TimeSpan.Zero || delta > RecoveryWindow) continue;
+            if (!joined.TryGetValue(fi, out var list))
+            {
+                list = new List<Invocation>();
+                joined[fi] = list;
+            }
+            list.Add(inv);
+        }
+        return joined;
+    }
+
+    /// <summary>
+    /// The fold identity a recovery is attributed to: the engaged filter's
+    /// registry name (or fold name) when the row was filtered, else the
+    /// command family — the banner-strip spool of an unrecognized `npm run`
+    /// inner tool, which is gap-logged under that tool.
+    /// </summary>
+    private static string FoldIdentity(Invocation inv) =>
+        inv.Filtered && inv.Reason != "" ? inv.Reason : FirstToken(inv.Cmd);
+
+    /// <summary>
+    /// Recovery rate per fold identity (#137): folds emitted, folds the
+    /// agent pulled back with `vtk show` inside <see cref="RecoveryWindow"/>,
+    /// and the bytes those shows emitted. Sorted by recovered folds
+    /// descending, then folds, then name. <paramref name="since"/> (#140)
+    /// windows on the fold row; the joined shows follow it. Read-only over
+    /// metadata — ids and counts, never output content.
+    /// </summary>
+    public List<RecoverySummary> Recovered(DateTime? since = null)
+    {
+        var rows = Invocations();
+        var joined = JoinShows(rows);
+        var agg = new Dictionary<string, RecoverySummary>();
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var inv = rows[i];
+            if (!IsFold(inv)) continue;
+            if (!SinceSpec.InWindow(inv.Time, since)) continue;
+            var key = FoldIdentity(inv);
+            if (key == "") continue;
+            if (!agg.TryGetValue(key, out var r))
+            {
+                r = new RecoverySummary { Filter = key };
+                agg[key] = r;
+            }
+            r.Folds++;
+            if (joined.TryGetValue(i, out var shows))
+            {
+                r.Recovered++;
+                foreach (var sh in shows) r.ShowBytes += sh.OutBytes;
+            }
+        }
+        var outList = agg.Values.ToList();
+        outList.Sort((a, b) => a.Recovered != b.Recovered
+            ? b.Recovered.CompareTo(a.Recovered)
+            : a.Folds != b.Folds
+                ? b.Folds.CompareTo(a.Folds)
+                : string.CompareOrdinal(a.Filter, b.Filter));
+        return outList;
+    }
+
+    /// <summary>
+    /// Aggregates cumulative token savings from the invocation log. Backs
+    /// `vtk gain`. Gross figures count every countable row exactly as
+    /// before; the recovered bytes (#137) are the `out_bytes` of `vtk show`
+    /// rows joined to a fold, attributed to the fold's family, and feed
+    /// only the net figures.
+    /// </summary>
     public GainReport Gain()
     {
         var report = new GainReport();
         var agg = new Dictionary<string, FamilyGain>();
-        foreach (var inv in Invocations())
+        var rows = Invocations();
+        var joined = JoinShows(rows);
+        for (var i = 0; i < rows.Count; i++)
         {
+            var inv = rows[i];
             if (!Countable(inv)) continue;
             var family = FirstToken(inv.Cmd);
             if (family == "") continue;
@@ -336,6 +449,15 @@ public sealed class Store
             g.Calls++;
             g.RawBytes += inv.RawBytes;
             g.OutBytes += inv.OutBytes;
+            if (joined.TryGetValue(i, out var shows))
+            {
+                report.Recoveries++;
+                foreach (var sh in shows)
+                {
+                    g.Recovered += sh.OutBytes;
+                    report.Recovered += sh.OutBytes;
+                }
+            }
         }
         report.Families = agg.Values.ToList();
         report.Families.Sort((a, b) => a.Saved != b.Saved

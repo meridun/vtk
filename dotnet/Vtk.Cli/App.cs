@@ -274,7 +274,7 @@ public static class Program
             if (!compact.EndsWith('\n')) Console.Out.WriteLine();
         }
         Console.Out.WriteLine($"OK {id}");
-        LogInvocation(st, strip.Inner, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
+        LogInvocation(st, strip.Inner, raw.Length, compact.Length, filtered: true, tty: false, entry.Name, spoolId: id);
         return result.ExitCode;
     }
 
@@ -344,7 +344,7 @@ public static class Program
         Console.Out.WriteLine($"OK {id}");
         // Banner stripped; recorded with the bytes the body saved. A coverage
         // gap for the inner tool only when it has no filter.
-        LogInvocation(st, inner, raw.Length, body.Length, filtered, tty: false, reason);
+        LogInvocation(st, inner, raw.Length, body.Length, filtered, tty: false, reason, spoolId: id);
         return code;
     }
 
@@ -430,7 +430,7 @@ public static class Program
             if (!tail.EndsWith('\n')) Console.Out.WriteLine();
         }
         Console.Out.WriteLine($"OK {id}");
-        LogInvocation(st, logArgv, raw.Length, tail.Length, filtered: true, tty: false, foldName);
+        LogInvocation(st, logArgv, raw.Length, tail.Length, filtered: true, tty: false, foldName, spoolId: id);
         return true;
     }
 
@@ -530,7 +530,7 @@ public static class Program
             if (!compact.EndsWith('\n')) Console.Out.WriteLine();
         }
         Console.Out.WriteLine($"OK {id}");
-        LogInvocation(st, match, raw.Length, compact.Length, filtered: true, tty: false, entry.Name);
+        LogInvocation(st, match, raw.Length, compact.Length, filtered: true, tty: false, entry.Name, spoolId: id);
         return result.ExitCode;
     }
 
@@ -570,7 +570,14 @@ public static class Program
         return savings / (double)rawLen >= MinSavingsRatio;
     }
 
-    private static void LogInvocation(Store st, string[] args, long rawBytes, long outBytes, bool filtered, bool tty, string reason)
+    /// <summary>
+    /// Appends one metadata row (never output content — invariant 3).
+    /// <paramref name="spoolId"/> is set only by the paths that emitted
+    /// `OK &lt;id&gt;`, so the fold→show join (#137) can find the fold a
+    /// later `vtk show` recovered. A log failure is reported and swallowed:
+    /// telemetry never changes the wrapped command's exit code or output.
+    /// </summary>
+    private static void LogInvocation(Store st, string[] args, long rawBytes, long outBytes, bool filtered, bool tty, string reason, string? spoolId = null, bool? grep = null)
     {
         try
         {
@@ -583,6 +590,8 @@ public static class Program
                 Filtered = filtered,
                 TTY = tty,
                 Reason = reason,
+                SpoolId = spoolId,
+                Grep = grep,
             });
         }
         catch (Exception ex)
@@ -615,6 +624,14 @@ public static class Program
         return string.Equals(Norm(a), Norm(b), cmp);
     }
 
+    /// <summary>
+    /// Prints a spooled entry (provenance header first), optionally narrowed
+    /// to `--grep` matches. Every successful read appends one metadata-only
+    /// row to the invocation log (#137): `reason=show`, `raw_bytes` = spool
+    /// content size, `out_bytes` = bytes actually emitted, `grep` as a
+    /// boolean — the pattern text is never written (invariant 3). Nothing
+    /// extra reaches stdout, and a log failure never changes the exit code.
+    /// </summary>
     private static int CmdShow(string[] args)
     {
         string id = "", pat = "";
@@ -667,7 +684,13 @@ public static class Program
         if (pat == "")
         {
             Console.Out.Write(content);
-            if (!content.EndsWith('\n')) Console.Out.WriteLine();
+            var emitted = content.Length;
+            if (!content.EndsWith('\n'))
+            {
+                Console.Out.WriteLine();
+                emitted++;
+            }
+            LogInvocation(st, new[] { "show", id }, content.Length, emitted, filtered: false, tty: false, Store.ReasonShow, spoolId: id, grep: false);
             return 0;
         }
 
@@ -675,10 +698,14 @@ public static class Program
         try { re = new Regex(pat); }
         catch (Exception ex) { Console.Error.WriteLine($"vtk show: bad pattern: {ex.Message}"); return 2; }
 
+        long grepEmitted = 0;
         foreach (var line in content.Split('\n'))
         {
-            if (re.IsMatch(line)) Console.Out.WriteLine(line);
+            if (!re.IsMatch(line)) continue;
+            Console.Out.WriteLine(line);
+            grepEmitted += line.Length + 1;
         }
+        LogInvocation(st, new[] { "show", id }, content.Length, grepEmitted, filtered: false, tty: false, Store.ReasonShow, spoolId: id, grep: true);
         return 0;
     }
 
@@ -789,15 +816,27 @@ public static class Program
         return GapsIssues.Run(st, o, reg);
     }
 
-    /// <summary>Emits the human-facing coverage-gap and degraded-filter tables (the default `vtk gaps` output), keyed per Registry.GapFamily (#139).</summary>
+    /// <summary>Header line of the recovered-folds section of `vtk gaps` (#137). Smoke tests split the report on it.</summary>
+    internal const string RecoveredHeader = "RECOVERED FOLDS (vtk show within 10 min of the fold)";
+
+    /// <summary>
+    /// Emits the human-facing coverage-gap and degraded-filter tables (the
+    /// default `vtk gaps` output, keyed per Registry.GapFamily, #139), then
+    /// the recovered-folds section (#137) whenever the window holds any
+    /// fold: per fold identity, how many folds the agent pulled back with
+    /// `vtk show` and what that cost. A high rate marks a filter that
+    /// suppresses what the agent wanted.
+    /// </summary>
     private static int PrintGapsReport(Store st, DateTime? since, Registry reg)
     {
         var gaps = st.Gaps(since, reg.GapFamily);
         var degraded = st.Degraded(since, reg.GapFamily);
+        var recovered = st.Recovered(since);
 
         if (gaps.Count == 0 && degraded.Count == 0)
         {
             Console.Out.WriteLine("no gap entries");
+            PrintRecovered(recovered, leadingBlank: true);
             return 0;
         }
         if (gaps.Count > 0)
@@ -814,7 +853,19 @@ public static class Program
             foreach (var g in degraded)
                 Console.Out.WriteLine($"{g.Family,-24} {g.Calls,7} {g.RawBytes,12}");
         }
+        PrintRecovered(recovered, leadingBlank: true);
         return 0;
+    }
+
+    /// <summary>The recovered-folds table (#137); prints nothing when the window holds no fold.</summary>
+    private static void PrintRecovered(List<RecoverySummary> recovered, bool leadingBlank)
+    {
+        if (recovered.Count == 0) return;
+        if (leadingBlank) Console.Out.WriteLine();
+        Console.Out.WriteLine(RecoveredHeader);
+        Console.Out.WriteLine($"{"FILTER",-24} {"FOLDS",7} {"RECOVERED",10} {"RATE",7} {"SHOW BYTES",12}");
+        foreach (var r in recovered)
+            Console.Out.WriteLine($"{r.Filter,-24} {r.Folds,7} {r.Recovered,10} {Percent(r.Recovered, r.Folds),7} {r.ShowBytes,12}");
     }
 
     /// <summary>
@@ -866,10 +917,13 @@ public static class Program
         }
         Console.Out.WriteLine($"cumulative savings: {report.RawBytes} raw -> {report.OutBytes} emitted, saved {report.Saved} bytes ({Percent(report.Saved, report.RawBytes)}) over {report.Calls} calls");
         Console.Out.WriteLine($"~ {Tokens(report.Saved)} tokens = {Usd(Economics.SavedUsd(report.Saved))} saved ({Economics.DefaultModel} input @ {Usd(Economics.PriceFor(Economics.DefaultModel))}/MTok, bytes/4 heuristic)");
+        // Net (#137): gross minus what `vtk show` emitted to undo folds.
+        // Gross never moves because of this line; net is the honest figure.
+        Console.Out.WriteLine($"net {report.Net} bytes (~ {Tokens(report.Net)} tokens = {Usd(Economics.SavedUsd(report.Net))}) after {report.Recovered} bytes recovered via vtk show ({report.Recoveries} folds)");
         Console.Out.WriteLine();
-        Console.Out.WriteLine($"{"FAMILY",-24} {"CALLS",7} {"RAW BYTES",12} {"SAVED",12} {"SAVED%",8}");
+        Console.Out.WriteLine($"{"FAMILY",-24} {"CALLS",7} {"RAW BYTES",12} {"SAVED",12} {"SAVED%",8} {"NET",12}");
         foreach (var g in report.Families)
-            Console.Out.WriteLine($"{g.Family,-24} {g.Calls,7} {g.RawBytes,12} {g.Saved,12} {Percent(g.Saved, g.RawBytes),8}");
+            Console.Out.WriteLine($"{g.Family,-24} {g.Calls,7} {g.RawBytes,12} {g.Saved,12} {Percent(g.Saved, g.RawBytes),8} {g.Net,12}");
 
         var days = daily || graph ? st.Daily() : null;
         if (daily && days is not null)

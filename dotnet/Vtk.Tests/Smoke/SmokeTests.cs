@@ -595,7 +595,7 @@ public class TomlGapsSmokeTests : IDisposable
         // A filtered family is coverage, not a gap.
         var (gapsOut, _, gapsCode) = _h.Run(_h.Repo, "gaps");
         Assert.Equal(0, gapsCode);
-        Assert.DoesNotContain("cargo", gapsOut);
+        Assert.DoesNotContain("cargo", SmokeAssert.GapTable(gapsOut)); // the fold names itself only in the #137 recovered section
     }
 
     [Fact]

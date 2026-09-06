@@ -396,6 +396,151 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public void LogInvocation_SpoolIdAndGrep_OmittedWhenNull_RoundTripWhenSet()
+    {
+        // #137: the two new fields never change the shape of a row that
+        // does not carry them, and round-trip when they do.
+        _store.LogInvocation(new Invocation { Cmd = "git status", RawBytes = 100, OutBytes = 10, Filtered = true });
+        _store.LogInvocation(new Invocation { Cmd = "git diff", RawBytes = 5000, OutBytes = 200, Filtered = true, Reason = "git diff", SpoolId = "2e3f" });
+        _store.LogInvocation(new Invocation { Cmd = "show 2e3f", RawBytes = 5000, OutBytes = 5000, Reason = Store.ReasonShow, SpoolId = "2e3f", Grep = false });
+
+        var lines = File.ReadAllLines(Path.Combine(_dir, "invocations.jsonl"));
+        Assert.DoesNotContain("spool_id", lines[0]);
+        Assert.DoesNotContain("grep", lines[0]);
+        Assert.Contains("\"spool_id\":\"2e3f\"", lines[1]);
+        Assert.DoesNotContain("grep", lines[1]);
+        Assert.Contains("\"reason\":\"show\"", lines[2]);
+        Assert.Contains("\"grep\":false", lines[2]);
+
+        var rows = _store.Invocations();
+        Assert.Null(rows[0].SpoolId);
+        Assert.Null(rows[0].Grep);
+        Assert.Equal("2e3f", rows[1].SpoolId);
+        Assert.Equal("2e3f", rows[2].SpoolId);
+        Assert.False(rows[2].Grep);
+    }
+
+    public static IEnumerable<object[]> RecoveryCases()
+    {
+        // minutesAfterFold, expectRecovered
+        yield return new object[] { 0.0, true };
+        yield return new object[] { 9.9, true };
+        yield return new object[] { 10.0, true };
+        yield return new object[] { 10.1, false };
+        yield return new object[] { -1.0, false }; // show logged before its fold: not a recovery
+    }
+
+    [Theory]
+    [MemberData(nameof(RecoveryCases))]
+    public void Recovered_JoinsShowToFoldOnlyInsideWindow(double minutesAfterFold, bool expectRecovered)
+    {
+        var t0 = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        _store.LogInvocation(new Invocation { Time = t0, Cmd = "git diff", RawBytes = 9000, OutBytes = 300, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(minutesAfterFold), Cmd = "show ab12", RawBytes = 9000, OutBytes = 9050, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
+
+        var r = Assert.Single(_store.Recovered());
+        Assert.Equal("git diff", r.Filter);
+        Assert.Equal(1, r.Folds);
+        Assert.Equal(expectRecovered ? 1 : 0, r.Recovered);
+        Assert.Equal(expectRecovered ? 9050 : 0, r.ShowBytes);
+    }
+
+    [Fact]
+    public void Recovered_RatesPerFoldIdentity_MostRecentFoldWins_UnjoinedShowsIgnored()
+    {
+        var t0 = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        // Two git diff folds share an id (same command rerun); the show joins
+        // the most recent one only.
+        _store.LogInvocation(new Invocation { Time = t0, Cmd = "git diff", RawBytes = 9000, OutBytes = 300, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(1), Cmd = "git diff", RawBytes = 9500, OutBytes = 310, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(2), Cmd = "show ab12", RawBytes = 9500, OutBytes = 9550, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
+        // A grep'd second look at the same fold: counted once as recovered, bytes summed.
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(3), Cmd = "show ab12", RawBytes = 9500, OutBytes = 120, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = true });
+        // mocha fold never recovered.
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(4), Cmd = "mocha --reporter spec", RawBytes = 40000, OutBytes = 900, Filtered = true, Reason = "mocha", SpoolId = "cd34" });
+        // npm fold recovered.
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(5), Cmd = "npm run build", RawBytes = 70000, OutBytes = 500, Filtered = true, Reason = "npm-run-fold", SpoolId = "ef56" });
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(6), Cmd = "show ef56", RawBytes = 70000, OutBytes = 70000, Reason = Store.ReasonShow, SpoolId = "ef56", Grep = false });
+        // Unfiltered banner-strip spool (unrecognized inner tool): identity is the family.
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(7), Cmd = "tsc --noEmit", RawBytes = 3000, OutBytes = 2600, Reason = Store.ReasonNoFilter, SpoolId = "0a1b" });
+        // Show of an id with no fold row (expired / pre-#137 fold): ignored.
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(8), Cmd = "show 9999", RawBytes = 100, OutBytes = 100, Reason = Store.ReasonShow, SpoolId = "9999", Grep = false });
+        // Filtered rows without a spool id are not folds.
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(9), Cmd = "git status", RawBytes = 100, OutBytes = 90, Filtered = true, Reason = "git status" });
+
+        var got = _store.Recovered();
+
+        Assert.Equal(
+            new[]
+            {
+                ("git diff", 2, 1, 9670L),
+                ("npm-run-fold", 1, 1, 70000L),
+                ("mocha", 1, 0, 0L),
+                ("tsc", 1, 0, 0L),
+            },
+            got.Select(r => (r.Filter, r.Folds, r.Recovered, r.ShowBytes)));
+    }
+
+    [Fact]
+    public void Recovered_Since_WindowsOnTheFoldRow()
+    {
+        var since = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        _store.LogInvocation(new Invocation { Time = since.AddMinutes(-5), Cmd = "git diff", RawBytes = 9000, OutBytes = 300, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
+        _store.LogInvocation(new Invocation { Time = since.AddMinutes(1), Cmd = "show ab12", RawBytes = 9000, OutBytes = 9000, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
+        _store.LogInvocation(new Invocation { Time = since.AddMinutes(2), Cmd = "mocha", RawBytes = 40000, OutBytes = 900, Filtered = true, Reason = "mocha", SpoolId = "cd34" });
+
+        Assert.Equal(2, _store.Recovered().Count);
+        var windowed = Assert.Single(_store.Recovered(since));
+        Assert.Equal("mocha", windowed.Filter);
+    }
+
+    [Fact]
+    public void Gain_NetSubtractsRecoveredShowBytes_AndShowRowsNeverCountInGross()
+    {
+        var t0 = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        _store.LogInvocation(new Invocation { Time = t0, Cmd = "git diff", RawBytes = 9000, OutBytes = 300, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(1), Cmd = "show ab12", RawBytes = 9000, OutBytes = 9050, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(2), Cmd = "mocha", RawBytes = 40000, OutBytes = 900, Filtered = true, Reason = "mocha", SpoolId = "cd34" });
+        // Late show: outside the window, so not a recovery — and still not gross.
+        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(30), Cmd = "show cd34", RawBytes = 40000, OutBytes = 40000, Reason = Store.ReasonShow, SpoolId = "cd34", Grep = false });
+
+        var report = _store.Gain();
+
+        // Gross: exactly the two wrap rows, as before #137.
+        Assert.Equal(2, report.Calls);
+        Assert.Equal(49000, report.RawBytes);
+        Assert.Equal(1200, report.OutBytes);
+        Assert.Equal(47800, report.Saved);
+        // Net: gross minus the joined show's emitted bytes.
+        Assert.Equal(9050, report.Recovered);
+        Assert.Equal(1, report.Recoveries);
+        Assert.Equal(47800 - 9050, report.Net);
+        var git = Assert.Single(report.Families, f => f.Family == "git");
+        Assert.Equal(8700, git.Saved);
+        Assert.Equal(9050, git.Recovered);
+        Assert.Equal(-350, git.Net); // a recovered fold is a net loss: the round trip cost more than it saved
+        var mocha = Assert.Single(report.Families, f => f.Family == "mocha");
+        Assert.Equal(39100, mocha.Net);
+        Assert.DoesNotContain(report.Families, f => f.Family == "show");
+
+        // Daily / history share the countable gate: no show rows.
+        Assert.Equal(2, Assert.Single(_store.Daily()).Calls);
+        Assert.DoesNotContain(_store.Recent(10), inv => inv.Reason == Store.ReasonShow);
+    }
+
+    [Fact]
+    public void Gaps_ExcludeShowRows()
+    {
+        _store.LogInvocation(new Invocation { Cmd = "show ab12", RawBytes = 9000, OutBytes = 9000, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
+        _store.LogInvocation(new Invocation { Cmd = "ls -la", RawBytes = 100, Reason = Store.ReasonNoFilter });
+
+        var ls = Assert.Single(_store.Gaps());
+        Assert.Equal("ls", ls.Family);
+        Assert.Empty(_store.Degraded());
+        Assert.Single(_store.FileIssueGaps(1, 1));
+    }
+
+    [Fact]
     public void Sweep_RemovesEntriesOlderThanTtl()
     {
         var id = _store.Write(Cwd, new[] { "git", "status" }, "raw", DateTime.UtcNow);

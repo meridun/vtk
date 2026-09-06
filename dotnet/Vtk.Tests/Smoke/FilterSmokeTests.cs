@@ -17,6 +17,17 @@ public static class SmokeAssert
     public static void NoOk(string output) =>
         Assert.False(OkRe.IsMatch(output), $"unexpected OK <id> line in output:\n{output}");
 
+    /// <summary>
+    /// The `vtk gaps` output above the recovered-folds section (#137), for
+    /// assertions about the gap/degraded tables only — the section
+    /// legitimately names the filter of any fold the test produced.
+    /// </summary>
+    public static string GapTable(string gapsOut)
+    {
+        var idx = gapsOut.IndexOf("RECOVERED FOLDS", StringComparison.Ordinal);
+        return idx < 0 ? gapsOut : gapsOut[..idx];
+    }
+
     /// <summary>Every packed row (before the OK line, excluding "(+N more)" tails) fits the 96-char pack width.</summary>
     public static void PackRowsMaxWidth(string output)
     {
@@ -423,7 +434,7 @@ public class NpmFoldSmokeTests : IDisposable
         Assert.DoesNotContain("processed item", log);
         var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
         Assert.Equal(0, gapsCode);
-        Assert.DoesNotContain("npm", gaps);
+        Assert.DoesNotContain("npm", SmokeAssert.GapTable(gaps)); // the fold names itself only in the #137 recovered section
     }
 
     [Fact]
@@ -475,7 +486,7 @@ public class NpmFoldSmokeTests : IDisposable
         Assert.DoesNotContain("processed item", log);
         var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
         Assert.Equal(0, gapsCode);
-        Assert.DoesNotContain("npm", gaps);
+        Assert.DoesNotContain("npm", SmokeAssert.GapTable(gaps)); // the fold names itself only in the #137 recovered section
     }
 
     [Fact]
@@ -602,7 +613,7 @@ public class PowershellFoldSmokeTests : IDisposable
         Assert.DoesNotContain("request 0001", log);
         var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
         Assert.Equal(0, gapsCode);
-        Assert.DoesNotContain("powershell", gaps);
+        Assert.DoesNotContain("powershell", SmokeAssert.GapTable(gaps)); // the fold names itself only in the #137 recovered section
     }
 
     [Fact]

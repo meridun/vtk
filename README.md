@@ -142,6 +142,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   redaction), keyed per (directory, command) so sibling worktrees never clobber each other;
   `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only, and a one-line
   stderr warning flags a read from a directory other than the one that wrote it.
+  Each successful `show` is itself logged (#137) as a metadata-only row (`reason=show`, the
+  spool id, spool size, bytes emitted, and whether `--grep` was used as a boolean — the
+  pattern text is never written); output and exit codes of `show` are unchanged.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
   reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`,
   `spawn-fail`), and filtered
@@ -166,6 +169,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   `--file-issues` thresholds) to invocations logged at or after the bound (UTC); opt-in —
   without it the output is unchanged. A `window: since <utc> (<spec>)` header line is printed
   only when the flag is given; invalid or out-of-range specs exit 2 with usage.
+  A `RECOVERED FOLDS` section (#137) follows the tables whenever the window holds any fold:
+  per filter, how many folds were pulled back with `vtk show` within 10 minutes of the fold
+  (`FOLDS`, `RECOVERED`, `RATE`, `SHOW BYTES`) — a high rate marks a filter that suppresses
+  what the agent wanted; fix it per filter, not by making folds emit more.
 
 - **Cumulative savings + `vtk gain`** — aggregates the invocation log into total raw vs emitted
   bytes, bytes saved and savings %, overall and per command family (ranked by bytes saved).
@@ -177,7 +184,12 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   attributes logged invocations to session transcript time windows and renders the 10 most
   recent sessions with calls, saved bytes/%, ~tokens, ~USD; `--sessions <dir>` overrides the
   transcript directory). The session view reads only top-level transcript *timestamps* — never
-  transcript content.
+  transcript content. Beside the gross figures, a `NET` column and a third summary line
+  (#137) subtract the bytes pulled back through `vtk show` within 10 minutes of a fold —
+  gross never moves; net is the honest figure. `show` rows are never counted as calls.
+  Caveat on the economics: raw bytes are counted as saved even where the agent's own
+  `| tail -N` (or similar) would have discarded them, so gross overstates savings on piped
+  runs.
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm`/`winget`/`choco`/`reg` route
   through vtk without being prefixed. Marker-delimited and idempotent, with
@@ -240,7 +252,7 @@ Design decisions are recorded one line each in
 vtk git status          # compact status; prints "OK <id>" when filtering clears the savings bar
 vtk show <id>           # full captured output (provenance header first)
 vtk show <id> --grep x  # only matching lines
-vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
+vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters, recovered folds)
 vtk gaps --since 14d    # same report over a time window (<N>d, <N>h, or ISO-8601 date; UTC)
 vtk gaps --file-issues  # file recurring gap families as intake issues (dry-run; --yes to create)
 vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family,
