@@ -446,6 +446,66 @@ public class NpmFoldSmokeTests : IDisposable
     }
 
     [Fact]
+    public async Task BigBannerlessMochaWithTrailingNoisePinsSummaryAboveTail()
+    {
+        // The #134 shape: `npm test` off-TTY (no banner, so the inner mocha
+        // is undiscoverable and the #93 fold applies) whose "N passing" line
+        // is followed by five leftover-timer console lines. Positionally the
+        // summary is outside the 5-line tail; the fold pins it above.
+        var env = new Dictionary<string, string> { ["VTK_FAKE_NPM_ALIAS_SCRIPT"] = "bignoise" };
+        var (raw, rawCode) = _h.RunRawTool(env, "npm", "test");
+        Assert.Equal(0, rawCode);
+        Assert.True(raw.Length >= 64 * 1024, $"fixture below the fold floor: {raw.Length} bytes");
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, env, "npm", "test");
+        Assert.Equal(rawCode, code); // parity
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.StartsWith("  1500 passing (58ms)\n[TraderQueryAction.complete] No socket to emit response\n", outp);
+        Assert.Equal(5, outp.Split("No socket to emit response").Length - 1);
+        Assert.DoesNotContain("case 0001", outp);
+        Assert.True(outp.Length < 700, $"fold output not compact ({outp.Length} bytes):\n{outp}\nstderr: {err}");
+
+        // The same body through `npm run <script>` takes the same fold
+        // (its own spool id: the id hashes argv, #136).
+        var (outRun, _, codeRun) = _h.RunFaked(_h.Repo, null, "npm", "run", "bignoise");
+        Assert.Equal(0, codeRun);
+        SmokeHarness.MustOkId(outRun);
+        Assert.Equal(outp[..outp.IndexOf("OK ")], outRun[..outRun.IndexOf("OK ")]);
+
+        // The full raw is recoverable via the spool.
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("case 0001", shown);
+        Assert.Contains("1500 passing", shown);
+
+        // Telemetry: fold identity, no output content (invariant 3).
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"npm-run-fold\"", log);
+        Assert.DoesNotContain("passing", log);
+        Assert.DoesNotContain("No socket", log);
+
+        // Concurrent identical invocations: neither may lose output and at
+        // least one must fold (spool replace race; the loser degrades to raw
+        // per invariant 2, #125).
+        var t1 = Task.Run(() => _h.RunFaked(_h.Repo, env, "npm", "test"));
+        var t2 = Task.Run(() => _h.RunFaked(_h.Repo, env, "npm", "test"));
+        var results = await Task.WhenAll(t1, t2);
+        var folded = 0;
+        foreach (var r in results)
+        {
+            Assert.Equal(0, r.code);
+            if (r.stdout.Contains("OK " + id))
+            {
+                folded++;
+                Assert.Equal(outp, r.stdout);
+            }
+            else
+                Assert.Contains("case 0001", r.stdout);
+        }
+        Assert.True(folded >= 1, "neither concurrent invocation folded");
+    }
+
+    [Fact]
     public void BigBannerlessFailureStaysRawWithParity()
     {
         var (raw, rawCode) = _h.RunRawTool(Code(3), "npm", "run", "bigraw");
