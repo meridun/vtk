@@ -320,6 +320,39 @@ public class NpmDispatchSmokeTests : IDisposable
         Assert.Equal(0, gapsCode);
         Assert.Contains("node", gaps);
         Assert.DoesNotContain("npm", gaps);
+        // An unrecognized inner tool is a real coverage gap (#153).
+        var log = _h.InvocationLog();
+        Assert.Contains("\"cmd\":\"node", log);
+        Assert.Contains("\"filtered\":false", log);
+        Assert.Contains("\"reason\":\"no-filter\"", log);
+    }
+
+    [Fact]
+    public void NpmRunWithUnshrinkableMochaBodyAttributesRowToMochaFilter()
+    {
+        // #153: the inner filter exists and ran but elided nothing (a mocha
+        // module-load error carries no summary line). The banner-stripped
+        // body prints inline (saving below the #52 bar, no `OK`), exit code
+        // is mocha's own, and the row is attributed to the mocha filter —
+        // filtered=true, reason=mocha — like the direct path's "nothing
+        // elided" row, so `vtk gaps` never proposes a filter that ships.
+        var (outp, err, code) = _h.RunFaked(_h.Repo, null, "npm", "run", "testcrash");
+        Assert.Equal(1, code); // parity
+        Assert.DoesNotContain("demo@1.0.0", outp + err);
+        Assert.DoesNotContain("> mocha", outp + err);
+        Assert.Contains("Cannot find module './helpers/db'", outp + err);
+        Assert.Contains("at Module._load", outp + err);
+        SmokeAssert.NoOk(outp);
+        var log = _h.InvocationLog();
+        Assert.Contains("\"cmd\":\"mocha --reporter spec\"", log);
+        Assert.Contains("\"filtered\":true", log);
+        Assert.Contains("\"reason\":\"mocha\"", log);
+        Assert.DoesNotContain("\"reason\":\"no-filter\"", log);
+        // Metadata never carries output content.
+        Assert.DoesNotContain("Cannot find module", log);
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("mocha", gaps);
     }
 
     [Fact]

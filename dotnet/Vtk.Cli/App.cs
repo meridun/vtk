@@ -224,7 +224,7 @@ public static class Program
             // Banner stripped but the inner tool has no filter: emit the
             // banner-stripped body (already a saving) and log the gap under
             // the inner tool's family so `vtk gaps` prioritizes the real tool.
-            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode);
+            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode, filterName: null);
         }
         if (!entry.Filters(result.ExitCode))
         {
@@ -241,10 +241,12 @@ public static class Program
         }
         // Compare the compacted output against the raw the agent would
         // otherwise see: if the inner filter did not shrink the body, still
-        // prefer the banner-stripped body when that alone is a saving.
+        // prefer the banner-stripped body when that alone is a saving. The
+        // filter ran and elided nothing, so the row is attributed to it
+        // (filtered=true, its name) — not a coverage gap (#153).
         if (compact.Length >= strip.Body.Length)
         {
-            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode);
+            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode, entry.Name);
         }
         if (!ClearsSavingsBar(raw.Length, compact.Length))
         {
@@ -282,9 +284,16 @@ public static class Program
     /// raw under an ID for recovery; otherwise it is a plain passthrough.
     /// Attribution is always to the inner tool's family. Any spool failure
     /// degrades to full raw so no output is ever lost.
+    /// <paramref name="filterName"/> is the inner filter that ran and elided
+    /// nothing (logged filtered=true under its name, matching the direct
+    /// path's "nothing elided" row), or null when the inner tool has no
+    /// filter (logged filtered=false, no-filter: a real coverage gap) (#153).
     /// </summary>
-    private static int EmitNpmBody(Store st, string[] inner, string raw, string body, int code)
+    private static int EmitNpmBody(Store st, string[] inner, string raw, string body, int code, string? filterName)
     {
+        var filtered = filterName != null;
+        var reason = filterName ?? Store.ReasonNoFilter;
+
         // Unrecognized inner tool with a successful, floor-clearing body:
         // the size-floored fold (#93, option C) beats banner-only stripping.
         // A fold failure falls through to the pre-fold behavior below (which
@@ -294,22 +303,23 @@ public static class Program
 
         if (body.Length >= raw.Length)
         {
-            // No saving from stripping the banner: emit the raw and gap-log
-            // the inner family so the tool still surfaces in `vtk gaps`.
+            // No saving from stripping the banner: emit the raw, logged
+            // under the inner family so the tool still surfaces in `vtk gaps`
+            // when it has no filter.
             Console.Out.Write(raw);
             if (raw != "" && !raw.EndsWith('\n')) Console.Out.WriteLine();
-            LogInvocation(st, inner, raw.Length, raw.Length, filtered: false, tty: false, Store.ReasonNoFilter);
+            LogInvocation(st, inner, raw.Length, raw.Length, filtered, tty: false, reason);
             return code;
         }
 
         if (!ClearsSavingsBar(raw.Length, body.Length))
         {
             // Banner stripping saved bytes but below the savings bar (#52):
-            // emit the body inline, no spool, no `OK`. Still a coverage gap
-            // for the inner tool, logged with the bytes the body saved.
+            // emit the body inline, no spool, no `OK`. Logged with the bytes
+            // the body saved; a coverage gap only when no inner filter exists.
             Console.Out.Write(body);
             if (body != "" && !body.EndsWith('\n')) Console.Out.WriteLine();
-            LogInvocation(st, inner, raw.Length, body.Length, filtered: false, tty: false, Store.ReasonNoFilter);
+            LogInvocation(st, inner, raw.Length, body.Length, filtered, tty: false, reason);
             return code;
         }
 
@@ -332,9 +342,9 @@ public static class Program
             if (!body.EndsWith('\n')) Console.Out.WriteLine();
         }
         Console.Out.WriteLine($"OK {id}");
-        // Banner stripped but no inner filter ran: this is still a coverage
-        // gap for the inner tool, recorded with the bytes the body saved.
-        LogInvocation(st, inner, raw.Length, body.Length, filtered: false, tty: false, Store.ReasonNoFilter);
+        // Banner stripped; recorded with the bytes the body saved. A coverage
+        // gap for the inner tool only when it has no filter.
+        LogInvocation(st, inner, raw.Length, body.Length, filtered, tty: false, reason);
         return code;
     }
 
