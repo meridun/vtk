@@ -134,4 +134,70 @@ public class RegistryTests
         Assert.Equal("gh run", entry.Name);
         Assert.True(entry.Filters(0) && entry.Filters(1) && !entry.Filters(2));
     }
+
+    /// <summary>
+    /// Known git global options ahead of the subcommand normalize to the bare
+    /// pair key for the six allowed subcommands (#152): each form resolves to
+    /// the same entry as `git <sub>`.
+    /// </summary>
+    public static TheoryData<string[], string> GitNormalizedCases()
+    {
+        var data = new TheoryData<string[], string>();
+        var prefixes = new[]
+        {
+            new[] { "-C", "dir" },
+            new[] { "-c", "core.quotepath=off" },
+            new[] { "--no-pager" },
+            new[] { "-P" },
+            new[] { "-p" },
+            new[] { "--paginate" },
+            new[] { "--git-dir=.git" },
+            new[] { "--git-dir", ".git" },
+            new[] { "--work-tree=wt" },
+            new[] { "--work-tree", "wt" },
+            new[] { "-C", "dir", "-c", "a=b", "--no-pager" },
+        };
+        foreach (var sub in new[] { "status", "branch", "add", "commit", "push", "pull" })
+        {
+            foreach (var prefix in prefixes)
+            {
+                data.Add(new[] { "git" }.Concat(prefix).Append(sub).ToArray(), "git " + sub);
+            }
+        }
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(GitNormalizedCases))]
+    public void Default_GitGlobalOptions_ResolveToBarePairKey(string[] argv, string wantKey)
+    {
+        var r = Registry.Default();
+        Assert.True(r.TryLookup(argv, out var entry), string.Join(" ", argv));
+        Assert.Equal(wantKey, entry.Name);
+        Assert.True(r.TryLookup(wantKey.Split(' '), out var bare));
+        Assert.Same(bare, entry);
+    }
+
+    /// <summary>
+    /// diff/show/log are excluded from normalization (#152): behind a global
+    /// option they still miss and pass through (gap-logged), even though
+    /// their bare keys are registered.
+    /// </summary>
+    [Theory]
+    [InlineData("git --no-pager diff")]
+    [InlineData("git -C x show")]
+    [InlineData("git -C x log")]
+    [InlineData("git -c a=b --git-dir=.git diff --stat")]
+    public void Default_GitGlobalOptions_ExcludedSubcommandsStillMiss(string cmd)
+    {
+        var r = Registry.Default();
+        Assert.False(r.TryLookup(cmd.Split(' '), out _), cmd);
+    }
+
+    /// <summary>An unknown global option ahead of the subcommand keeps the conservative miss: no guessing at which token is the subcommand.</summary>
+    [Fact]
+    public void Default_GitUnknownGlobalOption_StillMisses()
+    {
+        Assert.False(Registry.Default().TryLookup(new[] { "git", "--exec-path=x", "status" }, out _));
+    }
 }
