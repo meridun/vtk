@@ -8,6 +8,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using Vtk.Core.Filter;
 using Vtk.Core.Spool;
 
 namespace Vtk.Cli;
@@ -36,18 +37,19 @@ internal static class GapsIssues
     internal const string FilterIssueTitlePrefix = "Filter: ";
 
     /// <summary>
-    /// Selects over-threshold gap families, drops any that already have an
-    /// open Filter issue, and either prints the plan (dry-run) or files each
-    /// via `gh issue create`. Returns nonzero only on a hard error (bad
-    /// metadata, unreachable gh, or a failed create) — an empty candidate set
-    /// is success.
+    /// Selects over-threshold gap families (keyed per <see cref="Registry.GapFamily"/>,
+    /// #139), reports families that already resolve in the registry as
+    /// dispatch gaps, drops any that already have an open Filter issue, and
+    /// either prints the plan (dry-run) or files each via `gh issue create`.
+    /// Returns nonzero only on a hard error (bad metadata, unreachable gh, or
+    /// a failed create) — an empty candidate set is success.
     /// </summary>
-    internal static int Run(Store st, FileIssuesOpts o)
+    internal static int Run(Store st, FileIssuesOpts o, Registry reg)
     {
         List<GapSummary> candidates;
         try
         {
-            candidates = st.FileIssueGaps(o.MinBytes, o.MinCalls, o.Since);
+            candidates = st.FileIssueGaps(o.MinBytes, o.MinCalls, o.Since, reg.GapFamily);
         }
         catch (Exception ex)
         {
@@ -63,7 +65,7 @@ internal static class GapsIssues
         HashSet<string> existing;
         try
         {
-            existing = GhExistingFilterFamilies();
+            existing = GhExistingFilterFamilies(reg.PairKeyedCommands);
         }
         catch (Exception ex)
         {
@@ -72,14 +74,18 @@ internal static class GapsIssues
             return 1;
         }
 
-        var (toFile, skipped) = PlanFilterIssues(candidates, existing);
+        var (toFile, skipped, dispatchGaps) = PlanFilterIssues(candidates, existing, fam => reg.TryLookup(fam.Split(' '), out _));
+        foreach (var g in dispatchGaps)
+        {
+            Console.Out.WriteLine($"dispatch gap {g.Family} — resolves in the registry but passed through unfiltered [{g.Calls} calls, {g.RawBytes} raw bytes]; not a filter gap, not filed");
+        }
         foreach (var fam in skipped)
         {
             Console.Out.WriteLine($"skip {fam} — open {FilterIssueTitlePrefix}{fam} issue already exists");
         }
         if (toFile.Count == 0)
         {
-            Console.Out.WriteLine("nothing to file (all candidates already have open issues)");
+            Console.Out.WriteLine("nothing to file (all candidates already have open issues or are dispatch gaps)");
             return 0;
         }
 
@@ -113,17 +119,26 @@ internal static class GapsIssues
     }
 
     /// <summary>
-    /// Splits candidate families into those to file and those skipped because
-    /// an open Filter issue already exists (dedupe → idempotent). Pure: no
-    /// I/O, so the selection is unit-testable.
+    /// Splits candidate families three ways: dispatch gaps — families whose
+    /// key already resolves in the registry (e.g. `git diff` fed by
+    /// `git --no-pager diff` rows), a dispatch miss rather than a missing
+    /// filter, so no Filter issue is proposed (#139); skipped — an open
+    /// Filter issue already exists (dedupe → idempotent); and those to file.
+    /// Pure: no I/O, so the selection is unit-testable.
     /// </summary>
-    internal static (List<GapSummary> ToFile, List<string> Skipped) PlanFilterIssues(
-        IReadOnlyList<GapSummary> candidates, IReadOnlySet<string> existing)
+    internal static (List<GapSummary> ToFile, List<string> Skipped, List<GapSummary> DispatchGaps) PlanFilterIssues(
+        IReadOnlyList<GapSummary> candidates, IReadOnlySet<string> existing, Func<string, bool> resolves)
     {
         var toFile = new List<GapSummary>();
         var skipped = new List<string>();
+        var dispatchGaps = new List<GapSummary>();
         foreach (var g in candidates)
         {
+            if (resolves(g.Family))
+            {
+                dispatchGaps.Add(g);
+                continue;
+            }
             if (existing.Contains(g.Family))
             {
                 skipped.Add(g.Family);
@@ -131,7 +146,7 @@ internal static class GapsIssues
             }
             toFile.Add(g);
         }
-        return (toFile, skipped);
+        return (toFile, skipped, dispatchGaps);
     }
 
     /// <summary>The issue title for a gap family. The prefix is fixed so ParseExistingFilterFamilies can recover the family for dedupe.</summary>
@@ -159,20 +174,28 @@ internal static class GapsIssues
 
     /// <summary>
     /// Extracts the gap family from each open-issue title of the form
-    /// `Filter: &lt;family&gt; ...`, returning a set for dedupe. Pure.
+    /// `Filter: &lt;family&gt; ...`, returning a set for dedupe. Pair-aware
+    /// (#139): when the first token is in <paramref name="pairKeyed"/> and a
+    /// second token follows before any paren, the family is the pair
+    /// (`Filter: git rev-parse (auto-filed ...)` → `git rev-parse`), matching
+    /// the aggregation key; otherwise the first token as before. Pure.
     /// </summary>
-    internal static HashSet<string> ParseExistingFilterFamilies(IEnumerable<string> titles)
+    internal static HashSet<string> ParseExistingFilterFamilies(IEnumerable<string> titles, IReadOnlySet<string> pairKeyed)
     {
         var result = new HashSet<string>();
         foreach (var t in titles)
         {
             if (!t.StartsWith(FilterIssueTitlePrefix, StringComparison.Ordinal)) continue;
             var rest = t[FilterIssueTitlePrefix.Length..].Trim();
-            // Family is the first whitespace- or paren-delimited token.
-            var fam = rest;
-            var i = rest.IndexOfAny(new[] { ' ', '(' });
-            if (i >= 0) fam = rest[..i];
-            if (fam != "") result.Add(fam);
+            // Family tokens are whitespace-delimited and end at the first paren.
+            var paren = rest.IndexOf('(');
+            if (paren >= 0) rest = rest[..paren];
+            var tokens = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0) continue;
+            var fam = tokens.Length >= 2 && pairKeyed.Contains(tokens[0])
+                ? tokens[0] + " " + tokens[1]
+                : tokens[0];
+            result.Add(fam);
         }
         return result;
     }
@@ -182,7 +205,7 @@ internal static class GapsIssues
     /// Filter issue. The `gh` shell-out is kept thin; the parsing is
     /// delegated to the pure helper.
     /// </summary>
-    private static HashSet<string> GhExistingFilterFamilies()
+    private static HashSet<string> GhExistingFilterFamilies(IReadOnlySet<string> pairKeyed)
     {
         var stdout = RunGh("issue", "list", "--state", "open", "--limit", "500", "--json", "title");
         List<GhIssueTitle>? issues;
@@ -194,7 +217,7 @@ internal static class GapsIssues
         {
             throw new FormatException($"parsing gh output: {ex.Message}");
         }
-        return ParseExistingFilterFamilies((issues ?? new()).Select(i => i.Title));
+        return ParseExistingFilterFamilies((issues ?? new()).Select(i => i.Title), pairKeyed);
     }
 
     private sealed record GhIssueTitle

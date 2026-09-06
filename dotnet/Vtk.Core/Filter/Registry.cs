@@ -132,6 +132,45 @@ public sealed class Registry
         return false;
     }
 
+    /// <summary>
+    /// The commands that own at least one exact "cmd sub" pair key (git, gh,
+    /// npx, dbmate in the default registry). Regex/TOML entries do not count:
+    /// a pair key is what makes the second token the dispatch grain.
+    /// </summary>
+    public IReadOnlySet<string> PairKeyedCommands
+    {
+        get
+        {
+            var set = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var key in _entries.Keys)
+            {
+                var i = key.IndexOf(' ');
+                if (i > 0) set.Add(key[..i]);
+            }
+            return set;
+        }
+    }
+
+    /// <summary>
+    /// The family key `vtk gaps` / `--file-issues` aggregate a logged
+    /// (redacted) command line under (#139): "argv[0] argv[1]" when argv[0]
+    /// owns any pair key here — so a multiplexer with shipped filters names
+    /// the actual missing subcommand (`git rev-parse`, `gh api`) instead of
+    /// one undifferentiated `git` — else bare argv[0]. Known git global
+    /// options are normalized first (GitOptions.Strip, #152) so
+    /// `git --no-pager diff` aggregates under `git diff`. Pure string
+    /// function over metadata; never touches output content.
+    /// </summary>
+    public string GapFamily(string cmd)
+    {
+        var argv = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (argv.Length == 0) return "";
+        if (argv[0] == "git") argv = GitOptions.Strip(argv);
+        if (argv.Length >= 2 && PairKeyedCommands.Contains(argv[0]))
+            return argv[0] + " " + argv[1];
+        return argv[0];
+    }
+
     /// <summary>mocha exits with its failure count (min(failures, 255)), so every code in 0..255 is a report, not a failure (#138).</summary>
     private static readonly int[] MochaExitCodes = Enumerable.Range(0, 256).ToArray();
 

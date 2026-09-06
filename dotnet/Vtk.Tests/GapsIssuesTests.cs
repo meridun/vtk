@@ -7,6 +7,9 @@ namespace Vtk.Tests;
 
 public class GapsIssuesTests
 {
+    private static readonly IReadOnlySet<string> PairKeyed = new HashSet<string> { "git", "gh", "npx" };
+    private static readonly IReadOnlySet<string> NoPairs = new HashSet<string>();
+
     [Fact]
     public void ParseExistingFilterFamilies_ExtractsFamilies()
     {
@@ -20,8 +23,29 @@ public class GapsIssuesTests
             "filter: lowercase",      // prefix is case-sensitive
             "",
         };
-        var got = GapsIssues.ParseExistingFilterFamilies(titles);
+        var got = GapsIssues.ParseExistingFilterFamilies(titles, NoPairs);
         Assert.Equal(new HashSet<string> { "cargo", "docker", "kubectl" }, got);
+    }
+
+    /// <summary>
+    /// #139: a pair-keyed first token takes its subcommand into the family so
+    /// dedupe keys match the pair-grained aggregation; an umbrella
+    /// `Filter: git` no longer suppresses `git rev-parse`, and non-pair tools
+    /// keep the first token even when the title carries more words.
+    /// </summary>
+    [Fact]
+    public void ParseExistingFilterFamilies_IsPairAwareForPairKeyedCommands()
+    {
+        var titles = new[]
+        {
+            "Filter: git rev-parse (auto-filed from vtk gaps)",
+            "Filter: gh api",
+            "Filter: git",                         // umbrella: bare family, no second token
+            "Filter: npx (auto-filed from vtk gaps)", // paren stops the family
+            "Filter: cargo build (manual)",        // cargo is not pair-keyed
+        };
+        var got = GapsIssues.ParseExistingFilterFamilies(titles, PairKeyed);
+        Assert.Equal(new HashSet<string> { "git rev-parse", "gh api", "git", "npx", "cargo" }, got);
     }
 
     [Fact]
@@ -35,10 +59,35 @@ public class GapsIssuesTests
         };
         var existing = new HashSet<string> { "docker" };
 
-        var (toFile, skipped) = GapsIssues.PlanFilterIssues(candidates, existing);
+        var (toFile, skipped, dispatchGaps) = GapsIssues.PlanFilterIssues(candidates, existing, _ => false);
 
         Assert.Equal(new[] { "cargo", "kubectl" }, toFile.Select(g => g.Family));
         Assert.Equal(new[] { "docker" }, skipped);
+        Assert.Empty(dispatchGaps);
+    }
+
+    /// <summary>
+    /// #139: a family that already resolves in the registry is a dispatch
+    /// miss, not a missing filter — it is reported as a dispatch gap and
+    /// never proposed or deduped, even when an open Filter issue names it.
+    /// </summary>
+    [Fact]
+    public void PlanFilterIssues_ReportsResolvingFamiliesAsDispatchGaps()
+    {
+        var candidates = new List<GapSummary>
+        {
+            new() { Family = "git diff", Calls = 232, RawBytes = 900000 },
+            new() { Family = "git rev-parse", Calls = 1312, RawBytes = 120000 },
+            new() { Family = "git status", Calls = 5, RawBytes = 50000 },
+        };
+        var existing = new HashSet<string> { "git status" };
+        var registry = new HashSet<string> { "git diff", "git status" };
+
+        var (toFile, skipped, dispatchGaps) = GapsIssues.PlanFilterIssues(candidates, existing, registry.Contains);
+
+        Assert.Equal(new[] { "git rev-parse" }, toFile.Select(g => g.Family));
+        Assert.Empty(skipped);
+        Assert.Equal(new[] { "git diff", "git status" }, dispatchGaps.Select(g => g.Family));
     }
 
     /// <summary>A filed title must parse back to its family, or dedupe silently breaks.</summary>
@@ -46,11 +95,14 @@ public class GapsIssuesTests
     [InlineData("cargo")]
     [InlineData("docker")]
     [InlineData("kubectl")]
+    [InlineData("git rev-parse")]
+    [InlineData("gh api")]
+    [InlineData("npx tsc")]
     public void FilterIssueTitle_RoundTrips(string family)
     {
         var title = GapsIssues.FilterIssueTitle(family);
         Assert.StartsWith(GapsIssues.FilterIssueTitlePrefix, title);
-        var got = GapsIssues.ParseExistingFilterFamilies(new[] { title });
+        var got = GapsIssues.ParseExistingFilterFamilies(new[] { title }, PairKeyed);
         Assert.Contains(family, got);
     }
 
