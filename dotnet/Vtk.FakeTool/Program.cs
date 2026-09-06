@@ -158,6 +158,18 @@ public static class Program
     private const string MochaFatalRaw =
         "\u001b[31mError: No test files found: \"nope/**/*.test.js\"\u001b[39m\n";
 
+    // Captured from mocha 11.7.5 when a spec file requires a missing module
+    // (exit 1): no summary line, so the mocha filter passes it through.
+    private const string MochaCrashRaw =
+        "Error: Cannot find module './helpers/db'\n" +
+        "Require stack:\n" +
+        "- C:\\src\\demo\\test\\cart.test.js\n" +
+        "    at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)\n" +
+        "    at Module._load (node:internal/modules/cjs/loader:1051:27)\n" +
+        "    at Module.require (node:internal/modules/cjs/loader:1311:19)\n" +
+        "    at require (node:internal/modules/helpers:179:18)\n" +
+        "    at Object.<anonymous> (C:\\src\\demo\\test\\cart.test.js:2:12)\n";
+
     // `npx <tool>`: the Go suite copied the fake mocha to npx(.exe) so that
     // `npx mocha` resolved to it. Emulate the same, tolerating the
     // transparent flags real npx traffic carries (#97): mocha and eslint are
@@ -295,6 +307,9 @@ public static class Program
     //   itest     -> mocha spec run behind a cross-env banner line (#97, the
     //                telemetry shape `> cross-env INTEGRATION=1 mocha ...`;
     //                exit/payload from VTK_FAKE_MOCHA_CODE)
+    //   testcrash -> banner then a mocha module-load error with no summary
+    //                line, exit 1: the mocha filter runs and elides nothing,
+    //                so the row must still be attributed to mocha (#153)
     //   db:status -> dbmate status report (exit 0)
     //   bigraw    -> NO banner (npm >= 11 suppresses it off-TTY, #93) and a
     //                large (>64KB) plain payload: the size-floored fold shape
@@ -354,6 +369,10 @@ public static class Program
                 return Mocha(stdout, stderr, banner: "> demo@1.0.0 test\n> mocha --reporter spec\n\n");
             case "itest":
                 return Mocha(stdout, stderr, banner: "> demo@1.0.0 itest\n> cross-env INTEGRATION=1 mocha --reporter spec\n\n");
+            case "testcrash":
+                stdout.Write("> demo@1.0.0 testcrash\n> mocha --reporter spec\n\n");
+                stderr.Write(MochaCrashRaw);
+                return 1;
             case "db:status":
                 stdout.Write("> demo@1.0.0 db:status\n> dbmate status\n\n");
                 stdout.Write(DbmateStatusOut);
