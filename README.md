@@ -47,7 +47,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   terse, load-bearing scripts like `npm run sdlc` are never touched), and failures are never
   folded — nonzero exits keep their full output inline. Unfolded gaps are attributed to the
   inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
-  npm. The full raw output, banner included, stays recoverable via `vtk show`. Measured 44–58%
+  npm. When the inner filter exists and ran but had nothing to elide (a mocha crash before
+  any spec, say), the invocation is logged as filtered under that filter's name — the same
+  attribution the direct path uses (#153) — so `vtk gaps` never proposes a filter that already
+  shipped. The full raw output, banner included, stays recoverable via `vtk show`. Measured 44–58%
   on banner-strip/delegation fixtures and ≈99.8% on a 122 KB folded run; savings compound with
   the inner filter's on large reports. Aliases behave byte-identically to their `npm run`
   spellings; off-TTY `npm start` buffers output until exit (same as `npm run start`), and on a
