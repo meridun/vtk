@@ -182,8 +182,11 @@ vtk show 2e3f --grep pat  →   just the matching lines
   passthrough path copies child bytes stream-to-stream, untouched.
 - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte
   counts, filtered/passthrough, reason — the engaged filter's registry name when filtered, the
-  unfiltered cause otherwise — and timestamp). Backs `vtk show`, `vtk gain`, and `vtk gaps` —
-  one store, three queries.
+  unfiltered cause otherwise — and timestamp). `vtk show` appends its own metadata-only row
+  (`reason=show`, spool id, byte counts, `grep` boolean). Backs `vtk show`, `vtk gain`, and
+  `vtk gaps` — one store, three queries; the fold→show join (a `show` row against the most
+  recent prior fold row with the same spool id, within 10 minutes) is computed offline by the
+  `gaps` recovered-folds section and the `gain` net column, never at show time.
 - **Session provider** (`Vtk.Core/Session/`) — locates and reads local agent session
   transcripts (Claude Code JSONL under `~/.claude/projects/<munged-cwd>/`), yielding command
   events (command, error output presence, ordering, timestamp). Analysis-side only: the wrap
