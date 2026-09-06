@@ -1,0 +1,6 @@
+  1200 passing (76ms)
+[TraderQueryAction.complete] No socket to emit response
+[TraderQueryAction.complete] No socket to emit response
+[TraderQueryAction.complete] No socket to emit response
+[TraderQueryAction.complete] No socket to emit response
+[TraderQueryAction.complete] No socket to emit response

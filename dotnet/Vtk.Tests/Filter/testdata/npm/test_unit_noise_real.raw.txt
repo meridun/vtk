@@ -1,0 +1,1462 @@
+
+
+  TraderQueryAction handler
+    request 000 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 001 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 002 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 003 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 004 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 005 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 006 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 007 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 008 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 009 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 010 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 011 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 012 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 013 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 014 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 015 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 016 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 017 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 018 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 019 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 020 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 021 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 022 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 023 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 024 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 025 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 026 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 027 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 028 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 029 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 030 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 031 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 032 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 033 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 034 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 035 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 036 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 037 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 038 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 039 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+
+  TraderTradeAction handler
+    request 000 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 001 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 002 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 003 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 004 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 005 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 006 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 007 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 008 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 009 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 010 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 011 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 012 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 013 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 014 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 015 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 016 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 017 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 018 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 019 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 020 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 021 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 022 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 023 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 024 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 025 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 026 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 027 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 028 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 029 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 030 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 031 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 032 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 033 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 034 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 035 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 036 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 037 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 038 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 039 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+
+  MarketListAction handler
+    request 000 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 001 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 002 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 003 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 004 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 005 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 006 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 007 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 008 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 009 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 010 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 011 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 012 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 013 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 014 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 015 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 016 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 017 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 018 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 019 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 020 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 021 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 022 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 023 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 024 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 025 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 026 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 027 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 028 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 029 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 030 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 031 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 032 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 033 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 034 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 035 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 036 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 037 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 038 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 039 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+
+  InventorySyncAction handler
+    request 000 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 001 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 002 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 003 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 004 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 005 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 006 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 007 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 008 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 009 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 010 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 011 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 012 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 013 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 014 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 015 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 016 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 017 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 018 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 019 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 020 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 021 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 022 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 023 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 024 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 025 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 026 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 027 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 028 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 029 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 030 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 031 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 032 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 033 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 034 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 035 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 036 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 037 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 038 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 039 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+
+  ChatBroadcastAction handler
+    request 000 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 001 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 002 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 003 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 004 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 005 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 006 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 007 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 008 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 009 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 010 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 011 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 012 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 013 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 014 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 015 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 016 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 017 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 018 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 019 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 020 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 021 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 022 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 023 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 024 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 025 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 026 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 027 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 028 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 029 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 030 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 031 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 032 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 033 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 034 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 035 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 036 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 037 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 038 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 039 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+
+  QuestProgressAction handler
+    request 000 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 001 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 002 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 003 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 004 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 005 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 006 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 007 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 008 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 009 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 010 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 011 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 012 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 013 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 014 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 015 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 016 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 017 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 018 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 019 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 020 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 021 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 022 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 023 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 024 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 025 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 026 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 027 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 028 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 029 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 030 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 031 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 032 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 033 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 034 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 035 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 036 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 037 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 038 with a detached socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+    request 039 with a connected socket
+      ✔ validates the incoming payload schema before dispatching
+      ✔ emits the completion event on the originating socket when present
+      ✔ persists the resulting state change through the repository layer
+      ✔ logs a structured audit record with the actor and target ids
+      ✔ rejects a replayed request id within the dedupe window
+
+
+  1200 passing (76ms)
+
+[TraderQueryAction.complete] No socket to emit response
+[TraderQueryAction.complete] No socket to emit response
+[TraderQueryAction.complete] No socket to emit response
+[TraderQueryAction.complete] No socket to emit response
+[TraderQueryAction.complete] No socket to emit response
