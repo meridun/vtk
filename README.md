@@ -136,7 +136,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   line. Measured 5–85% on fixtures (green test 85%, clean build 69%, warning-heavy build 5%);
   red builds and failing tests (non-zero exit) pass through raw with exit-code parity intact.
 - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
-  redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
+  redaction), keyed per (directory, command) so sibling worktrees never clobber each other;
+  `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only, and a one-line
+  stderr warning flags a read from a directory other than the one that wrote it.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
   reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`,
   `spawn-fail`), and filtered

@@ -260,7 +260,7 @@ public static class Program
         string id;
         try
         {
-            id = st.Write(strip.Inner, raw, DateTime.UtcNow);
+            id = st.Write(Directory.GetCurrentDirectory(), strip.Inner, raw, DateTime.UtcNow);
         }
         catch
         {
@@ -316,7 +316,7 @@ public static class Program
         string id;
         try
         {
-            id = st.Write(inner, raw, DateTime.UtcNow);
+            id = st.Write(Directory.GetCurrentDirectory(), inner, raw, DateTime.UtcNow);
         }
         catch
         {
@@ -408,7 +408,7 @@ public static class Program
         string id;
         try
         {
-            id = st.Write(spoolArgv, raw, DateTime.UtcNow);
+            id = st.Write(Directory.GetCurrentDirectory(), spoolArgv, raw, DateTime.UtcNow);
         }
         catch
         {
@@ -508,7 +508,7 @@ public static class Program
         string id;
         try
         {
-            id = st.Write(args, raw, DateTime.UtcNow);
+            id = st.Write(Directory.GetCurrentDirectory(), args, raw, DateTime.UtcNow);
         }
         catch
         {
@@ -589,6 +589,22 @@ public static class Program
     /// </summary>
     private static bool IsTTY() => !Console.IsOutputRedirected;
 
+    /// <summary>
+    /// Path-text equality for the `vtk show` cwd check (#136): full paths,
+    /// trailing separators trimmed, case-insensitive on Windows. Text only —
+    /// never touches the filesystem, so a vanished directory still compares.
+    /// </summary>
+    internal static bool SameDirectory(string a, string b)
+    {
+        static string Norm(string p)
+        {
+            try { p = Path.GetFullPath(p); } catch { /* keep the text as-is */ }
+            return p.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return string.Equals(Norm(a), Norm(b), cmp);
+    }
+
     private static int CmdShow(string[] args)
     {
         string id = "", pat = "";
@@ -627,6 +643,16 @@ public static class Program
         string content;
         try { content = st.Read(id); }
         catch { Console.Error.WriteLine($"vtk: no spool entry {id} (expired or never spooled)"); return 1; }
+
+        // The id keys on (cwd, argv) (#136), so a cross-directory read is
+        // deliberate recovery, not a clobber — warn on stderr, still print.
+        var headerCwd = Store.HeaderCwd(content);
+        if (headerCwd is not null)
+        {
+            var here = Directory.GetCurrentDirectory();
+            if (!SameDirectory(headerCwd, here))
+                Console.Error.WriteLine($"vtk show: spool {id} was written from {headerCwd} (current dir {here})");
+        }
 
         if (pat == "")
         {
