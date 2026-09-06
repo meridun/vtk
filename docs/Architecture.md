@@ -96,6 +96,12 @@ outgrows a screen.)
   one-line stderr warning when the header cwd differs from the caller's cwd and still prints
   the output (no refusal, no `--force`), so concurrent worktree workers no longer clobber each
   other's entries — [#136](https://github.com/meridun/vtk/issues/136)
+- `vtk show` is **logged** to `invocations.jsonl` as a metadata-only row (`reason=show`,
+  `raw_bytes` = spool size, `out_bytes` = bytes emitted, `grep` as a boolean — the pattern text
+  is never written); the fold→show join is computed offline and reported as a **"recovered
+  folds" section of `vtk gaps`** (placement (a) — no new subcommand, nothing under `discover`,
+  keeps the #44 layering), and `vtk gain` gains a **net** column (gross − recovered bytes)
+  beside today's gross figure; one issue, one branch — [#137](https://github.com/meridun/vtk/issues/137)
 
 ## Pipeline
 
