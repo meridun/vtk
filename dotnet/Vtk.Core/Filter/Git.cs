@@ -174,15 +174,28 @@ public static partial class Git
         return outLines;
     }
 
-    /// <summary>Compacts `git diff` to a per-file +/- summary with a total line.</summary>
+    /// <summary>
+    /// Compacts `git diff` to a per-file +/- summary with a total line — only
+    /// at or above <see cref="Fold.FloorBytes"/> (#135, shared #93/#131
+    /// floor). Hunk output below the floor is the load-bearing case (agents
+    /// run `git diff` to read the hunks and recovered 93% of the folds via
+    /// `vtk show`), so it is returned unchanged; the runner treats that as a
+    /// byte-identical passthrough logged under this entry, never a gap.
+    /// </summary>
     public static string Diff(string raw)
     {
         var stats = DiffStats(raw);
         if (stats.Count == 0) return raw; // no unified-diff headers (e.g. --stat output): pass through
+        if (raw.Length < Fold.FloorBytes) return raw; // hunks below the fold floor stay inline (#135)
         return string.Join("\n", FormatStats(stats));
     }
 
-    /// <summary>Compacts `git show` to "hash subject" plus the diff summary.</summary>
+    /// <summary>
+    /// Compacts `git show` to "hash subject" plus the diff summary. Hunk-shaped
+    /// output below <see cref="Fold.FloorBytes"/> is returned unchanged (#135,
+    /// same floor as <see cref="Diff"/>): agents recovered 77% of those folds.
+    /// Header-only shapes (`--stat`, `-s`) carry no hunks and compact as before.
+    /// </summary>
     public static string Show(string raw)
     {
         var head = "";
@@ -204,6 +217,7 @@ public static partial class Git
         }
         var stats = DiffStats(raw);
         if (head == "" && stats.Count == 0) return raw;
+        if (stats.Count > 0 && raw.Length < Fold.FloorBytes) return raw; // hunks below the fold floor stay inline (#135)
         var outLines = new List<string>();
         if (head != "") outLines.Add(head);
         outLines.AddRange(FormatStats(stats));
