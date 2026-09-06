@@ -50,18 +50,27 @@ public sealed class Store
 
     private string SpoolDir => Path.Combine(_dir, "spool");
 
-    /// <summary>The spool ID for a command line: first 4 hex chars of a SHA-256 checksum. Rerunning the same command overwrites its own entry.</summary>
-    public static string Id(IReadOnlyList<string> argv)
+    /// <summary>
+    /// The spool ID for a command line run from <paramref name="cwd"/>:
+    /// first 4 hex chars of a SHA-256 checksum over (cwd, argv). Rerunning
+    /// the same command from the same directory overwrites its own entry;
+    /// the same command from another directory (a sibling worktree, #136)
+    /// gets its own entry instead of clobbering this one.
+    /// </summary>
+    public static string Id(string cwd, IReadOnlyList<string> argv)
     {
-        var sum = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join(" ", argv)));
+        var sum = SHA256.HashData(Encoding.UTF8.GetBytes(cwd + "\n" + string.Join(" ", argv)));
         return Convert.ToHexStringLower(sum)[..4];
     }
 
-    /// <summary>Spools raw output for argv: redaction pass, provenance header, temp-file + atomic-rename write. Returns the retrieval ID.</summary>
-    public string Write(IReadOnlyList<string> argv, string raw, DateTime now)
+    private const string CwdHeaderPrefix = "# cwd: ";
+
+    /// <summary>Spools raw output for argv run from cwd: redaction pass, provenance header (cmd, cwd, time), temp-file + atomic-rename write. Returns the retrieval ID.</summary>
+    public string Write(string cwd, IReadOnlyList<string> argv, string raw, DateTime now)
     {
-        var id = Id(argv);
+        var id = Id(cwd, argv);
         var content = "# vtk spool\n# cmd: " + Redact(string.Join(" ", argv)) +
+            "\n" + CwdHeaderPrefix + Redact(cwd) +
             "\n# time: " + now.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") + "\n\n" + Redact(raw);
 
         var tmpName = Path.Combine(SpoolDir, id + ".tmp-" + Path.GetRandomFileName());
@@ -100,6 +109,23 @@ public sealed class Store
         if (!IdRe.IsMatch(id))
             throw new ArgumentException($"invalid spool id \"{id}\"");
         return File.ReadAllText(Path.Combine(SpoolDir, id + SpoolExt));
+    }
+
+    /// <summary>
+    /// The directory recorded in a spool entry's provenance header, or null
+    /// when the header carries none (entries written before #136). Reads the
+    /// header block only — stops at the first blank line, never the body.
+    /// </summary>
+    public static string? HeaderCwd(string content)
+    {
+        foreach (var line in content.Split('\n'))
+        {
+            var l = line.TrimEnd('\r');
+            if (l.Length == 0) return null;
+            if (l.StartsWith(CwdHeaderPrefix, StringComparison.Ordinal))
+                return l[CwdHeaderPrefix.Length..];
+        }
+        return null;
     }
 
     /// <summary>Opportunistically deletes spool entries (and stale temp files) older than ttl. Errors are ignored: best-effort by design.</summary>
