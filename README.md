@@ -25,7 +25,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   Global options ahead of the subcommand (`-C <dir>`, `-c <k=v>`, `--no-pager`/`-P`,
   `-p`/`--paginate`, `--git-dir[=<path>]`, `--work-tree[=<path>]`) still engage the filter for
   `status`, `branch`, `add`, `commit`, `push`, `pull`; `diff`, `show`, `log` behind a global
-  option pass through unfiltered (#152).
+  option pass through unfiltered (#152). Hunk-shaped `git diff` / `git show` output below 64 KiB
+  (the shared fold floor) passes through byte-identical — agents run these to read the hunks, so
+  folding them only cost a `vtk show` round trip; at or above the floor the per-file stats shape
+  plus an `OK <id>` recovery line still applies (#135). `--stat` / `--numstat` and `show -s`
+  shapes are unchanged.
 - **eslint filter** — `eslint`, `npx eslint` (direct invocations): problems rolled up by rule id,
   top example per rule, `✖ N problems` summary preserved. Measured 41–99% on fixtures. Report-style
   exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
