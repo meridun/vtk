@@ -85,6 +85,12 @@ outgrows a screen.)
   summary survives the fold (option B; content-sniffed inner-tool dispatch stays off the table
   unless #137 telemetry shows the recovery rate did not fall) —
   [#134](https://github.com/meridun/vtk/issues/134)
+- `git diff` / `git show` hunk-shaped output reuses the **#93 / #131 size-floored fold** (option
+  1, shared `Fold.FloorBytes`): below the floor hunks pass through byte-identical, above it the
+  per-file stats shape + `OK <id>` stands; git global-option normalization in
+  `Registry.TryLookup` is split to [#152](https://github.com/meridun/vtk/issues/152)
+  (`status`/`branch`/`add`/`commit`/`push`/`pull` only — `diff`/`show`/`log` excluded unless
+  #137 telemetry says otherwise) — [#135](https://github.com/meridun/vtk/issues/135)
 
 ## Pipeline
 
