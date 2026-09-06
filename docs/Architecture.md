@@ -79,6 +79,12 @@ outgrows a screen.)
   blocking source of truth: `sdlc-maint.ps1` reads the edge graph each cycle and derives the
   blocked gate, close sweep, and `blocked`/`ready` labels; those labels are display-only and
   the machine never reads them — [#142](https://github.com/meridun/vtk/issues/142)
+- Shared fold tails (`Fold.Tail`, used by the #93 / #131 size-floored folds) **pin summary-regex
+  lines** (`N passing/failing/pending`, `Tests: … passed`, `N problems`) above the positional
+  tail — at most 3 pinned lines, counted inside `TailMaxBytes` — so the load-bearing runner
+  summary survives the fold (option B; content-sniffed inner-tool dispatch stays off the table
+  unless #137 telemetry shows the recovery rate did not fall) —
+  [#134](https://github.com/meridun/vtk/issues/134)
 
 ## Pipeline
 
