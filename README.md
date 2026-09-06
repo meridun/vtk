@@ -22,6 +22,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 
 - **git filter family** — `status`, `log`, `diff`, `show`, `add`, `commit`, `push`, `pull`,
   `branch` (other subcommands pass through). Measured savings 47–89% on typical fixtures.
+  Global options ahead of the subcommand (`-C <dir>`, `-c <k=v>`, `--no-pager`/`-P`,
+  `-p`/`--paginate`, `--git-dir[=<path>]`, `--work-tree[=<path>]`) still engage the filter for
+  `status`, `branch`, `add`, `commit`, `push`, `pull`; `diff`, `show`, `log` behind a global
+  option pass through unfiltered (#152).
 - **eslint filter** — `eslint`, `npx eslint` (direct invocations): problems rolled up by rule id,
   top example per rule, `✖ N problems` summary preserved. Measured 41–99% on fixtures. Report-style
   exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
