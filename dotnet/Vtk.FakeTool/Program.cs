@@ -302,6 +302,11 @@ public static class Program
     //   quiet     -> NO banner and a terse status payload (`npm run sdlc`
     //                shape): must stay a byte-identical inline passthrough
     //                (exit from VTK_FAKE_NPM_CODE, default 0)
+    //   bignoise  -> NO banner and a large (>64KB) mocha-shaped spec run
+    //                whose "N passing" summary is followed by leftover-timer
+    //                console noise: the #134 shape (the summary sits above
+    //                the positional fold tail; exit from VTK_FAKE_NPM_CODE,
+    //                default 0)
     //
     // Lifecycle aliases (`npm test`, `npm t`, `npm tst`, `npm start`, `npm
     // stop`, `npm restart`) run scripts without the `run` verb (#120): they
@@ -334,6 +339,16 @@ public static class Program
                 return EnvCode("VTK_FAKE_NPM_CODE", 0);
             case "quiet":
                 stdout.Write("sdlc: verify 60 -> ADVANCE (audit)\nsdlc: 1 lane processed\n");
+                return EnvCode("VTK_FAKE_NPM_CODE", 0);
+            case "bignoise":
+                // Banner-less mocha spec bulk, then the summary, then five
+                // after-hook timer lines that log after mocha's summary.
+                stdout.Write("\n\n  vtk #134 shape\n");
+                for (var i = 1; i <= 1500; i++)
+                    stdout.Write($"    ✔ case {i:0000} persists the resulting state change through the repository layer\n");
+                stdout.Write("\n\n  1500 passing (58ms)\n\n");
+                for (var i = 0; i < 5; i++)
+                    stdout.Write("[TraderQueryAction.complete] No socket to emit response\n");
                 return EnvCode("VTK_FAKE_NPM_CODE", 0);
             case "test":
                 return Mocha(stdout, stderr, banner: "> demo@1.0.0 test\n> mocha --reporter spec\n\n");

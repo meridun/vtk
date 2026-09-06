@@ -39,7 +39,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   inner tool has no filter, a size-floored fold applies (#93): successful (exit 0) output of
   64 KiB or more collapses to a short summary tail (last few lines) plus an `OK <id>` recovery
   line — including the no-banner shape modern npm emits under pipe capture, where the inner
-  tool can't be detected at all. Below the floor, output passes through byte-identical (so
+  tool can't be detected at all. The tail also pins up to 3 runner summary lines that fit
+  (mocha `N passing`/`failing`/`pending`, jest `Tests: … passed`/`failed`, eslint
+  `N problems`) from above the last lines, nearest first, inside the same 512-byte cap
+  (#134) — so a `1200 passing` line followed by leftover console noise survives the fold
+  instead of needing a `vtk show` round trip. Below the floor, output passes through byte-identical (so
   terse, load-bearing scripts like `npm run sdlc` are never touched), and failures are never
   folded — nonzero exits keep their full output inline. Unfolded gaps are attributed to the
   inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
@@ -50,7 +54,8 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   real terminal all npm calls still pass through interactively.
 - **powershell -File fold** — `powershell`/`pwsh -ExecutionPolicy ... -File <script>` (#131)
   reuses the same size-floored fold: successful (exit 0) script output of 64 KiB or more (a
-  shared floor constant with the npm fold) collapses to a short summary tail plus an `OK <id>`
+  shared floor constant with the npm fold) collapses to a short summary tail (same shape as the
+  npm fold, including the pinned runner summary lines, #134) plus an `OK <id>`
   recovery line, with the full raw output recoverable via `vtk show`. Below the floor, output
   passes through byte-identical; failures are never folded — a red test run keeps its full
   output inline with the script's exit code returned unchanged. Both spellings (± `.exe`, any
