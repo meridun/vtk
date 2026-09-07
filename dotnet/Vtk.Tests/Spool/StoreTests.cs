@@ -128,7 +128,7 @@ public class StoreTests : IDisposable
         var otherAppender = new FileStream(meta, FileMode.Append, FileAccess.Write, FileShare.Read);
         var release = Task.Run(async () =>
         {
-            await Task.Delay(60); // shorter than the 25+50+100 ms retry budget
+            await Task.Delay(60); // well inside the 500 ms append retry budget
             otherAppender.Dispose();
         });
         try
