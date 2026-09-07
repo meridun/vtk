@@ -188,9 +188,40 @@ public sealed class Store
     {
         inv = inv with { Cmd = Redact(inv.Cmd) };
         var json = JsonSerializer.Serialize(inv);
-        using var fs = new FileStream(MetaPath, FileMode.Append, FileAccess.Write, FileShare.Read);
+        // FileShare.Read (no Write sharing) makes concurrent appenders
+        // mutually exclusive: FileMode.Append seeks to EOF at open rather
+        // than using O_APPEND, so two writers opened at the same EOF would
+        // clobber each other's row. The loser sees a sharing violation
+        // (IOException) on Windows; a bounded, jittered retry waits out the
+        // other appenders' short writes (#155). On final failure the
+        // exception propagates so the caller degrades to its stderr note —
+        // never touching stdout, exit code, or the spool.
+        using var fs = OpenAppendWithRetry(MetaPath);
         using var writer = new StreamWriter(fs, Encoding.UTF8);
         writer.WriteLine(json);
+    }
+
+    // Each append holds the file for microseconds, so a herd of concurrent
+    // vtk invocations serialises well inside this budget. Jittered sleeps
+    // keep the losers from re-colliding in lockstep (a fixed 25/50/100 ms
+    // ladder does exactly that under a 16-way race).
+    private static readonly TimeSpan AppendRetryBudget = TimeSpan.FromMilliseconds(500);
+
+    private static FileStream OpenAppendWithRetry(string path)
+    {
+        var deadline = Environment.TickCount64 + (long)AppendRetryBudget.TotalMilliseconds;
+        for (; ; )
+        {
+            try
+            {
+                return new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (Environment.TickCount64 >= deadline) throw;
+                Thread.Sleep(Random.Shared.Next(2, 12));
+            }
+        }
     }
 
     /// <summary>Returns all logged entries, skipping malformed lines.</summary>

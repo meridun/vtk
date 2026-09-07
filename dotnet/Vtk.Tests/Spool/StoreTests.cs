@@ -112,6 +112,76 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public async Task LogInvocation_RetriesPastConcurrentAppender()
+    {
+        // #155: two concurrent vtk invocations append to invocations.jsonl;
+        // the second open hits a sharing violation while the first appender
+        // holds the file (FileShare.Read, no Write sharing). Hold the log
+        // open as a real second appender, release it on another thread
+        // inside the retry window, and require the row to land rather than
+        // be dropped. Sharing violations are Windows semantics — skip elsewhere.
+        if (!OperatingSystem.IsWindows()) return;
+
+        _store.LogInvocation(new Invocation { Cmd = "git status", RawBytes = 10, Filtered = true });
+        var meta = Path.Combine(_dir, "invocations.jsonl");
+
+        var otherAppender = new FileStream(meta, FileMode.Append, FileAccess.Write, FileShare.Read);
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(60); // well inside the 500 ms append retry budget
+            otherAppender.Dispose();
+        });
+        try
+        {
+            _store.LogInvocation(new Invocation { Cmd = "git log", RawBytes = 20, Filtered = true });
+        }
+        finally
+        {
+            await release;
+        }
+
+        var rows = _store.Invocations();
+        Assert.Equal(new[] { "git status", "git log" }, rows.Select(r => r.Cmd));
+    }
+
+    [Fact]
+    public void LogInvocation_ConcurrentAppenders_KeepEveryRow()
+    {
+        // #155: N in-process appenders racing on the same log must yield
+        // exactly N parseable rows — none dropped to a sharing violation,
+        // none clobbered by an overlapping EOF write. Windows-gated: the
+        // sharing violation the retry absorbs is a Windows semantic.
+        if (!OperatingSystem.IsWindows()) return;
+
+        const int n = 16;
+        var threads = new Thread[n];
+        var failures = new List<Exception>();
+        for (var i = 0; i < n; i++)
+        {
+            var cmd = "git log --oneline -" + i;
+            threads[i] = new Thread(() =>
+            {
+                try
+                {
+                    _store.LogInvocation(new Invocation { Cmd = cmd, RawBytes = 100, OutBytes = 10, Filtered = true });
+                }
+                catch (Exception ex)
+                {
+                    lock (failures) failures.Add(ex);
+                }
+            });
+        }
+        foreach (var t in threads) t.Start();
+        foreach (var t in threads) t.Join();
+
+        Assert.Empty(failures);
+        var rows = _store.Invocations();
+        Assert.Equal(n, rows.Count);
+        Assert.Equal(n, rows.Select(r => r.Cmd).Distinct().Count());
+        Assert.Equal(n, File.ReadAllLines(Path.Combine(_dir, "invocations.jsonl")).Count(l => l.Length > 0));
+    }
+
+    [Fact]
     public void Read_UnknownId_Throws()
     {
         Assert.ThrowsAny<Exception>(() => _store.Read("dead"));
