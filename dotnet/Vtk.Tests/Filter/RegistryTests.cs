@@ -186,6 +186,31 @@ public class RegistryTests
     }
 
     /// <summary>
+    /// Registry reuse (#167): `gh pr` (content dispatcher), `git merge`, and
+    /// `git grep` resolve in the default registry, exit 0 only — merge
+    /// conflicts and grep no-match both exit 1 and stay raw.
+    /// </summary>
+    [Theory]
+    [InlineData("gh pr")]
+    [InlineData("git merge")]
+    [InlineData("git grep")]
+    public void Default_ReuseKeys_ResolveExitZeroOnly(string key)
+    {
+        var r = Registry.Default();
+        Assert.True(r.TryLookup(key.Split(' ').Append("x").ToArray(), out var entry));
+        Assert.Equal(key, entry.Name);
+        Assert.True(entry.Filters(0));
+        Assert.False(entry.Filters(1));
+    }
+
+    /// <summary>`git merge` / `git grep` are not in GitNormalizedSubcommands (#152): behind a global option they miss.</summary>
+    [Theory]
+    [InlineData("git -C x merge feature")]
+    [InlineData("git --no-pager grep -n foo")]
+    public void Default_ReuseKeys_NotNormalized(string cmd) =>
+        Assert.False(Registry.Default().TryLookup(cmd.Split(' '), out _), cmd);
+
+    /// <summary>
     /// Known git global options ahead of the subcommand normalize to the bare
     /// pair key for the six allowed subcommands (#152): each form resolves to
     /// the same entry as `git <sub>`.

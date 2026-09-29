@@ -30,6 +30,11 @@ public class GitTests
         yield return new object[] { "push_new_branch", (Func<string, string>)Git.Push, 0.0 };
         yield return new object[] { "push_progress", (Func<string, string>)Git.Push, 0.60 };
         yield return new object[] { "pull_ff", (Func<string, string>)Git.Pull, 0.40 };
+        // Registry reuse (#167): `git merge` (real non-ff capture, ort strategy)
+        // and `git grep -n` (real capture from this repo) ride Git.Pull and
+        // Files.Grep unchanged; only the registry key is new.
+        yield return new object[] { "merge_ort", (Func<string, string>)Git.Pull, 0.60 };
+        yield return new object[] { "grep_n", (Func<string, string>)Files.Grep, 0.60 };
         yield return new object[] { "branch_list", (Func<string, string>)Git.Branch, 0.0 };
     }
 

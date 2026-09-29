@@ -23,6 +23,50 @@ public class GhTests
     public void PrList_MatchesGoldenOutput(string name, double minSavings) =>
         AssertGolden(name, raw => Gh.PrListAt(raw, Ref), minSavings);
 
+    // `gh pr` dispatches by content shape (#167): a unified diff routes to
+    // Git.Diff with its #135 floor; list tables still reach PrList. Real
+    // captures from public cli/cli PRs: #14451 (118 KB, 16 files) sits
+    // above Fold.FloorBytes and folds to per-file stats; #13803 (562 B)
+    // sits below it and must return byte-identical, exactly like direct
+    // `git diff` (the runner still logs it filtered=true, never a gap).
+    [Theory]
+    [InlineData("pr_diff_large", 0.99)]
+    public void Pr_DiffAboveFloor_MatchesGoldenOutput(string name, double minSavings) =>
+        AssertGolden(name, Gh.Pr, minSavings);
+
+    [Fact]
+    public void Pr_DiffBelowFloor_PassesThroughByteIdentical()
+    {
+        var raw = File.ReadAllText(Path.Combine(FixtureDir, "pr_diff_small.raw.txt"));
+        Assert.True(raw.Length < Fold.FloorBytes, $"fixture is not below the floor: {raw.Length}");
+        Assert.True(Gh.IsUnifiedDiff(raw));
+        Assert.Equal(raw, Gh.Pr(raw));
+    }
+
+    [Fact]
+    public void Pr_DiffFoldsExactlyAtTheFloor()
+    {
+        // Same boundary as GitTests: pad with one long context line (" "
+        // prefix, so the stats are unchanged) to floor - 1, then one more.
+        var raw = File.ReadAllText(Path.Combine(FixtureDir, "pr_diff_small.raw.txt"));
+        var want = File.ReadAllText(Path.Combine(FixtureDir, "pr_diff_small.want.txt"));
+        var below = raw + "\n " + new string('x', Fold.FloorBytes - raw.Length - 3);
+        Assert.Equal(Fold.FloorBytes - 1, below.Length);
+        Assert.Equal(below, Gh.Pr(below));
+        var at = below + "x";
+        Assert.Equal(Fold.FloorBytes, at.Length);
+        Assert.Equal(want, Gh.Pr(at));
+    }
+
+    /// <summary>The Pr dispatcher routes list tables to PrList — a pr_list fixture is not diff-shaped.</summary>
+    [Fact]
+    public void Pr_ListShape_RoutesToPrList()
+    {
+        var raw = File.ReadAllText(Path.Combine(FixtureDir, "pr_list.raw.txt"));
+        Assert.False(Gh.IsUnifiedDiff(raw));
+        Assert.Equal(Gh.PrList(raw), Gh.Pr(raw));
+    }
+
     [Theory]
     [InlineData("run_list", 0.45)]
     public void RunList_MatchesGoldenOutput(string name, double minSavings) =>
@@ -74,6 +118,7 @@ public class GhTests
         var raw = File.ReadAllText(Path.Combine(FixtureDir, "json_passthrough.raw.txt"));
         Assert.Equal(raw, Gh.IssueList(raw));
         Assert.Equal(raw, Gh.PrList(raw));
+        Assert.Equal(raw, Gh.Pr(raw));
         Assert.Equal(raw, Gh.RunList(raw));
         Assert.Equal(raw, Gh.Run(raw));
     }
@@ -87,6 +132,7 @@ public class GhTests
     {
         Assert.Equal(raw, Gh.IssueList(raw));
         Assert.Equal(raw, Gh.PrList(raw));
+        Assert.Equal(raw, Gh.Pr(raw));
         Assert.Equal(raw, Gh.RunList(raw));
         Assert.Equal(raw, Gh.Run(raw));
     }
