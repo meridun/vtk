@@ -47,7 +47,8 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   (mocha `N passing`/`failing`/`pending`, jest `Tests: … passed`/`failed`, eslint
   `N problems`) from above the last lines, nearest first, inside the same 512-byte cap
   (#134) — so a `1200 passing` line followed by leftover console noise survives the fold
-  instead of needing a `vtk show` round trip. Below the floor, output passes through byte-identical (so
+  instead of needing a `vtk show` round trip; the pin scan sees through ANSI color codes
+  (#163), and a pinned colored line is emitted verbatim. Below the floor, output passes through byte-identical (so
   terse, load-bearing scripts like `npm run sdlc` are never touched), and failures are never
   folded — nonzero exits keep their full output inline. Unfolded gaps are attributed to the
   inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
@@ -78,7 +79,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   through unchanged, gap-logged.
 - **mocha filter** — `mocha`, `npx mocha` (spec reporter): folds passing/pending/suite spec-tree
   lines away and keeps the summary (`N passing`/`M failing`/`K pending`) plus every failure-detail
-  block (name + assertion + stack) verbatim — the signal an agent needs. Measured 23–94% on
+  block (name + assertion + stack) — the signal an agent needs. Colored output (`--color`, or
+  `"color": true` in `.mocharc.json`) is recognized too (#163): kept lines are emitted with ANSI
+  codes stripped, while `vtk show` returns the raw colored bytes. Measured 23–94% on
   fixtures (savings scale with the pass:fail ratio: a green run collapses to a single summary line,
   a failure-heavy run keeps most of its bytes). Filtered on any exit `0`–`255`: mocha exits with
   its failure count (`min(failures, 255)`), so a multi-failure run is a report, not a crash;
