@@ -14,6 +14,8 @@ public class MochaTests
     [InlineData("pending", 0.60)]
     [InlineData("fail", 0.20)]
     [InlineData("fail2", 0.20)] // real mocha 11.7.5, 2 failing -> exit 2 (#138)
+    [InlineData("pass-color", 0.85)] // real mocha 11.x --color, summary wrapped in SGR codes (#163)
+    [InlineData("fail-color", 0.40)] // real mocha 11.x --color, 2 failing; detail block opens with ESC[0m (#163)
     public void MatchesGoldenOutput(string name, double minSavings)
     {
         var raw = File.ReadAllText(Path.Combine(FixtureDir, name + ".raw.txt"));
@@ -53,6 +55,31 @@ public class MochaTests
         var got = Mocha.Filter(raw);
         Assert.DoesNotContain("✔", got);
         Assert.Equal("7 passing (5ms)", got);
+    }
+
+    /// <summary>
+    /// mocha with `color: true` (the .mocharc.json shape from #163) emits
+    /// the summary as `ESC[92m ESC[0mESC[32m 7 passing ESC[0mESC[90m (3ms)ESC[0m`
+    /// and opens each failure block with `ESC[0m  1) ...`. The colored run
+    /// must compact to the same shape as the uncolored one — no raw
+    /// passthrough, no escape codes in the compact view.
+    /// </summary>
+    [Fact]
+    public void ColoredOutput_MatchesUncoloredShape()
+    {
+        var pass = File.ReadAllText(Path.Combine(FixtureDir, "pass-color.raw.txt"));
+        Assert.Contains("\x1b[32m 7 passing\x1b[0m", pass);
+        var got = Mocha.Filter(pass);
+        Assert.Equal("7 passing (3ms)", got);
+        Assert.DoesNotContain("\x1b", got, StringComparison.Ordinal); // ordinal: ICU culture compare treats ESC as ignorable
+
+        var fail = File.ReadAllText(Path.Combine(FixtureDir, "fail-color.raw.txt"));
+        Assert.Contains("\x1b[0m  1) cart", fail);
+        got = Mocha.Filter(fail);
+        Assert.StartsWith("5 passing (4ms)\n2 failing\n\n  1) cart\n", got);
+        Assert.Contains("Error: gateway timeout", got);
+        Assert.Contains(@"at Context.<anonymous> (test\mixed.test.js:10:36)", got);
+        Assert.DoesNotContain("\x1b", got, StringComparison.Ordinal); // ordinal: ICU culture compare treats ESC as ignorable
     }
 
     /// <summary>
