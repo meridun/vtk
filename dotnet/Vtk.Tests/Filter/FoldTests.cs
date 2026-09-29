@@ -105,6 +105,25 @@ public class FoldTests
             "✖ 2 problems (0 errors, 2 warnings)\nn1\nn2\nn3\nn4\nn5"
         },
         {
+            // #168: the no-banner `npm test` fold of a node --test run —
+            // the 8-line summary block sits above the 5-line positional
+            // tail, so `tests`/`pass`/`fail` pin (three nearest the tail;
+            // suites/cancelled/skipped/todo/duration_ms do not qualify).
+            "node --test summary block: tests/pass/fail pinned above the tail",
+            "▶ s\n  ✔ a (1ms)\n✔ s (2ms)\nℹ tests 10\nℹ suites 4\nℹ pass 8\nℹ fail 0\nℹ cancelled 0\nℹ skipped 1\nℹ todo 1\nℹ duration_ms 81.3\n",
+            "ℹ tests 10\nℹ pass 8\nℹ fail 0\nℹ cancelled 0\nℹ skipped 1\nℹ todo 1\nℹ duration_ms 81.3"
+        },
+        {
+            "node --test TAP summary lines pin too",
+            "TAP version 13\nok 1 - a\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\nn1\nn2\nn3\nn4\nn5\n",
+            "# tests 1\n# pass 1\n# fail 0\nn1\nn2\nn3\nn4\nn5"
+        },
+        {
+            "bare tests/pass/fail prose without a prefix is not a summary",
+            "tests 3\npass 2\nfail 1\nn1\nn2\nn3\nn4\nn5\n",
+            "n1\nn2\nn3\nn4\nn5"
+        },
+        {
             "summary already inside the positional tail is not moved or duplicated",
             "tree\nn1\n  7 passing (5ms)\nn2\nn3\n",
             "tree\nn1\n  7 passing (5ms)\nn2\nn3"

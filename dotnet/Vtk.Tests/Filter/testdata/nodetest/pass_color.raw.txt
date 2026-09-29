@@ -1,0 +1,60 @@
+▶ auth
+  [32m✔ hashes the password [90m(0.6282ms)[39m[39m
+  [32m✔ rejects a short password [90m(0.0995ms)[39m[39m
+  [32m✔ issues a session token [90m(0.0906ms)[39m[39m
+  [32m✔ expires the token [90m(0.0924ms)[39m # TODO[39m
+[32m✔ auth [90m(1.8083ms)[39m[39m
+▶ cart
+  ▶ totals
+    [32m✔ sums line items [90m(0.8713ms)[39m[39m
+    [32m✔ applies a discount code [90m(0.2302ms)[39m[39m
+    [32m✔ rounds to cents [90m(0.1567ms)[39m[39m
+  [32m✔ totals [90m(2.3519ms)[39m[39m
+  ▶ shipping
+    [32m✔ free over threshold [90m(0.7705ms)[39m[39m
+    [32m✔ flat rate under threshold [90m(0.1626ms)[39m[39m
+    [90m﹣ skips digital goods [90m(0.1547ms)[39m # not implemented[39m
+  [32m✔ shipping [90m(1.4364ms)[39m[39m
+[32m✔ cart [90m(4.5359ms)[39m[39m
+▶ inventory
+  ▶ stock levels
+    [32m✔ tracks on-hand quantity for A-100 [90m(1.4349ms)[39m[39m
+    [32m✔ tracks on-hand quantity for A-101 [90m(0.0933ms)[39m[39m
+    [32m✔ tracks on-hand quantity for A-102 [90m(0.0833ms)[39m[39m
+    [32m✔ tracks on-hand quantity for B-200 [90m(0.0889ms)[39m[39m
+    [32m✔ tracks on-hand quantity for B-201 [90m(0.0699ms)[39m[39m
+    [32m✔ tracks on-hand quantity for C-300 [90m(0.0787ms)[39m[39m
+    [32m✔ tracks on-hand quantity for C-301 [90m(0.1213ms)[39m[39m
+    [32m✔ tracks on-hand quantity for C-302 [90m(0.1032ms)[39m[39m
+    [32m✔ tracks on-hand quantity for D-400 [90m(0.0918ms)[39m[39m
+  [32m✔ stock levels [90m(3.1398ms)[39m[39m
+  ▶ reservations
+    [32m✔ reserves stock for a pending order [90m(0.176ms)[39m[39m
+    [32m✔ releases stock on cancellation [90m(0.1151ms)[39m[39m
+    [32m✔ rejects reservation above on-hand [90m(0.0965ms)[39m[39m
+    [32m✔ expires stale reservations [90m(0.0885ms)[39m[39m
+  [32m✔ reservations [90m(0.6661ms)[39m[39m
+  ▶ reorder points
+    [32m✔ flags SKUs below the reorder point [90m(0.1153ms)[39m[39m
+    [32m✔ ignores discontinued SKUs [90m(0.0913ms)[39m[39m
+    [32m✔ computes the reorder quantity [90m(0.0551ms)[39m[39m
+  [32m✔ reorder points [90m(0.3471ms)[39m[39m
+[32m✔ inventory [90m(4.5882ms)[39m[39m
+▶ pricing
+  [32m✔ applies the list price [90m(0.6364ms)[39m[39m
+  [32m✔ applies a percentage discount [90m(0.097ms)[39m[39m
+  [32m✔ applies a fixed discount [90m(0.1071ms)[39m[39m
+  [32m✔ never goes below zero [90m(0.0917ms)[39m[39m
+  [32m✔ rounds half up to cents [90m(0.0871ms)[39m[39m
+  [32m✔ adds sales tax by region [90m(0.1085ms)[39m[39m
+  [32m✔ exempts tax-free regions [90m(0.0934ms)[39m[39m
+  [90m﹣ handles currency conversion [90m(0.0816ms)[39m # needs rate fixture[39m
+[32m✔ pricing [90m(2.8713ms)[39m[39m
+[34mℹ tests 34[39m
+[34mℹ suites 9[39m
+[34mℹ pass 31[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 2[39m
+[34mℹ todo 1[39m
+[34mℹ duration_ms 100.6114[39m
