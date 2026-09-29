@@ -16,6 +16,8 @@ public static partial class Git
     private static partial Regex AheadRe();
     [GeneratedRegex(@"^\S.*\|\s+(\d+\s*[+-]*|Bin\b.*)$")]
     private static partial Regex StatLineRe();
+    [GeneratedRegex(@"^([*+ ]) (\S+|\([^)]*\))(?: -> (\S+))?$")]
+    private static partial Regex BranchLineRe();
 
     /// <summary>Compacts `git status` (human format) to a porcelain-style summary: a "## branch" header plus one short-coded line per changed file.</summary>
     public static string Status(string raw)
@@ -296,16 +298,64 @@ public static partial class Git
         return string.Join("\n", outLines);
     }
 
-    /// <summary>Joins the branch list onto a single line; the current branch keeps its "*" marker.</summary>
+    /// <summary>
+    /// Reshapes the plain `git branch` listing (#166): one entry per line with the
+    /// `*` / `+` markers kept, the `remotes/` prefix stripped, and a local branch
+    /// plus its `origin/&lt;same&gt;` remote twin collapsed into one entry marked
+    /// `(tracked)`. Anything that is not the plain listing shape (`-vv` columns,
+    /// `--show-current`, `--format`, `Deleted branch ...`) passes through unchanged.
+    /// </summary>
     public static string Branch(string raw)
     {
-        var items = new List<string>();
+        var entries = new List<(string Marker, string Name, string? Target)>();
         foreach (var line in raw.Split('\n'))
         {
-            var t = line.Trim();
-            if (t == "") continue;
-            items.Add(t);
+            var l = line.TrimEnd('\r');
+            if (l.Trim() == "") continue;
+            var m = BranchLineRe().Match(l);
+            if (!m.Success) return raw; // not the plain listing shape: leave it alone
+            entries.Add((m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Success ? m.Groups[3].Value : null));
         }
-        return string.Join(", ", items);
+        if (entries.Count == 0) return raw;
+
+        const string remotesPrefix = "remotes/";
+        const string originPrefix = "origin/";
+        var locals = new List<(string Marker, string Name, string? Target)>();
+        var remotes = new List<(string Marker, string Name, string? Target)>();
+        foreach (var e in entries)
+        {
+            if (e.Name.StartsWith(remotesPrefix)) remotes.Add((e.Marker, e.Name[remotesPrefix.Length..], e.Target));
+            else locals.Add(e);
+        }
+        var localNames = new HashSet<string>(locals.Where(e => e.Target == null).Select(e => e.Name));
+        var tracked = new HashSet<string>();
+        remotes.RemoveAll(e =>
+        {
+            if (e.Target != null || !e.Name.StartsWith(originPrefix)) return false;
+            var twin = e.Name[originPrefix.Length..];
+            if (!localNames.Contains(twin)) return false;
+            tracked.Add(twin);
+            return true;
+        });
+
+        var sb = new StringBuilder();
+        foreach (var (marker, name, target) in locals)
+        {
+            AppendBranchLine(sb, marker, name, target, tracked.Contains(name));
+        }
+        foreach (var (marker, name, target) in remotes)
+        {
+            AppendBranchLine(sb, marker, name, target, tracked: false);
+        }
+        return sb.ToString();
+    }
+
+    private static void AppendBranchLine(StringBuilder sb, string marker, string name, string? target, bool tracked)
+    {
+        if (sb.Length > 0) sb.Append('\n');
+        if (marker != " ") sb.Append(marker).Append(' ');
+        sb.Append(name);
+        if (target != null) sb.Append(" -> ").Append(target);
+        if (tracked) sb.Append(" (tracked)");
     }
 }

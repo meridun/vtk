@@ -30,7 +30,12 @@ public class GitTests
         yield return new object[] { "push_new_branch", (Func<string, string>)Git.Push, 0.0 };
         yield return new object[] { "push_progress", (Func<string, string>)Git.Push, 0.60 };
         yield return new object[] { "pull_ff", (Func<string, string>)Git.Pull, 0.40 };
+        // branch (#166): the `-a` reshape (remotes/ stripped, origin twins collapsed)
+        // must clear 30% on a typical listing; plain and -r are near-lossless reformats.
         yield return new object[] { "branch_list", (Func<string, string>)Git.Branch, 0.0 };
+        yield return new object[] { "branch_all", (Func<string, string>)Git.Branch, 0.30 };
+        yield return new object[] { "branch_local", (Func<string, string>)Git.Branch, 0.0 };
+        yield return new object[] { "branch_remote", (Func<string, string>)Git.Branch, 0.0 };
     }
 
     [Theory]
@@ -110,6 +115,41 @@ public class GitTests
         // hunk fold and keeps compacting to "hash subject" (+ nothing).
         const string headerOnly = "commit 453dc13aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nAuthor: A <a@b>\nDate:   Mon Jan 1 00:00:00 2024 +0000\n\n    feat: staged batch\n\n";
         Assert.Equal("453dc13 feat: staged batch", Git.Show(headerOnly));
+    }
+
+    // ---- git branch shape guard (#166): only the plain listing is reshaped ----
+
+    public static IEnumerable<object[]> BranchPassthroughShapes()
+    {
+        yield return new object[] { "-vv", File.ReadAllText(Path.Combine(FixtureDir, "branch_vv.raw.txt")) };
+        yield return new object[] { "--show-current", "dev\n" };
+        yield return new object[] { "--format", "dev origin/dev\nmain \n" };
+        yield return new object[] { "-d", "Deleted branch topic (was 1a2b3c4).\n" };
+        yield return new object[] { "empty", "" };
+    }
+
+    [Theory]
+    [MemberData(nameof(BranchPassthroughShapes))]
+    public void BranchNonListingShapesPassThrough(string shape, string raw)
+    {
+        Assert.Equal(raw, Git.Branch(raw));
+        _ = shape;
+    }
+
+    [Fact]
+    public void BranchDetachedHeadKeepsTheMarkerLine()
+    {
+        const string raw = "* (HEAD detached at 9dcbfbb)\n  master\n  remotes/origin/master\n";
+        Assert.Equal("* (HEAD detached at 9dcbfbb)\nmaster (tracked)", Git.Branch(raw));
+    }
+
+    [Fact]
+    public void BranchCollapsesOnlyOriginTwins()
+    {
+        // A second remote's copy of a local branch stays listed by remote name;
+        // the origin/HEAD symref survives the prefix strip.
+        const string raw = "* dev\n  remotes/origin/HEAD -> origin/dev\n  remotes/origin/dev\n  remotes/upstream/dev\n";
+        Assert.Equal("* dev (tracked)\norigin/HEAD -> origin/dev\nupstream/dev", Git.Branch(raw));
     }
 
     [Theory]
