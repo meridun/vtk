@@ -29,7 +29,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   (the shared fold floor) passes through byte-identical — agents run these to read the hunks, so
   folding them only cost a `vtk show` round trip; at or above the floor the per-file stats shape
   plus an `OK <id>` recovery line still applies (#135). `--stat` / `--numstat` and `show -s`
-  shapes are unchanged.
+  shapes are unchanged. `git branch` listings print one entry per line with the `*` / `+`
+  markers kept, the `remotes/` prefix stripped, and a local branch that is also listed as
+  `origin/<same>` collapsed to one `<name> (tracked)` entry (#166); `--show-current`, `-vv`,
+  `--format`, and other non-listing shapes pass through byte-identical.
 - **eslint filter** — `eslint`, `npx eslint` (direct invocations): problems rolled up by rule id,
   top example per rule, `✖ N problems` summary preserved. Measured 41–99% on fixtures. Report-style
   exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
