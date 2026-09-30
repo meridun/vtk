@@ -85,6 +85,16 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   fatal/config errors (no `N passing`/`failing`/`pending` summary line) pass through raw on
   content, with the child's exit code always returned unchanged. The `npm run test` wrapped form
   is covered via the npm run dispatch layer; full raw is recoverable via `vtk show`.
+- **playwright filter** — `playwright test`, `npx playwright test` (default `list` reporter, #169):
+  folds the per-test pass and skip lines away and keeps the `Running N tests` header, every
+  failing line (retry attempts included), the numbered failure-detail blocks (error, expect diff,
+  snippet, stack — ANSI stripped), forwarded test console output, and the trailing summary block
+  (`N failed`/`N flaky` listings, `N skipped`, `N passed (…)`) verbatim. Measured 29–92% on real
+  captures (green runs 86–92%, a 2-failure run 29%). Filtered on exit `{0,1}` — exit 1 means
+  failures, which is a report, not a crash; runs with no summary block (`Error: No tests found`,
+  config crashes, `--reporter=json`) or nothing to fold (`--reporter=line`/`dot`) pass through
+  byte-identical, with the child's exit code always returned unchanged. Full raw (every `ok N`
+  line) is recoverable via `vtk show`.
 - **gh filter family** — `gh issue list`, `gh pr list`, `gh run list`: table output compacts to
   one line per row (`#<n> <state> <title> (<age>)`; runs show `<conclusion> <title> · <workflow>`),
   labels/branch/runID noise dropped. Measured savings 33–48% on fixtures.
