@@ -140,7 +140,9 @@ public static class Program
     // failure count, min(failures, 255); every 0..255 code is allowlisted,
     // #138). VTK_FAKE_MOCHA_FATAL=1 instead emits a real "No test files
     // found" config error on stderr — no summary line — at exit 1: the
-    // content gate must keep it raw.
+    // content gate must keep it raw. VTK_FAKE_MOCHA_COLOR=1 swaps in the
+    // colored payloads (real `mocha --color`, the .mocharc.json "color": true
+    // shape, #163): green at 0, 2 failing otherwise.
     private static int Mocha(TextWriter stdout, TextWriter stderr, string? banner)
     {
         if (EnvCode("VTK_FAKE_MOCHA_FATAL", 0) == 1)
@@ -149,8 +151,11 @@ public static class Program
             return 1;
         }
         var code = EnvCode("VTK_FAKE_MOCHA_CODE", 1);
+        var color = EnvCode("VTK_FAKE_MOCHA_COLOR", 0) == 1;
         if (banner != null) stdout.Write(banner);
-        stdout.Write(code == 0 ? MochaPassRaw : MochaFailRaw);
+        stdout.Write(code == 0
+            ? (color ? MochaPassColorRaw : MochaPassRaw)
+            : (color ? MochaFailColorRaw : MochaFailRaw));
         return code;
     }
 
@@ -296,6 +301,68 @@ public static class Program
         "\n\n" +
         "  27 passing (5ms)\n\n";
 
+    // Captured from real mocha 11.x `--color` (the .mocharc.json "color": true shape, #163): the summary is wrapped in SGR codes.
+    private const string MochaPassColorRaw =
+        "\n" +
+        "\u001b[0m\u001b[0m\n" +
+        "\u001b[0m  cart\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m starts empty\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m adds an item\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m computes total\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m is serializable\u001b[0m\n" +
+        "\n" +
+        "\u001b[0m  checkout\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m validates address\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m charges card\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m sends receipt\u001b[0m\n" +
+        "\n" +
+        "\n" +
+        "\u001b[92m \u001b[0m\u001b[32m 7 passing\u001b[0m\u001b[90m (3ms)\u001b[0m\n" +
+        "\n";
+
+    // Captured from real mocha 11.x `--color`, 2 failing -> exit 2 (#163): the summary is colored and each failure-detail block opens with ESC[0m.
+    private const string MochaFailColorRaw =
+        "\n" +
+        "\u001b[0m\u001b[0m\n" +
+        "\u001b[0m  cart\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m starts empty\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m adds an item\u001b[0m\n" +
+        "  \u001b[31m  1) computes total\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m is serializable\u001b[0m\n" +
+        "\n" +
+        "\u001b[0m  checkout\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m validates address\u001b[0m\n" +
+        "  \u001b[31m  2) charges card\u001b[0m\n" +
+        "  \u001b[32m  \u001b[32m✔\u001b[39m\u001b[0m\u001b[90m sends receipt\u001b[0m\n" +
+        "\n" +
+        "\n" +
+        "\u001b[92m \u001b[0m\u001b[32m 5 passing\u001b[0m\u001b[90m (4ms)\u001b[0m\n" +
+        "\u001b[31m  2 failing\u001b[0m\n" +
+        "\n" +
+        "\u001b[0m  1) cart\n" +
+        "       computes total:\n" +
+        "\n" +
+        "      \u001b[31mAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n" +
+        "\n" +
+        "12 !== 11\n" +
+        "\u001b[0m\n" +
+        "      \u001b[32m+ expected\u001b[0m \u001b[31m- actual\u001b[0m\n" +
+        "\n" +
+        "      \u001b[31m-12\u001b[0m\n" +
+        "      \u001b[32m+11\u001b[0m\n" +
+        "      \u001b[0m\u001b[90m\n" +
+        "      at Context.<anonymous> (test\\mixed.test.js:5:37)\n" +
+        "      at process.processImmediate (node:internal/timers:504:21)\n" +
+        "\u001b[0m\n" +
+        "\u001b[0m  2) checkout\n" +
+        "       charges card:\n" +
+        "\u001b[0m\u001b[31m     Error: gateway timeout\u001b[0m\u001b[90m\n" +
+        "      at Context.<anonymous> (test\\mixed.test.js:10:36)\n" +
+        "      at process.processImmediate (node:internal/timers:504:21)\n" +
+        "\u001b[0m\n" +
+        "\n" +
+        "\n";
+
     // ---- npm ---------------------------------------------------------------
     // Emulates `npm run <script>`: the two-line npm banner then the inner
     // tool's output. Script selects the inner shape:
@@ -358,10 +425,14 @@ public static class Program
             case "bignoise":
                 // Banner-less mocha spec bulk, then the summary, then five
                 // after-hook timer lines that log after mocha's summary.
+                // VTK_FAKE_MOCHA_COLOR=1 colors the summary line the way
+                // real `mocha --color` does (#163).
                 stdout.Write("\n\n  vtk #134 shape\n");
                 for (var i = 1; i <= 1500; i++)
                     stdout.Write($"    ✔ case {i:0000} persists the resulting state change through the repository layer\n");
-                stdout.Write("\n\n  1500 passing (58ms)\n\n");
+                stdout.Write(EnvCode("VTK_FAKE_MOCHA_COLOR", 0) == 1
+                    ? "\n\n\u001b[92m \u001b[0m\u001b[32m 1500 passing\u001b[0m\u001b[90m (58ms)\u001b[0m\n\n"
+                    : "\n\n  1500 passing (58ms)\n\n");
                 for (var i = 0; i < 5; i++)
                     stdout.Write("[TraderQueryAction.complete] No socket to emit response\n");
                 return EnvCode("VTK_FAKE_NPM_CODE", 0);

@@ -1,0 +1,16 @@
+
+[0m[0m
+[0m  cart[0m
+  [32m  [32m✔[39m[0m[90m starts empty[0m
+  [32m  [32m✔[39m[0m[90m adds an item[0m
+  [32m  [32m✔[39m[0m[90m computes total[0m
+  [32m  [32m✔[39m[0m[90m is serializable[0m
+
+[0m  checkout[0m
+  [32m  [32m✔[39m[0m[90m validates address[0m
+  [32m  [32m✔[39m[0m[90m charges card[0m
+  [32m  [32m✔[39m[0m[90m sends receipt[0m
+
+
+[92m [0m[32m 7 passing[0m[90m (3ms)[0m
+
