@@ -1,0 +1,7 @@
+Running 8 tests using 2 workers
+
+seeded 3 rows
+warn: slow query
+
+  1 skipped
+  7 passed (611ms)

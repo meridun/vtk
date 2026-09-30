@@ -1,0 +1,39 @@
+Running 10 tests using 2 workers
+
+  x   2 [chromium] › tests\checkout.spec.js:3:3 › checkout › charges the card (6ms)
+  x   9 [chromium] › tests\checkout.spec.js:4:3 › checkout › sends a receipt (2ms)
+
+  1) [chromium] › tests\checkout.spec.js:3:3 › checkout › charges the card ─────────────────────────
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 11
+    Received: 12
+
+      1 | const { test, expect } = require('@playwright/test');
+      2 | test.describe('checkout', () => {
+    > 3 |   test('charges the card', async () => { expect(12).toBe(11); });
+        |                                                     ^
+      4 |   test('sends a receipt', async () => { throw new Error('gateway timeout'); });
+      5 |   test('empties the cart', async () => { expect([]).toHaveLength(0); });
+      6 | });
+        at C:\work\shop\tests\checkout.spec.js:3:53
+
+  2) [chromium] › tests\checkout.spec.js:4:3 › checkout › sends a receipt ──────────────────────────
+
+    Error: gateway timeout
+
+      2 | test.describe('checkout', () => {
+      3 |   test('charges the card', async () => { expect(12).toBe(11); });
+    > 4 |   test('sends a receipt', async () => { throw new Error('gateway timeout'); });
+        |                                               ^
+      5 |   test('empties the cart', async () => { expect([]).toHaveLength(0); });
+      6 | });
+      7 |
+        at C:\work\shop\tests\checkout.spec.js:4:47
+
+  2 failed
+    [chromium] › tests\checkout.spec.js:3:3 › checkout › charges the card ──────────────────────────
+    [chromium] › tests\checkout.spec.js:4:3 › checkout › sends a receipt ───────────────────────────
+  1 skipped
+  7 passed (1.6s)

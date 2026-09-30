@@ -199,6 +199,13 @@ public sealed class Registry
         // content — not exit code — is the gate for the raw path.
         r.RegisterCodes("mocha", Mocha.Filter, MochaExitCodes);
         r.RegisterCodes("npx mocha", Mocha.Filter, MochaExitCodes);
+        // playwright test (#169): the list reporter's per-test lines fold;
+        // exit 1 means "some tests failed" and is a report (decision #7
+        // precedent), so {0, 1} filters. One pair key covers `npx playwright
+        // test` too — the #97 launcher unwrap runs before lookup. Fatal
+        // errors ("No tests found") and the json/line/dot reporters carry
+        // no list lines to fold and pass through by content.
+        r.RegisterCodes("playwright test", Playwright.Filter, 0, 1);
         // gh list families: TSV human output on success (exit 0). `gh --json`
         // forms hit the same keys but pass through structurally intact.
         r.Register("gh issue", Gh.IssueList);
