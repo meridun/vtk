@@ -1,0 +1,35 @@
+dotnet/Vtk.Cli/App.cs:106:            var reason = found ? Store.ReasonTTYBypass : Store.ReasonNoFilter;
+dotnet/Vtk.Cli/App.cs:132:            return Passthrough(st, args, false, Store.ReasonNoFilter, match);
+dotnet/Vtk.Cli/App.cs:217:            return EmitRawAttr(match, Store.ReasonNoFilter);
+dotnet/Vtk.Cli/App.cs:295:        var reason = filterName ?? Store.ReasonNoFilter;
+dotnet/Vtk.Cli/App.cs:385:            return EmitRaw(Store.ReasonNoFilter);
+dotnet/Vtk.Core/Spool/Store.cs:163:    // ReasonNoFilter entries are true coverage gaps.
+dotnet/Vtk.Core/Spool/Store.cs:164:    public const string ReasonNoFilter = "no-filter";
+dotnet/Vtk.Core/Spool/Store.cs:259:        return inv.Reason == ReasonNoFilter;
+dotnet/Vtk.Core/Spool/Store.cs:268:    /// (`vtk gaps --file-issues`, #34): true gaps (ReasonNoFilter) that meet
+dotnet/Vtk.Core/Spool/Store.cs:286:                : inv.Reason == ReasonNoFilter;
+dotnet/Vtk.Tests/Spool/StoreTests.cs:199:        _store.LogInvocation(new Invocation { Cmd = "ls -la", RawBytes = 100, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:200:        _store.LogInvocation(new Invocation { Cmd = "ls -R", RawBytes = 50, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:225:        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse HEAD", RawBytes = 100, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:226:        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse --show-toplevel", RawBytes = 100, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:227:        _store.LogInvocation(new Invocation { Time = now, Cmd = "git fetch origin", RawBytes = 50, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:230:        _store.LogInvocation(new Invocation { Time = now, Cmd = "ls -la", RawBytes = 10, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:254:        _store.LogInvocation(new Invocation { Cmd = "ls -la", RawBytes = 100, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:274:        _store.LogInvocation(new Invocation { Cmd = "git log", RawBytes = 200, OutBytes = 200, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:291:        _store.LogInvocation(new Invocation { Time = day1, Cmd = "ls", RawBytes = 300, OutBytes = 300, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:319:        _store.LogInvocation(new Invocation { Time = s2.AddMinutes(5), Cmd = "ls", RawBytes = 300, OutBytes = 300, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:409:            new Invocation { Time = now, Cmd = "cargo build", RawBytes = 20000, OutBytes = 20000, Reason = Store.ReasonNoFilter },
+dotnet/Vtk.Tests/Spool/StoreTests.cs:410:            new Invocation { Time = now, Cmd = "cargo test", RawBytes = 10000, OutBytes = 10000, Reason = Store.ReasonNoFilter },
+dotnet/Vtk.Tests/Spool/StoreTests.cs:413:            new Invocation { Time = now, Cmd = "gh pr list --json number", RawBytes = 40000, OutBytes = 40000, Reason = Store.ReasonNoFilter },
+dotnet/Vtk.Tests/Spool/StoreTests.cs:414:            new Invocation { Time = now, Cmd = "gh run view --json jobs", RawBytes = 40000, OutBytes = 40000, Reason = Store.ReasonNoFilter },
+dotnet/Vtk.Tests/Spool/StoreTests.cs:415:            new Invocation { Time = now, Cmd = "gh pr diff 5", RawBytes = 5000, OutBytes = 5000, Reason = Store.ReasonNoFilter },
+dotnet/Vtk.Tests/Spool/StoreTests.cs:417:            new Invocation { Time = now, Cmd = "docker ps", RawBytes = 100, OutBytes = 100, Reason = Store.ReasonNoFilter },
+dotnet/Vtk.Tests/Spool/StoreTests.cs:418:            new Invocation { Time = now, Cmd = "docker images", RawBytes = 100, OutBytes = 100, Reason = Store.ReasonNoFilter },
+dotnet/Vtk.Tests/Spool/StoreTests.cs:419:            new Invocation { Time = now, Cmd = "docker build .", RawBytes = 100, OutBytes = 100, Reason = Store.ReasonNoFilter },
+dotnet/Vtk.Tests/Spool/StoreTests.cs:442:        _store.LogInvocation(new Invocation { Time = since.AddDays(-30), Cmd = "grep -r foo", RawBytes = 1000, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:443:        _store.LogInvocation(new Invocation { Time = since.AddSeconds(-1), Cmd = "grep -n bar", RawBytes = 500, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:444:        _store.LogInvocation(new Invocation { Time = since, Cmd = "grep baz", RawBytes = 100, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:445:        _store.LogInvocation(new Invocation { Time = since.AddDays(1), Cmd = "ls -la", RawBytes = 40, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:446:        _store.LogInvocation(new Invocation { Cmd = "ls -R", RawBytes = 60, Reason = Store.ReasonNoFilter }); // undated
+dotnet/Vtk.Tests/Spool/StoreTests.cs:535:        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(7), Cmd = "tsc --noEmit", RawBytes = 3000, OutBytes = 2600, Reason = Store.ReasonNoFilter, SpoolId = "0a1b" });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:605:        _store.LogInvocation(new Invocation { Cmd = "ls -la", RawBytes = 100, Reason = Store.ReasonNoFilter });

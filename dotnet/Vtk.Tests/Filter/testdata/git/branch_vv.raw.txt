@@ -1,0 +1,5 @@
+* dev                         ae71d5f [origin/dev] Merge pull request #162 from meridun/fix/155-invocation-log-append-retry
++ fix/120-npm-lifecycle-alias f2e8d52 (C:/Claude/vtk-wt/120) [origin/fix/120-npm-lifecycle-alias: gone] docs(npm): record lifecycle-alias dispatch in README + ToolCoverage (#120)
++ fix/163-mocha-fold-ansi     cb18c27 (C:/Claude/vtk-wt/163) [origin/fix/163-mocha-fold-ansi] docs(readme): colored mocha output recognized; fold pin scan ANSI-aware (#163)
++ fix/164-git-log-p-floor     5529e25 (C:/Claude/vtk-wt/164) [origin/fix/164-git-log-p-floor] docs(git): record the git log -p hunk floor in ToolCoverage and README (#164)
+  main                        7487a50 Add agentic SDLC pipeline adapted from IsekaiOnline

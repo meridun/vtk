@@ -208,6 +208,43 @@ public class RegistryTests
         Assert.Equal(cmd, r.GapFamily(cmd));
     }
 
+    /// <summary>
+    /// `node --test` resolves via the regex path (#168) — `--test` in any
+    /// position after `node`, flags/values ahead of it tolerated — on exit
+    /// 0 and 1 (a failing run is a report). The exact token is required, so
+    /// `--test-*` flags alone and plain script runs miss.
+    /// </summary>
+    [Theory]
+    [InlineData("node --test", true)]
+    [InlineData("node --test test/", true)]
+    [InlineData("node.exe --test", true)]
+    [InlineData("node --import tsx --test", true)]
+    [InlineData("node --test-reporter=spec --test test/unit", true)]
+    [InlineData("node --test --test-reporter tap", true)]
+    [InlineData("node server.js", false)]
+    [InlineData("node --test-only file.js", false)]
+    [InlineData("node --version", false)]
+    [InlineData("node", false)]
+    [InlineData("nodemon --test", false)]
+    public void Default_NodeTest_MatchesOnlyTheTestFlag(string cmd, bool want)
+    {
+        var r = Registry.Default();
+        var found = r.TryLookup(cmd.Split(' '), out var entry);
+        Assert.Equal(want, found);
+        if (!want) return;
+        Assert.Equal("node --test", entry.Name);
+        Assert.True(entry.Filters(0) && entry.Filters(1) && !entry.Filters(2) && !entry.Filters(9));
+    }
+
+    /// <summary>The regex entry adds no pair key: `node` stays a bare gap family (#139), unlike the pair-keyed multiplexers.</summary>
+    [Fact]
+    public void Default_NodeTest_AddsNoPairKey()
+    {
+        var r = Registry.Default();
+        Assert.DoesNotContain("node", r.PairKeyedCommands);
+        Assert.Equal("node", r.GapFamily("node server.js --port 3000"));
+    }
+
     /// <summary>`gh run` dispatches both run-list tables and CI job logs (#96), on exit 0 and 1 (`--exit-status` forms).</summary>
     [Fact]
     public void Default_GhRun_AllowsExitZeroAndOne()
@@ -217,6 +254,31 @@ public class RegistryTests
         Assert.Equal("gh run", entry.Name);
         Assert.True(entry.Filters(0) && entry.Filters(1) && !entry.Filters(2));
     }
+
+    /// <summary>
+    /// Registry reuse (#167): `gh pr` (content dispatcher), `git merge`, and
+    /// `git grep` resolve in the default registry, exit 0 only — merge
+    /// conflicts and grep no-match both exit 1 and stay raw.
+    /// </summary>
+    [Theory]
+    [InlineData("gh pr")]
+    [InlineData("git merge")]
+    [InlineData("git grep")]
+    public void Default_ReuseKeys_ResolveExitZeroOnly(string key)
+    {
+        var r = Registry.Default();
+        Assert.True(r.TryLookup(key.Split(' ').Append("x").ToArray(), out var entry));
+        Assert.Equal(key, entry.Name);
+        Assert.True(entry.Filters(0));
+        Assert.False(entry.Filters(1));
+    }
+
+    /// <summary>`git merge` / `git grep` are not in GitNormalizedSubcommands (#152): behind a global option they miss.</summary>
+    [Theory]
+    [InlineData("git -C x merge feature")]
+    [InlineData("git --no-pager grep -n foo")]
+    public void Default_ReuseKeys_NotNormalized(string cmd) =>
+        Assert.False(Registry.Default().TryLookup(cmd.Split(' '), out _), cmd);
 
     /// <summary>
     /// Known git global options ahead of the subcommand normalize to the bare

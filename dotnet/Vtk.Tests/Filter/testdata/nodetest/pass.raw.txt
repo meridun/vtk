@@ -1,0 +1,60 @@
+▶ auth
+  ✔ hashes the password (0.6008ms)
+  ✔ rejects a short password (0.1003ms)
+  ✔ issues a session token (0.0927ms)
+  ✔ expires the token (0.0917ms) # TODO
+✔ auth (1.7808ms)
+▶ cart
+  ▶ totals
+    ✔ sums line items (0.7885ms)
+    ✔ applies a discount code (0.2096ms)
+    ✔ rounds to cents (0.1916ms)
+  ✔ totals (2.2674ms)
+  ▶ shipping
+    ✔ free over threshold (0.7684ms)
+    ✔ flat rate under threshold (0.1637ms)
+    ﹣ skips digital goods (0.0984ms) # not implemented
+  ✔ shipping (1.3031ms)
+✔ cart (4.1632ms)
+▶ inventory
+  ▶ stock levels
+    ✔ tracks on-hand quantity for A-100 (0.6392ms)
+    ✔ tracks on-hand quantity for A-101 (0.0948ms)
+    ✔ tracks on-hand quantity for A-102 (0.0798ms)
+    ✔ tracks on-hand quantity for B-200 (0.0799ms)
+    ✔ tracks on-hand quantity for B-201 (0.0704ms)
+    ✔ tracks on-hand quantity for C-300 (0.0971ms)
+    ✔ tracks on-hand quantity for C-301 (0.0724ms)
+    ✔ tracks on-hand quantity for C-302 (0.0784ms)
+    ✔ tracks on-hand quantity for D-400 (0.085ms)
+  ✔ stock levels (2.5574ms)
+  ▶ reservations
+    ✔ reserves stock for a pending order (0.1846ms)
+    ✔ releases stock on cancellation (0.1308ms)
+    ✔ rejects reservation above on-hand (0.0951ms)
+    ✔ expires stale reservations (0.0945ms)
+  ✔ reservations (0.6946ms)
+  ▶ reorder points
+    ✔ flags SKUs below the reorder point (0.1502ms)
+    ✔ ignores discontinued SKUs (0.1385ms)
+    ✔ computes the reorder quantity (0.069ms)
+  ✔ reorder points (0.5095ms)
+✔ inventory (4.1964ms)
+▶ pricing
+  ✔ applies the list price (0.6478ms)
+  ✔ applies a percentage discount (0.0961ms)
+  ✔ applies a fixed discount (0.1049ms)
+  ✔ never goes below zero (0.0906ms)
+  ✔ rounds half up to cents (0.0913ms)
+  ✔ adds sales tax by region (0.4637ms)
+  ✔ exempts tax-free regions (0.0938ms)
+  ﹣ handles currency conversion (0.0814ms) # needs rate fixture
+✔ pricing (2.6695ms)
+ℹ tests 34
+ℹ suites 9
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 1
+ℹ duration_ms 96.3927

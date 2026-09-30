@@ -1,0 +1,9 @@
+Merge made by the 'ort' strategy.
+ alpha.txt   | 1 +
+ delta.txt   | 3 +++
+ epsilon.txt | 3 +++
+ gamma.txt   | 3 +++
+ 4 files changed, 10 insertions(+)
+ create mode 100644 delta.txt
+ create mode 100644 epsilon.txt
+ create mode 100644 gamma.txt

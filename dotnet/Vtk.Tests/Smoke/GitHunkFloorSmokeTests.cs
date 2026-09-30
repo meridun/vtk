@@ -156,6 +156,49 @@ public class GitHunkFloorSmokeTests : IDisposable
     }
 
     [Fact]
+    public void LogPatchFloorsHunksButPlainLogStillCompacts()
+    {
+        // Below the floor: the harness's small commits pass through byte-identical (#164).
+        var rawSmall = SmokeHarness.Git(_h.Repo, "log", "-p");
+        Assert.Contains("@@", rawSmall);
+        Assert.True(rawSmall.Length < FloorBytes, $"scratch log -p unexpectedly at/above the floor ({rawSmall.Length})");
+        var (smallOut, _, smallCode) = _h.Run(_h.Repo, "git", "log", "-p");
+        Assert.Equal(0, smallCode);
+        Assert.Equal(rawSmall, smallOut);
+        SmokeAssert.NoOk(smallOut);
+
+        // At or above the floor: one line per commit, each followed by its
+        // own per-file stats + OK, hunks recoverable via `vtk show`.
+        BigChange();
+        SmokeHarness.Git(_h.Repo, "add", ".");
+        SmokeHarness.Git(_h.Repo, "commit", "-q", "-m", "commit 4: grow file2.txt");
+        var head = SmokeHarness.Git(_h.Repo, "rev-parse", "HEAD").Trim();
+        var rawBig = SmokeHarness.Git(_h.Repo, "log", "-p");
+        Assert.True(rawBig.Length >= FloorBytes, $"scratch log -p below the floor ({rawBig.Length})");
+        var (bigOut, _, bigCode) = _h.Run(_h.Repo, "git", "log", "-p");
+        Assert.Equal(0, bigCode);
+        var id = SmokeHarness.MustOkId(bigOut);
+        Assert.StartsWith(head[..7] + " commit 4: grow file2.txt\nfile2.txt | +900 -0\n", bigOut);
+        Assert.DoesNotContain("@@", bigOut);
+        Assert.DoesNotContain(Marker, bigOut);
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("# cmd: git log -p", shown);
+        Assert.Contains(Marker + " padding line 899", shown);
+
+        // Plain `git log` has no hunks: the pre-#164 one-line compaction stands.
+        var (plainOut, _, plainCode) = _h.Run(_h.Repo, "git", "log");
+        Assert.Equal(0, plainCode);
+        Assert.StartsWith(head[..7] + " commit 4: grow file2.txt\n", plainOut);
+        Assert.DoesNotContain("file2.txt |", plainOut);
+
+        var log = _h.InvocationLog();
+        Assert.Equal(3, CountOccurrences(log, "\"reason\":\"git log\""));
+        Assert.DoesNotContain("\"reason\":\"no-filter\"", log);
+        Assert.DoesNotContain(Marker, log); // invariant 3
+    }
+
+    [Fact]
     public void ExitCodeParityOnFailingDiffAndShow()
     {
         var rawDiff = RawGit(_h.Repo, "diff", "no-such-rev-135");
