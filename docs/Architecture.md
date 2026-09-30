@@ -129,6 +129,7 @@ vtk <cmd> [args...]
   ├─ 1. Dispatch: match <cmd> (+ subcommand) against the filter registry
   │      match  → run command, capture output, spool raw, apply filter, emit compact result
   │      no match → run command with output passed through untouched, write gap entry
+  │      (off-TTY the output is captured until exit so an oversized failure can tail-fold)
   │      wrapper (`npm run <script>`) → capture once, strip the wrapper banner, re-dispatch
   │      the body to the inner tool's filter; an uncovered inner tool gap-logs under the
   │      inner tool's family, not the wrapper's
