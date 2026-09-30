@@ -21,7 +21,8 @@ with two headline additions:
 Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 
 - **git filter family** — `status`, `log`, `diff`, `show`, `add`, `commit`, `push`, `pull`,
-  `branch` (other subcommands pass through). Measured savings 47–89% on typical fixtures.
+  `branch`, `merge`, `grep` (other subcommands pass through). Measured savings 47–89% on
+  typical fixtures.
   Global options ahead of the subcommand (`-C <dir>`, `-c <k=v>`, `--no-pager`/`-P`,
   `-p`/`--paginate`, `--git-dir[=<path>]`, `--work-tree[=<path>]`) still engage the filter for
   `status`, `branch`, `add`, `commit`, `push`, `pull`; `diff`, `show`, `log` behind a global
@@ -31,7 +32,13 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   per-file stats shape plus an `OK <id>` recovery line still applies (#135, #164) — for
   `git log -p` that is one line per commit, each followed by its own `file | +N -M` stats (merge
   commits without a diff stay bare lines). `--stat` / `--numstat` and `show -s` shapes are
-  unchanged.
+  unchanged. `git branch` listings print one entry per line with the `*` / `+`
+  markers kept, the `remotes/` prefix stripped, and a local branch that is also listed as
+  `origin/<same>` collapsed to one `<name> (tracked)` entry (#166); `--show-current`, `-vv`,
+  `--format`, and other non-listing shapes pass through byte-identical. `git merge` shares the
+  `pull` filter (diffstat and transfer noise dropped, the merge summary kept; a conflicting merge
+  exits 1 and stays raw) and `git grep -n` shares the files/search `grep` filter (5 matches per
+  file, no-match exit 1 stays raw) (#167).
 - **eslint filter** — `eslint`, `npx eslint` (direct invocations): problems rolled up by rule id,
   top example per rule, `✖ N problems` summary preserved. Measured 41–99% on fixtures. Report-style
   exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
@@ -100,7 +107,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   full raw always recoverable via `vtk show`. `gh run` filters exit `{0,1}` — a failed run's log
   is a report, not a crash, and non-log error output passes through raw via shape guards; other
   gh commands filter exit `0` only. `view` summary shapes and any `--json` output pass through
-  structurally intact.
+  structurally intact. `gh pr diff` output routes to the `git diff` filter by content (#167):
+  below 64 KiB it passes through byte-identical, at or above the floor it folds to per-file
+  stats plus `OK <id>`.
 - **files/search filter family** — `ls`, `grep`, `find`: list output column-packed and capped at
   40 entries with a `(+N more)` tail; `grep` match lines capped at 5 per file with per-file
   `(+N more)` tails. The full listing is always recoverable via `vtk show <id>`. Measured savings

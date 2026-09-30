@@ -1,0 +1,2857 @@
+diff --git a/api/http_client.go b/api/http_client.go
+index 43089b85e98..55688c18158 100644
+--- a/api/http_client.go
++++ b/api/http_client.go
+@@ -16,19 +16,23 @@ import (
+ )
+ 
+ type config interface {
+-	ActiveToken(string) gh.Credential
++	ActiveTokenWithRefresh(string) (gh.Credential, gh.RefreshStatus, error)
+ 	HostForAPIHost(string) (string, bool)
+ }
+ 
+ type HTTPClientOptions struct {
+-	AppVersion         string
+-	InvokingAgent      string
+-	CacheTTL           time.Duration
+-	Config             config
+-	EnableCache        bool
+-	Log                io.Writer
+-	LogColorize        bool
+-	LogVerboseHTTP     bool
++	AppVersion     string
++	InvokingAgent  string
++	CacheTTL       time.Duration
++	Config         config
++	EnableCache    bool
++	Log            io.Writer
++	LogColorize    bool
++	LogVerboseHTTP bool
++	// LogHeadlineOnly keeps logging non-verbose even when GH_DEBUG requests api tracing, so only httpretty's head
++	// lines (timing and URL) are emitted, not request/response headers and bodies. It is used by the token refresher
++	// client so a refresh triggered mid request does not dump a full trace into the middle of the user's request log.
++	LogHeadlineOnly    bool
+ 	SkipDefaultHeaders bool
+ 	TelemetryDisabler  ghtelemetry.Disabler
+ }
+@@ -44,7 +48,7 @@ func NewHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
+ 	}
+ 
+ 	debugEnabled, debugValue := utils.IsDebugEnabled()
+-	if strings.Contains(debugValue, "api") {
++	if strings.Contains(debugValue, "api") && !opts.LogHeadlineOnly {
+ 		opts.LogVerboseHTTP = true
+ 	}
+ 
+@@ -169,9 +173,11 @@ func AddAuthTokenHeader(rt http.RoundTripper, cfg config) http.RoundTripper {
+ 		if redirectHostnameChange {
+ 			return rt.RoundTrip(req)
+ 		}
+-
+ 		hostnameInRequest := ghauth.NormalizeHostname(getHostname(req))
+-		token := cfg.ActiveToken(hostnameInRequest).Token
++		// Refreshing is best effort because it happens before actual expiry, and expiry checks can be unreliable due to
++		// clock skew. Continue with the returned token and let the API determine whether it is valid.
++		cred, _, _ := cfg.ActiveTokenWithRefresh(hostnameInRequest)
++		token := cred.Token
+ 		if token == "" {
+ 			// The request may be aimed at a host's api_host, which gh is
+ 			// not logged in to and so has no token of its own. Fall back
+@@ -179,7 +185,8 @@ func AddAuthTokenHeader(rt http.RoundTripper, cfg config) http.RoundTripper {
+ 			// adds a token where there would have been none, so hosts we
+ 			// already authenticate keep resolving exactly as before.
+ 			if canonicalHost, ok := cfg.HostForAPIHost(hostnameInRequest); ok {
+-				token = cfg.ActiveToken(canonicalHost).Token
++				cred, _, _ = cfg.ActiveTokenWithRefresh(canonicalHost)
++				token = cred.Token
+ 			}
+ 		}
+ 		if token != "" {
+diff --git a/api/http_client_test.go b/api/http_client_test.go
+index 5cd445111fc..6da198005eb 100644
+--- a/api/http_client_test.go
++++ b/api/http_client_test.go
+@@ -268,6 +268,40 @@ func TestNewHTTPClient(t *testing.T) {
+ 	}
+ }
+ 
++func TestNewHTTPClientLogHeadlineOnly(t *testing.T) {
++	// Under GH_DEBUG=api the client normally logs a full verbose trace. LogHeadlineOnly must keep it non-verbose, so
++	// only httpretty's head lines are emitted and the request/response header and body lines are suppressed.
++	t.Setenv("GH_DEBUG", "api")
++
++	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		w.WriteHeader(http.StatusNoContent)
++	}))
++	defer ts.Close()
++
++	ios, _, _, stderr := iostreams.Test()
++	client, err := NewHTTPClient(HTTPClientOptions{
++		AppVersion:         "v1.2.3",
++		Log:                ios.ErrOut,
++		LogHeadlineOnly:    true,
++		SkipDefaultHeaders: true,
++	})
++	require.NoError(t, err)
++
++	req, err := http.NewRequest("GET", ts.URL, nil)
++	require.NoError(t, err)
++	req.Host = "github.com"
++
++	res, err := client.Do(req)
++	require.NoError(t, err)
++	assert.Equal(t, 204, res.StatusCode)
++
++	assert.Equal(t, heredoc.Doc(`
++		* Request at <time>
++		* Request to http://<host>:<port>
++		* Request took <duration>
++	`), normalizeVerboseLog(stderr.String()))
++}
++
+ func TestHTTPClientRedirectAuthenticationHeaderHandling(t *testing.T) {
+ 	// Two servers stand in for two different hosts. A dial map lets the test
+ 	// address them by hostname, so the auth layer compares real hostnames rather
+@@ -528,8 +562,8 @@ func (f *fakeTelemetryDisabler) Disable() {
+ 
+ type tinyConfig map[string]string
+ 
+-func (c tinyConfig) ActiveToken(host string) gh.Credential {
+-	return gh.Credential{Source: "oauth_token", Token: c[fmt.Sprintf("%s:%s", host, "oauth_token")]}
++func (c tinyConfig) ActiveTokenWithRefresh(host string) (gh.Credential, gh.RefreshStatus, error) {
++	return gh.Credential{Token: c[fmt.Sprintf("%s:%s", host, "oauth_token")]}, gh.RefreshStatusUnnecessary, nil
+ }
+ 
+ // HostForAPIHost resolves via an "api_host:<apiHost>" key holding the host that
+diff --git a/internal/attachments/client_test.go b/internal/attachments/client_test.go
+index 61c33d80705..183c6982943 100644
+--- a/internal/attachments/client_test.go
++++ b/internal/attachments/client_test.go
+@@ -52,8 +52,8 @@ func newTestUploader(t *testing.T, reg *httpmock.Registry, host string, targetRe
+ 
+ type staticTokenConfig map[string]string
+ 
+-func (c staticTokenConfig) ActiveToken(host string) gh.Credential {
+-	return gh.Credential{Source: "oauth_token", Token: c[host]}
++func (c staticTokenConfig) ActiveTokenWithRefresh(host string) (gh.Credential, gh.RefreshStatus, error) {
++	return gh.Credential{Token: c[host]}, gh.RefreshStatusUnnecessary, nil
+ }
+ 
+ func (c staticTokenConfig) HostForAPIHost(apiHost string) (string, bool) {
+diff --git a/internal/authflow/flow.go b/internal/authflow/flow.go
+index edf752d83ab..094580b2d61 100644
+--- a/internal/authflow/flow.go
++++ b/internal/authflow/flow.go
+@@ -120,8 +120,8 @@ type cfg struct {
+ 	token string
+ }
+ 
+-func (c cfg) ActiveToken(hostname string) gh.Credential {
+-	return gh.Credential{Source: gh.TokenSourceOAuthToken, Token: c.token}
++func (c cfg) ActiveTokenWithRefresh(hostname string) (gh.Credential, gh.RefreshStatus, error) {
++	return gh.Credential{Token: c.token}, gh.RefreshStatusInapplicable, nil
+ }
+ 
+ // HostForAPIHost never resolves, because the token here is supplied directly by
+diff --git a/internal/authflow/refresh.go b/internal/authflow/refresh.go
+new file mode 100644
+index 00000000000..829e0b3ddb5
+--- /dev/null
++++ b/internal/authflow/refresh.go
+@@ -0,0 +1,101 @@
++package authflow
++
++import (
++	"errors"
++	"fmt"
++	"net/http"
++	"time"
++
++	"github.com/cli/cli/v2/internal/gh"
++	"github.com/cli/cli/v2/internal/ghinstance"
++	"github.com/cli/oauth"
++	oauthapi "github.com/cli/oauth/api"
++)
++
++// timeNow is the clock used to anchor a server-reported token lifetime to an absolute expiry. Callers capture it just
++// before initiating the OAuth exchange, so the derived expiry is measured from an instant at or before the moment the
++// server issued the token and is therefore never later than the true expiry. It is a package variable so tests can pin
++// the anchor and assert the computed expiry deterministically.
++var timeNow = time.Now
++
++// TokenRefresher exchanges a refresh token for a renewed credential against a host's OAuth token endpoint. It performs
++// only the token endpoint request and response parsing; deciding when to refresh and serializing concurrent refreshes
++// are the caller's responsibility, per the gh.TokenRefresher contract.
++type TokenRefresher struct {
++	httpClient   *http.Client
++	clientID     string
++	clientSecret string
++}
++
++// NewTokenRefresher builds a TokenRefresher that renews credentials issued to gh's OAuth app. The provided HTTP client
++// should be a plain client that sets no auth or other headers, since the token endpoint is reached without an existing
++// token.
++func NewTokenRefresher(httpClient *http.Client) *TokenRefresher {
++	return &TokenRefresher{
++		httpClient:   httpClient,
++		clientID:     oauthClientID,
++		clientSecret: oauthClientSecret,
++	}
++}
++
++// Refresh exchanges refreshToken for a renewed credential on hostname. A refresh token the server rejects surfaces as
++// an error wrapping gh.ErrRefreshTokenInvalid, so callers can distinguish an unusable refresh token from a transient
++// failure without depending on the underlying OAuth library. When the server omits a new refresh token, the returned
++// credential's RefreshToken is left empty rather than reusing refreshToken, so the response is reported exactly as
++// received.
++func (r *TokenRefresher) Refresh(refreshToken, hostname string) (gh.RefreshableCredential, error) {
++	host, err := oauth.NewGitHubHost(ghinstance.HostPrefix(hostname))
++	if err != nil {
++		return gh.RefreshableCredential{}, err
++	}
++
++	opts := oauth.RefreshOptions{
++		Host:         host,
++		ClientID:     r.clientID,
++		ClientSecret: r.clientSecret,
++		RefreshToken: refreshToken,
++	}
++	// Only set HTTPClient when we actually have one. RefreshOptions.HTTPClient is an interface, so assigning a nil
++	// *http.Client would store a non-nil typed nil that defeats the library's own http.DefaultClient fallback and
++	// panics when the request is made.
++	if r.httpClient != nil {
++		opts.HTTPClient = r.httpClient
++	}
++
++	// Anchor the token lifetime to the instant just before the exchange. The server reports expires_in relative to
++	// when it issues the token, which is at or after this point, so measuring from here never overestimates the
++	// expiry. Use UTC so the derived absolute expiry matches the canonical UTC form gh stores and displays.
++	requestedAt := timeNow().UTC()
++	token, err := oauth.Refresh(opts)
++	if err != nil {
++		// Translate the library's rejection sentinel to gh's own so callers can classify a rejected refresh token
++		// without importing the OAuth library, while preserving the original error in the chain for debugging.
++		if errors.Is(err, oauth.ErrRefreshTokenInvalid) {
++			return gh.RefreshableCredential{}, fmt.Errorf("%w: %w", gh.ErrRefreshTokenInvalid, err)
++		}
++		return gh.RefreshableCredential{}, err
++	}
++
++	return refreshableCredentialFromAccessToken(token, requestedAt), nil
++}
++
++// refreshableCredentialFromAccessToken projects an OAuth access token onto gh.RefreshableCredential. It derives each
++// absolute expiry by adding the server-reported lifetime (ExpiresIn) to requestedAt, the instant the exchange was
++// initiated, rather than trusting any absolute time from the OAuth library. Because requestedAt is at or before the
++// server issued the token, the derived expiry is never later than the true expiry. A zero lifetime maps to a nil
++// pointer so the refresh gating treats the credential as non-expiring rather than already expired.
++func refreshableCredentialFromAccessToken(token *oauthapi.AccessToken, requestedAt time.Time) gh.RefreshableCredential {
++	credential := gh.RefreshableCredential{
++		AccessToken:           token.Token,
++		RefreshToken:          token.RefreshToken,
++		ExpiresIn:             token.ExpiresIn,
++		RefreshTokenExpiresIn: token.RefreshTokenExpiresIn,
++	}
++	if token.ExpiresIn > 0 {
++		credential.ExpiresAt = new(requestedAt.Add(time.Duration(token.ExpiresIn) * time.Second))
++	}
++	if token.RefreshTokenExpiresIn > 0 {
++		credential.RefreshTokenExpiresAt = new(requestedAt.Add(time.Duration(token.RefreshTokenExpiresIn) * time.Second))
++	}
++	return credential
++}
+diff --git a/internal/authflow/refresh_test.go b/internal/authflow/refresh_test.go
+new file mode 100644
+index 00000000000..6cdd17407df
+--- /dev/null
++++ b/internal/authflow/refresh_test.go
+@@ -0,0 +1,126 @@
++package authflow
++
++import (
++	"io"
++	"net/http"
++	"net/url"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/cli/cli/v2/internal/gh"
++	"github.com/cli/oauth"
++	"github.com/stretchr/testify/require"
++)
++
++// stubRoundTripper captures the outgoing request and returns a canned response, so the refresher can be exercised
++// against the real oauth.Refresh code path without a network call.
++type stubRoundTripper struct {
++	lastReq  *http.Request
++	lastBody string
++	status   int
++	body     string
++}
++
++func (s *stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
++	s.lastReq = req
++	if req.Body != nil {
++		data, _ := io.ReadAll(req.Body)
++		s.lastBody = string(data)
++	}
++	status := s.status
++	if status == 0 {
++		status = http.StatusOK
++	}
++	return &http.Response{
++		StatusCode: status,
++		Header:     http.Header{"Content-Type": {"application/x-www-form-urlencoded; charset=utf-8"}},
++		Body:       io.NopCloser(strings.NewReader(s.body)),
++		Request:    req,
++	}, nil
++}
++
++func TestTokenRefresherRefresh(t *testing.T) {
++	// Pin a non-UTC clock so the test proves the derived expiry is normalized to UTC rather than inheriting the
++	// local zone of the anchor.
++	loc, err := time.LoadLocation("America/New_York")
++	require.NoError(t, err)
++	fixedNow := time.Date(2026, 1, 2, 3, 4, 5, 0, loc)
++	timeNow = func() time.Time { return fixedNow }
++	t.Cleanup(func() { timeNow = time.Now })
++
++	stub := &stubRoundTripper{
++		body: "access_token=gho_NEW&refresh_token=ghr_NEW&token_type=bearer&scope=repo&expires_in=28800&refresh_token_expires_in=15897600",
++	}
++	refresher := NewTokenRefresher(&http.Client{Transport: stub})
++
++	credential, err := refresher.Refresh("ghr_OLD", "github.com")
++	require.NoError(t, err)
++
++	// The renewed token pair is mapped through verbatim.
++	require.Equal(t, "gho_NEW", credential.AccessToken)
++	require.Equal(t, "ghr_NEW", credential.RefreshToken)
++	require.Equal(t, 28800, credential.ExpiresIn)
++	require.Equal(t, 15897600, credential.RefreshTokenExpiresIn)
++	// Absolute expiries are derived from the server lifetimes, anchored at the instant the exchange was initiated,
++	// and expressed in UTC so they match the canonical form gh stores and displays.
++	require.NotNil(t, credential.ExpiresAt)
++	require.Equal(t, time.UTC, credential.ExpiresAt.Location())
++	require.Equal(t, fixedNow.Add(28800*time.Second).UTC(), *credential.ExpiresAt)
++	require.NotNil(t, credential.RefreshTokenExpiresAt)
++	require.Equal(t, time.UTC, credential.RefreshTokenExpiresAt.Location())
++	require.Equal(t, fixedNow.Add(15897600*time.Second).UTC(), *credential.RefreshTokenExpiresAt)
++
++	// The request is a refresh_token grant carrying the supplied refresh token, sent to the host's token endpoint.
++	require.Equal(t, "https://github.com/login/oauth/access_token", stub.lastReq.URL.String())
++	values, err := url.ParseQuery(stub.lastBody)
++	require.NoError(t, err)
++	require.Equal(t, "refresh_token", values.Get("grant_type"))
++	require.Equal(t, "ghr_OLD", values.Get("refresh_token"))
++	require.Equal(t, oauthClientID, values.Get("client_id"))
++}
++
++func TestTokenRefresherRefreshNoExpiry(t *testing.T) {
++	stub := &stubRoundTripper{
++		body: "access_token=gho_NEW&refresh_token=ghr_NEW&token_type=bearer&scope=repo",
++	}
++	refresher := NewTokenRefresher(&http.Client{Transport: stub})
++
++	credential, err := refresher.Refresh("ghr_OLD", "github.com")
++	require.NoError(t, err)
++
++	require.Equal(t, "gho_NEW", credential.AccessToken)
++	require.Equal(t, "ghr_NEW", credential.RefreshToken)
++	// An omitted expiry is mapped to a nil pointer so refresh gating treats the token as non-expiring.
++	require.Equal(t, 0, credential.ExpiresIn)
++	require.Nil(t, credential.ExpiresAt)
++	require.Nil(t, credential.RefreshTokenExpiresAt)
++}
++
++func TestTokenRefresherRefreshOmittedRefreshToken(t *testing.T) {
++	stub := &stubRoundTripper{
++		body: "access_token=gho_NEW&token_type=bearer&scope=repo&expires_in=28800",
++	}
++	refresher := NewTokenRefresher(&http.Client{Transport: stub})
++
++	credential, err := refresher.Refresh("ghr_OLD", "github.com")
++	require.NoError(t, err)
++
++	// When the server omits a refresh token we report it as received rather than reusing the old one.
++	require.Equal(t, "gho_NEW", credential.AccessToken)
++	require.Empty(t, credential.RefreshToken)
++}
++
++func TestTokenRefresherRefreshRejected(t *testing.T) {
++	stub := &stubRoundTripper{
++		body: "error=bad_refresh_token&error_description=The+refresh+token+passed+is+incorrect+or+expired.",
++	}
++	refresher := NewTokenRefresher(&http.Client{Transport: stub})
++
++	_, err := refresher.Refresh("ghr_OLD", "github.com")
++	require.Error(t, err)
++	// The gh sentinel lets a caller classify an unusable refresh token without importing the OAuth library, while the
++	// original library error is preserved in the chain.
++	require.ErrorIs(t, err, gh.ErrRefreshTokenInvalid)
++	require.ErrorIs(t, err, oauth.ErrRefreshTokenInvalid)
++}
+diff --git a/internal/config/auth_config_test.go b/internal/config/auth_config_test.go
+index 3b5a9100b35..dacd41464ce 100644
+--- a/internal/config/auth_config_test.go
++++ b/internal/config/auth_config_test.go
+@@ -1,6 +1,7 @@
+ package config
+ 
+ import (
++	"context"
+ 	"errors"
+ 	"testing"
+ 
+@@ -14,7 +15,16 @@ import (
+ // Note that NewIsolatedTestConfig sets up a Mock keyring as well
+ func newTestAuthConfig(t *testing.T) *AuthConfig {
+ 	cfg, _ := NewIsolatedTestConfig(t, "")
+-	return &AuthConfig{cfg: cfg.cfg}
++	// Neutralize the cross-process lock and disk reload so tests never take a real filesystem lock or read from disk.
++	return &AuthConfig{
++		cfg: cfg.cfg,
++		acquireRefreshLock: func(ctx context.Context, path string) (func(), error) {
++			return func() {}, nil
++		},
++		reloadConfig: func() error {
++			return nil
++		},
++	}
+ }
+ 
+ func TestTokenFromKeyring(t *testing.T) {
+@@ -84,8 +94,8 @@ func TestTokenStoredInConfig(t *testing.T) {
+ 	require.NoError(t, err)
+ 
+ 	// When we get the token
+-	cred1 := authCfg.ActiveToken("github.com")
+-	token, source := cred1.Token, cred1.Source
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
+ 
+ 	// Then the token is successfully fetched
+ 	// and the source is set to oauth_token but this isn't great:
+@@ -100,8 +110,8 @@ func TestTokenStoredInEnv(t *testing.T) {
+ 	t.Setenv("GH_TOKEN", "test-token")
+ 
+ 	// When we get the token
+-	cred2 := authCfg.ActiveToken("github.com")
+-	token, source := cred2.Token, cred2.Source
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
+ 
+ 	// Then the token is successfully fetched
+ 	// and the source is set to the name of the env var
+@@ -116,8 +126,8 @@ func TestTokenStoredInKeyring(t *testing.T) {
+ 	require.NoError(t, err)
+ 
+ 	// When we get the token
+-	cred3 := authCfg.ActiveToken("github.com")
+-	token, source := cred3.Token, cred3.Source
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
+ 
+ 	// Then the token is successfully fetched
+ 	// and the source is set to keyring
+@@ -482,8 +492,8 @@ func TestSwitchUserMakesInsecureTokenActive(t *testing.T) {
+ 	require.NoError(t, authCfg.SwitchUser("github.com", "test-user-1"))
+ 
+ 	// Their insecure token is now active
+-	cred4 := authCfg.ActiveToken("github.com")
+-	token, source := cred4.Token, cred4.Source
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
+ 	require.Equal(t, "test-token-1", token)
+ 	require.Equal(t, oauthTokenKey, source)
+ }
+@@ -542,8 +552,8 @@ func TestSwitchUserErrorsAndRestoresUserAndInsecureConfigUnderFailure(t *testing
+ 	require.NoError(t, err)
+ 	require.Equal(t, "test-user-2", activeUser)
+ 
+-	cred5 := authCfg.ActiveToken("github.com")
+-	token, source := cred5.Token, cred5.Source
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
+ 	require.Equal(t, "test-token-2", token)
+ 	require.Equal(t, "oauth_token", source)
+ }
+@@ -569,8 +579,8 @@ func TestSwitchUserErrorsAndRestoresUserAndKeyringUnderFailure(t *testing.T) {
+ 	require.NoError(t, err)
+ 	require.Equal(t, "test-user-2", activeUser)
+ 
+-	cred6 := authCfg.ActiveToken("github.com")
+-	token, source := cred6.Token, cred6.Source
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
+ 	require.Equal(t, "test-token-2", token)
+ 	require.Equal(t, "keyring", source)
+ }
+@@ -639,13 +649,12 @@ func TestTokenForUserSecureLogin(t *testing.T) {
+ 	require.NoError(t, err)
+ 
+ 	// When we get the token
+-	cred7, err := authCfg.TokenForUser("github.com", "test-user-1")
+-	token, source := cred7.Token, cred7.Source
++	cred, err := authCfg.TokenForUser("github.com", "test-user-1")
+ 
+ 	// Then it returns the token and the source as keyring
+ 	require.NoError(t, err)
+-	require.Equal(t, "test-token", token)
+-	require.Equal(t, "keyring", source)
++	require.Equal(t, "test-token", cred.Token)
++	require.Equal(t, "keyring", cred.Source)
+ }
+ 
+ func TestTokenForUserInsecureLogin(t *testing.T) {
+@@ -655,13 +664,12 @@ func TestTokenForUserInsecureLogin(t *testing.T) {
+ 	require.NoError(t, err)
+ 
+ 	// When we get the token
+-	cred8, err := authCfg.TokenForUser("github.com", "test-user-1")
+-	token, source := cred8.Token, cred8.Source
++	cred, err := authCfg.TokenForUser("github.com", "test-user-1")
+ 
+ 	// Then it returns the token and the source as oauth_token
+ 	require.NoError(t, err)
+-	require.Equal(t, "test-token", token)
+-	require.Equal(t, "oauth_token", source)
++	require.Equal(t, "test-token", cred.Token)
++	require.Equal(t, "oauth_token", cred.Source)
+ }
+ 
+ func TestTokenForUserNotFoundErrors(t *testing.T) {
+@@ -702,7 +710,7 @@ func TestUserWorksRightAfterMigration(t *testing.T) {
+ 
+ 	// When we migrate
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	// Then we can still get the user correctly
+@@ -719,7 +727,7 @@ func TestGitProtocolWorksRightAfterMigration(t *testing.T) {
+ 
+ 	// When we migrate
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	// Then we can still get the git protocol correctly
+@@ -736,7 +744,7 @@ func TestHostsWorksRightAfterMigration(t *testing.T) {
+ 
+ 	// When we migrate
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	// Then we can still get the hosts correctly
+@@ -752,7 +760,7 @@ func TestDefaultHostWorksRightAfterMigration(t *testing.T) {
+ 
+ 	// When we migrate
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	// Then the default host is still the enterprise host
+@@ -769,12 +777,12 @@ func TestTokenWorksRightAfterMigration(t *testing.T) {
+ 
+ 	// When we migrate
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	// Then we can still get the token correctly
+-	cred10 := authCfg.ActiveToken("github.com")
+-	token, source := cred10.Token, cred10.Source
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
+ 	require.Equal(t, "test-token", token)
+ 	require.Equal(t, oauthTokenKey, source)
+ }
+@@ -790,8 +798,8 @@ func TestTokenPrioritizesActiveUserToken(t *testing.T) {
+ 	authCfg.cfg.Remove([]string{hostsKey, "github.com", userKey})
+ 
+ 	// And get the token from the auth config
+-	cred11 := authCfg.ActiveToken("github.com")
+-	token, source := cred11.Token, cred11.Source
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
+ 
+ 	// Then it returns the token from the keyring active slot
+ 	require.Equal(t, "keyring", source)
+@@ -801,8 +809,8 @@ func TestTokenPrioritizesActiveUserToken(t *testing.T) {
+ 	authCfg.cfg.Set([]string{hostsKey, "github.com", userKey}, "test-user1")
+ 
+ 	// And get the token from the auth config
+-	cred12 := authCfg.ActiveToken("github.com")
+-	token, source = cred12.Token, cred12.Source
++	cred = authCfg.ActiveToken("github.com")
++	token, source = cred.Token, cred.Source
+ 
+ 	// Then it returns the token from the active user entry in the keyring
+ 	require.Equal(t, "keyring", source)
+@@ -812,8 +820,8 @@ func TestTokenPrioritizesActiveUserToken(t *testing.T) {
+ 	authCfg.cfg.Set([]string{hostsKey, "github.com", userKey}, "test-user2")
+ 
+ 	// And get the token from the auth config
+-	cred13 := authCfg.ActiveToken("github.com")
+-	token, source = cred13.Token, cred13.Source
++	cred = authCfg.ActiveToken("github.com")
++	token, source = cred.Token, cred.Source
+ 
+ 	// Then it returns the token from the active user entry in the keyring
+ 	require.Equal(t, "keyring", source)
+@@ -831,8 +839,8 @@ func TestTokenWithActiveUserNotInKeyringFallsBackToBlank(t *testing.T) {
+ 	authCfg.cfg.Set([]string{hostsKey, "github.com", userKey}, "test-user3")
+ 
+ 	// And get the token from the auth config
+-	cred14 := authCfg.ActiveToken("github.com")
+-	token, source := cred14.Token, cred14.Source
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
+ 
+ 	// Then it returns successfully with the fallback token
+ 	require.Equal(t, "keyring", source)
+@@ -851,7 +859,7 @@ func TestLogoutRightAfterMigrationRemovesHost(t *testing.T) {
+ 
+ 	// When we migrate and logout
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	require.NoError(t, authCfg.Logout(host, user))
+@@ -866,7 +874,7 @@ func TestLoginInsecurePostMigrationUsesConfigForToken(t *testing.T) {
+ 
+ 	// When we migrate and login with insecure storage
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	insecureStorageUsed, err := authCfg.Login("github.com", "test-user", "test-token", "", false)
+@@ -885,7 +893,7 @@ func TestLoginPostMigrationSetsGitProtocol(t *testing.T) {
+ 	authCfg := newTestAuthConfig(t)
+ 
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	_, err := authCfg.Login("github.com", "test-user", "test-token", "ssh", false)
+@@ -904,7 +912,7 @@ func TestLoginPostMigrationSetsUser(t *testing.T) {
+ 	authCfg := newTestAuthConfig(t)
+ 
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	_, err := authCfg.Login("github.com", "test-user", "test-token", "ssh", false)
+@@ -926,7 +934,7 @@ func TestLoginSecurePostMigrationRemovesTokenFromConfig(t *testing.T) {
+ 
+ 	// When we migrate and login again with secure storage
+ 	var m migration.MultiAccountDeprecated
+-	c := cfg{authCfg.cfg}
++	c := cfg{cfg: authCfg.cfg}
+ 	require.NoError(t, c.Migrate(m))
+ 
+ 	_, err = authCfg.Login("github.com", "test-user", "test-token", "", true)
+diff --git a/internal/config/config.go b/internal/config/config.go
+index 5ecb74c642c..c1fc58d090c 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -1,12 +1,14 @@
+ package config
+ 
+ import (
++	"context"
+ 	"errors"
+ 	"fmt"
+ 	"os"
+ 	"path/filepath"
+ 	"slices"
+ 	"strings"
++	"sync"
+ 
+ 	"github.com/cli/cli/v2/internal/gh"
+ 	"github.com/cli/cli/v2/internal/keyring"
+@@ -45,12 +47,15 @@ func NewConfig() (gh.Config, error) {
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	return &cfg{c}, nil
++	config := &cfg{cfg: c}
++	config.auth = &AuthConfig{cfg: c}
++	return config, nil
+ }
+ 
+ // Implements Config interface
+ type cfg struct {
+-	cfg *ghConfig.Config
++	cfg  *ghConfig.Config
++	auth *AuthConfig
+ }
+ 
+ func (c *cfg) get(hostname, key string) o.Option[string] {
+@@ -114,8 +119,14 @@ func (c *cfg) Aliases() gh.AliasConfig {
+ 	return &AliasConfig{cfg: c.cfg}
+ }
+ 
++// Authentication returns the single AuthConfig instance associated with this config. A single instance is returned so
++// that dependencies supplied after construction, such as the token refresher, remain visible to every caller. All of
++// its read methods are safe to share, and the few write methods are only used within the auth command set.
+ func (c *cfg) Authentication() gh.AuthConfig {
+-	return &AuthConfig{cfg: c.cfg}
++	if c.auth == nil {
++		c.auth = &AuthConfig{cfg: c.cfg}
++	}
++	return c.auth
+ }
+ 
+ func (c *cfg) AccessibleColors(hostname string) gh.ConfigEntry {
+@@ -234,9 +245,28 @@ func defaultFor(key string) o.Option[string] {
+ // Behavior is scoped to authentication specific tasks.
+ type AuthConfig struct {
+ 	cfg                 *ghConfig.Config
++	refresher           gh.TokenRefresher
+ 	defaultHostOverride func() (string, string)
+ 	hostsOverride       func() []string
+ 	tokenOverride       func(string) (string, string)
++	// acquireRefreshLock acquires the cross-process refresh lock and returns a function that releases it. It is nil in
++	// production, where withFreshConfigForRefresh falls back to a flock-backed implementation. Tests set it to a no-op
++	// so they never take a real filesystem lock.
++	acquireRefreshLock func(ctx context.Context, path string) (unlock func(), err error)
++	// reloadConfig re-reads the config from disk into the shared config. It is nil in production, where
++	// withFreshConfigForRefresh falls back to ghConfig.Reload. Tests set it to a no-op because their config is parsed
++	// from a string and a reload would discard it by reading the empty temp config dir.
++	reloadConfig func() error
++	// refreshMu serializes withFreshConfigForRefresh within this process. The cross-process flock guards against other
++	// gh processes but not against goroutines sharing this single AuthConfig instance, so this mutex provides the
++	// in-process half of the mutual exclusion that keeps a rotating refresh token from being spent twice.
++	refreshMu sync.Mutex
++}
++
++// SetTokenRefresher supplies the refresher used to renew tokens. Because Authentication returns a single shared
++// AuthConfig, a refresher set once remains available to every later caller.
++func (c *AuthConfig) SetTokenRefresher(refresher gh.TokenRefresher) {
++	c.refresher = refresher
+ }
+ 
+ // ActiveTokenType reports what kind of credential the active token is, so a
+@@ -281,6 +311,23 @@ func (c *AuthConfig) ActiveToken(hostname string) gh.Credential {
+ 	return gh.Credential{Source: source, Token: token}
+ }
+ 
++// ActiveTokenWithRefresh retrieves the active credential for the given hostname and, when it is refreshable and its
++// access token is expiring, renews and persists it, returning the credential to use and the refresh outcome.
++// Non-refreshable credentials are returned unchanged with RefreshStatusInapplicable.
++func (c *AuthConfig) ActiveTokenWithRefresh(hostname string) (gh.Credential, gh.RefreshStatus, error) {
++	credential := c.ActiveToken(hostname)
++	if !credential.IsRefreshable() {
++		return credential, gh.RefreshStatusInapplicable, nil
++	}
++	user, err := c.ActiveUser(hostname)
++	if err != nil {
++		// A refreshable active credential is always keyed by the active user, so this is unreachable in practice.
++		// If we somehow cannot identify the user, we have no key to refresh under, so return the credential as-is.
++		return credential, gh.RefreshStatusInapplicable, err
++	}
++	return c.refreshCredentialForUser(hostname, user, credential)
++}
++
+ // HasActiveToken returns true when a token for the hostname is present.
+ func (c *AuthConfig) HasActiveToken(hostname string) bool {
+ 	return c.ActiveToken(hostname).Token != ""
+@@ -435,6 +482,12 @@ func (c *AuthConfig) Login(hostname, username, token, gitProtocol string, secure
+ 		insecureStorageUsed = true
+ 	}
+ 
++	return insecureStorageUsed, c.completeLogin(hostname, username, gitProtocol)
++}
++
++// completeLogin sets the host git protocol, ensures the user entry is persisted, and activates the user. It is shared
++// by Login and LoginRefreshable once the credential has been stored.
++func (c *AuthConfig) completeLogin(hostname, username, gitProtocol string) error {
+ 	if gitProtocol != "" {
+ 		// Set the host level git protocol
+ 		// Although it might be expected that this is handled by switch, git protocol
+@@ -450,7 +503,7 @@ func (c *AuthConfig) Login(hostname, username, token, gitProtocol string, secure
+ 	}
+ 
+ 	// Then we activate the new user
+-	return insecureStorageUsed, c.activateUser(hostname, username)
++	return c.activateUser(hostname, username)
+ }
+ 
+ func (c *AuthConfig) SwitchUser(hostname, user string) error {
+@@ -459,26 +512,23 @@ func (c *AuthConfig) SwitchUser(hostname, user string) error {
+ 		return fmt.Errorf("failed to get active user: %s", err)
+ 	}
+ 
+-	cred := c.ActiveToken(hostname)
+-	previouslyActiveToken, previousSource := cred.Token, cred.Source
+-	if previousSource != "keyring" && previousSource != "oauth_token" {
++	previousSource := c.ActiveToken(hostname).Source
++	if previousSource != gh.TokenSourceKeyring &&
++		previousSource != gh.TokenSourceOAuthToken &&
++		previousSource != gh.TokenSourceRefreshableOAuthToken {
+ 		return fmt.Errorf("currently active token for %s is from %s", hostname, previousSource)
+ 	}
+ 
+ 	err = c.activateUser(hostname, user)
+ 	if err != nil {
+-		// Given that activateUser can only fail before the config is written, or when writing the config
+-		// we know for sure that the config has not been written. However, we still should restore it back
+-		// to its previous clean state just in case something else tries to make use of the config, or tries
+-		// to write it again.
+-		if previousSource == "keyring" {
+-			if setErr := keyring.Set(keyringServiceName(hostname), "", previouslyActiveToken); setErr != nil {
+-				err = errors.Join(err, setErr)
+-			}
+-		}
+-
+-		if previousSource == "oauth_token" {
+-			c.cfg.Set([]string{hostsKey, hostname, oauthTokenKey}, previouslyActiveToken)
++		// activateUser writes the config file only as its final step, so any failure means the on-disk config is
++		// still in its previous clean state and no disk write is needed to undo it. What may have changed is the
++		// in-memory config and the keyring: the keyring is persistent, so a stray active token from the failed
++		// switch is real, while the in-memory config only needs repairing so a later write persists the old data.
++		// setActiveCredential handles both, clearing every active representation and reinstalling the previously
++		// active user's credential.
++		if _, restoreErr := c.setActiveCredential(hostname, previouslyActiveUser); restoreErr != nil {
++			err = errors.Join(err, restoreErr)
+ 		}
+ 		c.cfg.Set([]string{hostsKey, hostname, userKey}, previouslyActiveUser)
+ 
+@@ -493,12 +543,17 @@ func (c *AuthConfig) SwitchUser(hostname, user string) error {
+ func (c *AuthConfig) Logout(hostname, username string) error {
+ 	users := c.UsersForHost(hostname)
+ 
++	// The user's per-user keyring records are not covered by removing config keys, so delete them explicitly.
++	// Historically the per-user token was only removed in the single-user branch, leaking it when logging out of a
++	// multi-user host.
++	_ = keyring.Delete(refreshableServiceName(hostname), username)
++	_ = keyring.Delete(keyringServiceName(hostname), username)
++
+ 	// If there is only one (or zero) users, then we remove the host
+ 	// and unset the keyring tokens.
+ 	if len(users) < 2 {
+ 		_ = c.cfg.Remove([]string{hostsKey, hostname})
+ 		_ = keyring.Delete(keyringServiceName(hostname), "")
+-		_ = keyring.Delete(keyringServiceName(hostname), username)
+ 		return ghConfig.Write(c.cfg)
+ 	}
+ 
+@@ -523,36 +578,52 @@ func (c *AuthConfig) Logout(hostname, username string) error {
+ }
+ 
+ func (c *AuthConfig) activateUser(hostname, user string) error {
+-	// We first need to idempotently clear out any set tokens for the host
++	found, err := c.setActiveCredential(hostname, user)
++	if err != nil {
++		return err
++	}
++	if !found {
++		return fmt.Errorf("no token found for %s", user)
++	}
++
++	// Then we'll update the active user for the host
++	c.cfg.Set([]string{hostsKey, hostname, userKey}, user)
++
++	return ghConfig.Write(c.cfg)
++}
++
++// setActiveCredential clears every host level active credential representation and copies the user's stored
++// credential into the active slot, preserving its storage form. It neither sets the active user nor writes the
++// config, so it can also be used to restore state after a failed switch. It reports whether a credential was found
++// for the user.
++func (c *AuthConfig) setActiveCredential(hostname, user string) (bool, error) {
++	// Idempotently clear the non-expiring active representations so that no stale token can outrank the credential we
++	// are about to activate. Refreshable credentials have no host-level active copy, so there is nothing to clear for
++	// them; they are resolved per-user through the active user key.
+ 	_ = keyring.Delete(keyringServiceName(hostname), "")
+ 	_ = c.cfg.Remove([]string{hostsKey, hostname, oauthTokenKey})
+ 
+-	// Then we'll move the keyring token or insecure token as necessary, only one of the
+-	// following branches should be true.
++	// A refreshable credential is the managed credential, so prefer it. It lives only in the per-user slot and is
++	// surfaced as active through the active user key, so confirming it exists is all that activation needs.
++	if _, _, err := c.refreshableForUser(hostname, user); err == nil {
++		return true, nil
++	} else if !errors.Is(err, errRefreshableNotFound) {
++		return false, err
++	}
+ 
+-	// If there is a token in the secure keyring for the user, move it to the active slot
+-	var tokenSwitched bool
++	// Otherwise fall back to a non-expiring credential in the keyring or insecure config.
+ 	if token, err := keyring.Get(keyringServiceName(hostname), user); err == nil {
+ 		if err = keyring.Set(keyringServiceName(hostname), "", token); err != nil {
+-			return fmt.Errorf("failed to move active token in keyring: %v", err)
++			return false, fmt.Errorf("failed to move active token in keyring: %v", err)
+ 		}
+-		tokenSwitched = true
++		return true, nil
+ 	}
+-
+-	// If there is a token in the insecure config for the user, move it to the active field
+ 	if token, err := c.cfg.Get([]string{hostsKey, hostname, usersKey, user, oauthTokenKey}); err == nil {
+ 		c.cfg.Set([]string{hostsKey, hostname, oauthTokenKey}, token)
+-		tokenSwitched = true
++		return true, nil
+ 	}
+ 
+-	if !tokenSwitched {
+-		return fmt.Errorf("no token found for %s", user)
+-	}
+-
+-	// Then we'll update the active user for the host
+-	c.cfg.Set([]string{hostsKey, hostname, userKey}, user)
+-
+-	return ghConfig.Write(c.cfg)
++	return false, nil
+ }
+ 
+ func (c *AuthConfig) UsersForHost(hostname string) []string {
+@@ -576,9 +647,29 @@ func (c *AuthConfig) TokenForUser(hostname, user string) (gh.Credential, error)
+ 		return gh.Credential{Source: gh.TokenSourceOAuthToken, Token: token}, nil
+ 	}
+ 
++	if credential, _, err := c.refreshableForUser(hostname, user); err == nil {
++		return credential, nil
++	} else if !errors.Is(err, errRefreshableNotFound) {
++		return gh.Credential{}, err
++	}
++
+ 	return gh.Credential{Source: gh.TokenSourceDefault}, fmt.Errorf("no token found for '%s'", user)
+ }
+ 
++// TokenForUserWithRefresh retrieves the credential for a specified user and hostname and, when it is refreshable and
++// its access token is expiring, renews and persists it, returning the credential to use and the refresh outcome.
++// Non-refreshable credentials are returned unchanged with RefreshStatusInapplicable.
++func (c *AuthConfig) TokenForUserWithRefresh(hostname, username string) (gh.Credential, gh.RefreshStatus, error) {
++	credential, err := c.TokenForUser(hostname, username)
++	if err != nil {
++		return credential, gh.RefreshStatusInapplicable, err
++	}
++	if !credential.IsRefreshable() {
++		return credential, gh.RefreshStatusInapplicable, nil
++	}
++	return c.refreshCredentialForUser(hostname, username, credential)
++}
++
+ func keyringServiceName(hostname string) string {
+ 	return "gh:" + hostname
+ }
+diff --git a/internal/config/migrate_test.go b/internal/config/migrate_test.go
+index 783f605a26a..51f1caae281 100644
+--- a/internal/config/migrate_test.go
++++ b/internal/config/migrate_test.go
+@@ -30,7 +30,7 @@ func TestMigrationAppliedSuccessfully(t *testing.T) {
+ 	})
+ 
+ 	// When we run the migration
+-	conf := cfg{c}
++	conf := cfg{cfg: c}
+ 	require.NoError(t, conf.Migrate(migration))
+ 
+ 	// Then our original config is updated with the migration applied
+@@ -75,7 +75,7 @@ func TestMigrationAppliedBumpsVersion(t *testing.T) {
+ 	}
+ 
+ 	// When we migrate
+-	conf := cfg{c}
++	conf := cfg{cfg: c}
+ 	require.NoError(t, conf.Migrate(migration))
+ 
+ 	// Then our original config is updated with the migration applied
+@@ -110,7 +110,7 @@ func TestMigrationIsNoopWhenAlreadyApplied(t *testing.T) {
+ 	}
+ 
+ 	// When we run Migrate
+-	conf := cfg{c}
++	conf := cfg{cfg: c}
+ 	err := conf.Migrate(migration)
+ 
+ 	// Then there is nothing done and the config is not modified
+@@ -141,7 +141,7 @@ func TestMigrationErrorsWhenPreVersionMismatch(t *testing.T) {
+ 	}
+ 
+ 	// When we run Migrate
+-	conf := cfg{c}
++	conf := cfg{cfg: c}
+ 	err := conf.Migrate(migration)
+ 
+ 	// Then there is an error the migration is not applied and the version is not modified
+@@ -161,7 +161,7 @@ func TestMigrationErrorWritesNoFiles(t *testing.T) {
+ 	})
+ 
+ 	// When we run the migration
+-	conf := cfg{c}
++	conf := cfg{cfg: c}
+ 	err := conf.Migrate(migration)
+ 
+ 	// Then the error is wrapped and bubbled
+@@ -210,7 +210,7 @@ func TestMigrationWriteErrors(t *testing.T) {
+ 			})
+ 
+ 			// When we run the migration
+-			conf := cfg{c}
++			conf := cfg{cfg: c}
+ 			err := conf.Migrate(migration)
+ 
+ 			// Then the error is wrapped and bubbled
+diff --git a/internal/config/refreshable.go b/internal/config/refreshable.go
+new file mode 100644
+index 00000000000..f74d391bbce
+--- /dev/null
++++ b/internal/config/refreshable.go
+@@ -0,0 +1,576 @@
++package config
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"os"
++	"path/filepath"
++	"strconv"
++	"time"
++
++	"github.com/cli/cli/v2/internal/flock"
++	"github.com/cli/cli/v2/internal/gh"
++	"github.com/cli/cli/v2/internal/keyring"
++	ghConfig "github.com/cli/go-gh/v2/pkg/config"
++)
++
++// refreshableTokenKey is the config and keyring field that holds a refreshable
++// credential record, kept separate from the non-expiring oauth_token so that neither
++// old readers nor go-gh mistake the record for a bare token string.
++const refreshableTokenKey = "refreshable_oauth_token"
++
++// errRefreshableNotFound reports that no refreshable credential exists for the
++// requested slot. It is distinct from other errors so callers can fall back to
++// non-expiring credentials without masking real read failures.
++var errRefreshableNotFound = errors.New("no refreshable credentials found")
++
++// timeNow returns the current time. It is a package-level indirection so tests can pin the clock when exercising
++// expiry-based refresh decisions.
++var timeNow = time.Now
++
++// refreshLockFile names the cross-process lock, in the config directory, that serializes token refreshes. Only the
++// refresh path takes it because refreshing is the sole operation that spends a single-use rotating refresh token;
++// other config mutations such as auth login or logout overwrite credentials wholesale and are safe under
++// last-writer-wins, so a single refresh-scoped lock is enough.
++const refreshLockFile = "refresh.lock"
++
++// refreshLockTimeout bounds how long withFreshConfigForRefresh waits for the cross-process lock before giving up and
++// proceeding without it. It is long enough to outlast a normal concurrent refresh yet short enough that a stuck or
++// unsupported lock cannot wedge gh indefinitely.
++const refreshLockTimeout = 60 * time.Second
++
++// flockRefreshLock acquires the cross-process refresh lock with flock. It is the production implementation used when
++// AuthConfig.acquireRefreshLock is nil.
++func flockRefreshLock(ctx context.Context, path string) (unlock func(), err error) {
++	_, unlock, err = flock.Lock(ctx, path)
++	return unlock, err
++}
++
++// withFreshConfigForRefresh runs fn, a token-refresh read-modify-write, while holding both an in-process mutex and a
++// cross-process advisory lock, and reloads the configuration from disk before running fn so it observes any credential
++// another process persisted. The mutex serializes goroutines sharing this AuthConfig; the file lock serializes
++// separate gh processes. Together they prevent concurrent refreshes from each spending a rotating refresh token based
++// on stale state. fn runs with both locks held and should perform the credential read, token exchange, and write as
++// one unit.
++//
++// The file lock is best effort: if it cannot be acquired (for example on a filesystem without advisory locking, or if
++// another process holds it past refreshLockTimeout), fn still runs so a filesystem limitation never blocks the user.
++//
++// The reload refreshes the shared configuration in place, so any config changes not yet written to disk are discarded.
++// That is acceptable on the refresh path because mutations are persisted as they happen.
++func (c *AuthConfig) withFreshConfigForRefresh(fn func() error) error {
++	c.refreshMu.Lock()
++	defer c.refreshMu.Unlock()
++
++	dir := ghConfig.ConfigDir()
++	if err := os.MkdirAll(dir, 0771); err != nil {
++		return fmt.Errorf("could not create config directory for the refresh lock: %w", err)
++	}
++
++	ctx, cancel := context.WithTimeout(context.Background(), refreshLockTimeout)
++	defer cancel()
++
++	acquire := c.acquireRefreshLock
++	if acquire == nil {
++		acquire = flockRefreshLock
++	}
++
++	unlock, err := acquire(ctx, filepath.Join(dir, refreshLockFile))
++	if err != nil {
++		// We could not acquire the cross-process lock, either because the filesystem does not support advisory
++		// locking (some network or FUSE mounts) or because another process held it past refreshLockTimeout. We
++		// deliberately ignore the error and proceed rather than fail the user's command over a filesystem
++		// limitation. The residual risk is two processes refreshing at once and spending a rotating token twice.
++		unlock = func() {}
++	}
++	defer unlock()
++
++	if err := c.reload(); err != nil {
++		return fmt.Errorf("could not reload configuration: %w", err)
++	}
++
++	return fn()
++}
++
++// reload re-reads the config from disk into the shared config, using the reloadConfig seam when set and the real
++// ghConfig.Reload otherwise. The production fallback passes fallbackConfig so a config file deleted between reads is
++// restored to gh's defaults, matching NewConfig.
++func (c *AuthConfig) reload() error {
++	if c.reloadConfig != nil {
++		return c.reloadConfig()
++	}
++	return ghConfig.Reload(fallbackConfig())
++}
++
++// LoginRefreshable stores a refreshable credential for the user, sets the git protocol, and activates the user. It
++// mirrors Login: secure storage is preferred and the insecure configuration is used as a fallback, reported via the
++// returned bool. Any non-expiring credential for the user is removed so it cannot outrank the refreshable record. It
++// runs under the cross-process refresh lock and reloads the configuration first, so it cannot interleave with a
++// concurrent configuration read-modify-write in another gh process.
++func (c *AuthConfig) LoginRefreshable(hostname, username string, credential gh.Credential, gitProtocol string, secureStorage bool) (bool, error) {
++	var insecureStorageUsed bool
++	err := c.withFreshConfigForRefresh(func() error {
++		var err error
++		insecureStorageUsed, err = c.loginRefreshable(hostname, username, credential, gitProtocol, secureStorage)
++		return err
++	})
++	return insecureStorageUsed, err
++}
++
++func (c *AuthConfig) loginRefreshable(hostname, username string, credential gh.Credential, gitProtocol string, secureStorage bool) (bool, error) {
++	if hostname == "" || username == "" {
++		return false, errors.New("hostname and username are required")
++	}
++	if err := validateRefreshableCredential(credential); err != nil {
++		return false, err
++	}
++
++	insecureStorageUsed := false
++	var setErr error
++	if secureStorage {
++		setErr = c.setRefreshableInKeyring(hostname, username, credential)
++		if setErr == nil {
++			_ = c.cfg.Remove(refreshablePath(hostname, username))
++		}
++	}
++	if !secureStorage || setErr != nil {
++		c.setRefreshableInConfig(hostname, username, credential)
++		_ = keyring.Delete(refreshableServiceName(hostname), username)
++		insecureStorageUsed = true
++	}
++
++	// Remove any non-expiring credential for this user so a stale token cannot be resolved in preference to the
++	// refreshable record.
++	_ = c.cfg.Remove([]string{hostsKey, hostname, usersKey, username, oauthTokenKey})
++	_ = keyring.Delete(keyringServiceName(hostname), username)
++
++	return insecureStorageUsed, c.completeLogin(hostname, username, gitProtocol)
++}
++
++// refreshableForUser returns the refreshable credential stored for the user along with whether it came from secure
++// storage. It prefers the secure keyring and falls back to the insecure configuration record, returning
++// errRefreshableNotFound when neither exists.
++func (c *AuthConfig) refreshableForUser(hostname, username string) (gh.Credential, bool, error) {
++	// Consult the secure keyring first, matching TokenForUser. The two storage forms are mutually exclusive, so this
++	// never changes which credential is returned in practice, but keeping the precedence identical avoids confusing
++	// bugs if a misconfiguration ever left records in both places. Preferring the keyring also means the refresh
++	// tokens survive a corrupted or tampered config file.
++	credential, err := refreshableFromKeyring(hostname, username)
++	if err == nil {
++		return credential, true, nil
++	}
++	if !errors.Is(err, errRefreshableNotFound) {
++		return gh.Credential{}, true, err
++	}
++
++	// The keyring holds no record, so fall back to the insecure configuration.
++	path := refreshablePath(hostname, username)
++	if _, err := c.cfg.Get(path); err != nil {
++		// A missing config file yields an empty config, so c.cfg.Get returns a KeyNotFoundError rather than a real
++		// read failure. Treat that as "no record anywhere" and report it as not found.
++		if isKeyNotFound(err) {
++			return gh.Credential{}, false, errRefreshableNotFound
++		}
++		return gh.Credential{}, false, err
++	}
++	credential, err = c.refreshableFromConfig(path)
++	return credential, false, err
++}
++
++func (c *AuthConfig) refreshableFromConfig(path []string) (gh.Credential, error) {
++	var record refreshableTokenRecord
++	var err error
++	if record.AccessToken, err = c.cfg.Get(append(path, "access_token")); err != nil {
++		return gh.Credential{}, err
++	}
++	if record.RefreshToken, err = c.cfg.Get(append(path, "refresh_token")); err != nil {
++		return gh.Credential{}, err
++	}
++	if record.ExpiresIn, err = c.optionalSeconds(append(path, "expires_in")); err != nil {
++		return gh.Credential{}, err
++	}
++	if record.ExpiresAt, err = c.optionalTimestamp(append(path, "expires_at")); err != nil {
++		return gh.Credential{}, err
++	}
++	if record.RefreshTokenExpiresIn, err = c.optionalSeconds(append(path, "refresh_token_expires_in")); err != nil {
++		return gh.Credential{}, err
++	}
++	if record.RefreshTokenExpiresAt, err = c.optionalTimestamp(append(path, "refresh_token_expires_at")); err != nil {
++		return gh.Credential{}, err
++	}
++	credential := record.credential(gh.TokenSourceRefreshableOAuthToken)
++	return credential, validateRefreshableCredential(credential)
++}
++
++// optionalSeconds reads a raw lifetime in seconds (an ExpiresIn field) from config, returning 0 when the key is absent
++// so a credential without the value is still valid.
++func (c *AuthConfig) optionalSeconds(path []string) (int, error) {
++	value, err := c.cfg.Get(path)
++	if isKeyNotFound(err) {
++		return 0, nil
++	}
++	if err != nil {
++		return 0, err
++	}
++	seconds, err := strconv.Atoi(value)
++	if err != nil {
++		return 0, errors.New("invalid refreshable credential expiration seconds")
++	}
++	return seconds, nil
++}
++
++func (c *AuthConfig) optionalTimestamp(path []string) (*time.Time, error) {
++	value, err := c.cfg.Get(path)
++	if isKeyNotFound(err) {
++		return nil, nil
++	}
++	if err != nil {
++		return nil, err
++	}
++	timestamp, err := time.Parse(time.RFC3339Nano, value)
++	if err != nil {
++		return nil, errors.New("invalid refreshable credential expiration timestamp")
++	}
++	return &timestamp, nil
++}
++
++func refreshableFromKeyring(hostname, username string) (gh.Credential, error) {
++	data, err := keyring.Get(refreshableServiceName(hostname), username)
++	if err != nil {
++		// A missing record and an unavailable keyring are both reported as not found
++		// so resolution can fall back to a non-expiring credential, matching how non-expiring
++		// keyring reads are treated during activation.
++		return gh.Credential{}, errRefreshableNotFound
++	}
++	var record refreshableTokenRecord
++	if err := json.Unmarshal([]byte(data), &record); err != nil {
++		return gh.Credential{}, errors.New("invalid refreshable keyring credentials")
++	}
++	credential := record.credential(gh.TokenSourceKeyring)
++	return credential, validateRefreshableCredential(credential)
++}
++
++func (c *AuthConfig) setRefreshableInKeyring(hostname, username string, credential gh.Credential) error {
++	data, err := json.Marshal(normalizeToUTC(recordFromCredential(credential)))
++	if err != nil {
++		return errors.New("could not encode refreshable credentials")
++	}
++	return keyring.Set(refreshableServiceName(hostname), username, string(data))
++}
++
++func (c *AuthConfig) setRefreshableInConfig(hostname, username string, credential gh.Credential) {
++	path := refreshablePath(hostname, username)
++	// Clear the mapping first so an omitted field does not retain a stale value.
++	_ = c.cfg.Remove(path)
++	record := normalizeToUTC(recordFromCredential(credential))
++	c.cfg.Set(append(path, "access_token"), record.AccessToken)
++	c.cfg.Set(append(path, "refresh_token"), record.RefreshToken)
++	if record.ExpiresIn != 0 {
++		c.cfg.Set(append(path, "expires_in"), strconv.Itoa(record.ExpiresIn))
++	}
++	if record.ExpiresAt != nil {
++		c.cfg.Set(append(path, "expires_at"), record.ExpiresAt.Format(time.RFC3339Nano))
++	}
++	if record.RefreshTokenExpiresIn != 0 {
++		c.cfg.Set(append(path, "refresh_token_expires_in"), strconv.Itoa(record.RefreshTokenExpiresIn))
++	}
++	if record.RefreshTokenExpiresAt != nil {
++		c.cfg.Set(append(path, "refresh_token_expires_at"), record.RefreshTokenExpiresAt.Format(time.RFC3339Nano))
++	}
++}
++
++// refreshExpiryLeeway is how far ahead of a short-lived access token's expiry gh proactively refreshes it, so a token
++// on the verge of expiring is renewed before it can fail an in-flight request.
++const refreshExpiryLeeway = 10 * time.Minute
++
++// accessTokenNeedsRefresh reports whether the credential's access token has expired or falls within refreshExpiryLeeway
++// of expiring as of now. A credential with no recorded expiry is treated as needing a refresh, since gh cannot prove
++// the token is still valid.
++func accessTokenNeedsRefresh(credential gh.Credential, now time.Time) bool {
++	// TESTING-ONLY HACK: remove before release, together with applyTestingExpiryOverride.
++	credential = applyTestingExpiryOverride(credential)
++	if credential.ExpiresAt == nil {
++		return true
++	}
++	return !now.Add(refreshExpiryLeeway).Before(*credential.ExpiresAt)
++}
++
++// applyTestingExpiryOverride returns a copy of credential whose access token expiry is reinterpreted per the
++// GH_AT_EXPIRES_IN testing override, so every refresh decision (and thus the WithRefresh accessors) gates on the
++// overridden lifetime even for a credential that was acquired without the override. The lifetime is anchored at the
++// token's original issuance (stored ExpiresAt minus stored ExpiresIn), so a value of n means "expires n seconds after
++// it was issued". The refresh token lifetime is handled separately by refreshTokenExpired.
++//
++// TESTING-ONLY HACK: remove before release, together with its call site in accessTokenNeedsRefresh.
++func applyTestingExpiryOverride(credential gh.Credential) gh.Credential {
++	if n, ok := testingExpiryOverrideFromEnv("GH_AT_EXPIRES_IN"); ok && credential.ExpiresAt != nil {
++		issuedAt := credential.ExpiresAt.Add(-time.Duration(credential.ExpiresIn) * time.Second)
++		expiresAt := issuedAt.Add(time.Duration(n) * time.Second).UTC()
++		credential.ExpiresIn = n
++		credential.ExpiresAt = &expiresAt
++	}
++	return credential
++}
++
++// refreshTokenExpired reports whether the credential's refresh token has expired as of now, per the GH_RT_EXPIRES_IN
++// testing override. Without the override it always returns false: nothing in this layer otherwise gates on refresh
++// token expiry, because a real refresh token's expiry is realized only when the server rejects it. The lifetime is
++// anchored at the refresh token's original issuance (stored RefreshTokenExpiresAt minus stored RefreshTokenExpiresIn),
++// so a value of n means "expires n seconds after it was issued".
++//
++// TESTING-ONLY HACK: remove before release, together with its call site in refreshCredentialForUser.
++func refreshTokenExpired(credential gh.Credential, now time.Time) bool {
++	n, ok := testingExpiryOverrideFromEnv("GH_RT_EXPIRES_IN")
++	if !ok || credential.RefreshTokenExpiresAt == nil {
++		return false
++	}
++	issuedAt := credential.RefreshTokenExpiresAt.Add(-time.Duration(credential.RefreshTokenExpiresIn) * time.Second)
++	expiresAt := issuedAt.Add(time.Duration(n) * time.Second)
++	return !now.Before(expiresAt)
++}
++
++// testingExpiryOverrideFromEnv reads a token lifetime override in seconds from the named environment variable. It
++// reports false when the variable is unset, empty, or not a valid integer.
++//
++// TESTING-ONLY HACK: remove before release, together with its call sites.
++func testingExpiryOverrideFromEnv(name string) (int, bool) {
++	raw := os.Getenv(name)
++	if raw == "" {
++		return 0, false
++	}
++	n, err := strconv.Atoi(raw)
++	if err != nil {
++		return 0, false
++	}
++	return n, true
++}
++
++// credentialFromRefreshable projects a renewed RefreshableCredential onto the universal gh.Credential shape, tagging it
++// with the given source. Timestamps are cloned so the result never aliases the input's *time.Time values.
++func credentialFromRefreshable(renewed gh.RefreshableCredential, source string) gh.Credential {
++	return gh.Credential{
++		Source:                source,
++		Token:                 renewed.AccessToken,
++		RefreshToken:          renewed.RefreshToken,
++		ExpiresIn:             renewed.ExpiresIn,
++		RefreshTokenExpiresIn: renewed.RefreshTokenExpiresIn,
++		ExpiresAt:             cloneTime(renewed.ExpiresAt),
++		RefreshTokenExpiresAt: cloneTime(renewed.RefreshTokenExpiresAt),
++	}
++}
++
++// refreshCredentialForUser renews the given refreshable credential when its access token is expiring and persists the
++// renewal to the same storage the credential already lives in. The caller supplies the already-resolved credential. It
++// returns the credential to use and the outcome: RefreshStatusUnnecessary when the token is still valid,
++// RefreshStatusInapplicable when no refresher is configured, RefreshStatusExpired when the server rejected the refresh
++// token (in which case the user's stored credential is removed so re-authentication is required), RefreshStatusFailed
++// when the exchange or persistence fails for a transient reason, and RefreshStatusDone when a renewed credential was
++// stored. The re-read, token exchange, and write run as one unit under the cross-process refresh lock so concurrent gh
++// processes cannot each spend the rotating refresh token.
++func (c *AuthConfig) refreshCredentialForUser(hostname, username string, credential gh.Credential) (gh.Credential, gh.RefreshStatus, error) {
++	if !accessTokenNeedsRefresh(credential, timeNow()) {
++		return credential, gh.RefreshStatusUnnecessary, nil
++	}
++	if c.refresher == nil {
++		return credential, gh.RefreshStatusInapplicable, nil
++	}
++
++	result := credential
++	status := gh.RefreshStatusFailed
++	err := c.withFreshConfigForRefresh(func() error {
++		// Re-read under the lock: another gh process may have refreshed the credential while we waited for it.
++		current, secure, err := c.refreshableForUser(hostname, username)
++		if err != nil {
++			return err
++		}
++		if !accessTokenNeedsRefresh(current, timeNow()) {
++			result = current
++			status = gh.RefreshStatusUnnecessary
++			return nil
++		}
++		if refreshTokenExpired(current, timeNow()) {
++			// TESTING-ONLY HACK: simulate the server rejecting an expired refresh token so refresh token expiry can
++			// be exercised without waiting for the real lifetime. This mirrors the ErrRefreshTokenInvalid handling
++			// below: wipe the now-useless stored credential and report RefreshStatusExpired. Remove before release,
++			// together with refreshTokenExpired.
++			result = gh.Credential{}
++			status = gh.RefreshStatusExpired
++			_ = c.removeCredentialForUser(hostname, username)
++			return gh.ErrRefreshTokenInvalid
++		}
++		renewed, err := c.refresher.Refresh(current.RefreshToken, hostname)
++		if err != nil {
++			result = current
++			// A refresh token the server rejects can never succeed on retry, so classify it distinctly from a
++			// transient failure to let callers advise re-authentication instead of a pointless retry.
++			if errors.Is(err, gh.ErrRefreshTokenInvalid) {
++				status = gh.RefreshStatusExpired
++				// The credential is now useless: we only reach a refresh because the access token is expiring or
++				// already expired, and the refresh token that could renew it has just been rejected, so no future
++				// call can revive it. Remove this user's stored credential so subsequent *WithRefresh callers
++				// resolve no refresh token and stop re-sending a request the server will always reject, which could
++				// otherwise hammer the token endpoint on every gh invocation.
++				//
++				// We deliberately wipe only this user's records and leave the active-user pointer and the rest of
++				// the host configuration alone, rather than reusing Logout. On a multi-user host Logout would
++				// silently switch the active account to a different user as a side effect of a token refresh, so a
++				// subsequent request would be sent as someone else entirely. That is a surprising and potentially
++				// dangerous behaviour. Leaving a dangling active user with no token is a deliberately broken state:
++				// gh treats it as unauthenticated and the user must run 'gh auth login' again before using gh.
++				//
++				// Removal is best effort. Even if it fails we still report the rejection so the caller can classify
++				// it, and we return an empty credential because the stored one is gone.
++				result = gh.Credential{}
++				_ = c.removeCredentialForUser(hostname, username)
++			}
++			return err
++		}
++		newCredential := credentialFromRefreshable(renewed, current.Source)
++		if err := validateRefreshableCredential(newCredential); err != nil {
++			result = current
++			return err
++		}
++		if err := c.persistRefreshedCredential(hostname, username, newCredential, secure); err != nil {
++			// This is a dead-end because the old credential is no longer usable (due to refresh) and the new one is
++			// failed to store.
++			//
++			// If we return the new credential, the flow that caused this refresh attempt will proceed with the new token
++			// but, subsequent flows in this process (most probably API calls) would fail because the new credential was
++			// not successfully persisted. So, returning the new token would be misleading and may cause unexpected
++			// failures in subsequent operations.
++			//
++			// We deliberately do not expose the underlying storage error for now; the caller only needs to know the
++			// refresh could not be completed.
++			result = current
++			return fmt.Errorf("failed to persist refreshed credential; the user needs to re-authenticate via 'gh auth login': %w", err)
++		}
++		result = newCredential
++		status = gh.RefreshStatusDone
++		return nil
++	})
++	return result, status, err
++}
++
++// removeCredentialForUser deletes every stored credential record for the user on the host, covering both the
++// refreshable and the non-expiring forms in both the keyring and the insecure config, then writes the config. It
++// intentionally leaves the active-user pointer and the rest of the host configuration untouched, so it neither
++// switches accounts nor removes the host; the caller is responsible for whatever locking the write requires (it is
++// called under the refresh lock). Each delete is best effort so a missing record or unavailable keyring does not stop
++// the others.
++func (c *AuthConfig) removeCredentialForUser(hostname, username string) error {
++	_ = keyring.Delete(refreshableServiceName(hostname), username)
++	_ = keyring.Delete(keyringServiceName(hostname), username)
++	_ = c.cfg.Remove(refreshablePath(hostname, username))
++	_ = c.cfg.Remove([]string{hostsKey, hostname, usersKey, username, oauthTokenKey})
++	return ghConfig.Write(c.cfg)
++}
++
++// persistRefreshedCredential writes a renewed refreshable credential back to the storage form it already lived in.
++// Refreshable credentials are resolved per-user via the active user key, so there is no host-level active copy to keep
++// in sync.
++func (c *AuthConfig) persistRefreshedCredential(hostname, username string, credential gh.Credential, secure bool) error {
++	if secure {
++		if err := c.setRefreshableInKeyring(hostname, username, credential); err != nil {
++			return err
++		}
++	} else {
++		c.setRefreshableInConfig(hostname, username, credential)
++	}
++
++	return ghConfig.Write(c.cfg)
++}
++
++// refreshableTokenRecord is the on-disk and keyring JSON shape of a refreshable credential. It exists solely so the
++// storage helpers can marshal and unmarshal the persisted fields; it never crosses an AuthConfig method boundary,
++// where gh.Credential is the currency instead. Its json tags also match the OAuth token endpoint field names.
++type refreshableTokenRecord struct {
++	AccessToken           string     `json:"access_token"`
++	RefreshToken          string     `json:"refresh_token"`
++	ExpiresIn             int        `json:"expires_in,omitempty"`
++	RefreshTokenExpiresIn int        `json:"refresh_token_expires_in,omitempty"`
++	ExpiresAt             *time.Time `json:"expires_at,omitempty"`
++	RefreshTokenExpiresAt *time.Time `json:"refresh_token_expires_at,omitempty"`
++}
++
++// credential projects the stored record onto the universal gh.Credential shape, tagging it with the given source
++// (the access token becomes Token). Refresh metadata is carried verbatim, cloning the timestamps so the result never
++// aliases the record's *time.Time values.
++func (r refreshableTokenRecord) credential(source string) gh.Credential {
++	return gh.Credential{
++		Source:                source,
++		Token:                 r.AccessToken,
++		RefreshToken:          r.RefreshToken,
++		ExpiresIn:             r.ExpiresIn,
++		RefreshTokenExpiresIn: r.RefreshTokenExpiresIn,
++		ExpiresAt:             cloneTime(r.ExpiresAt),
++		RefreshTokenExpiresAt: cloneTime(r.RefreshTokenExpiresAt),
++	}
++}
++
++// recordFromCredential projects a gh.Credential onto the persisted record shape, dropping the runtime-only Source and
++// carrying the access token as AccessToken. It clones the timestamps so the record never aliases the credential's
++// *time.Time values.
++func recordFromCredential(credential gh.Credential) refreshableTokenRecord {
++	return refreshableTokenRecord{
++		AccessToken:           credential.Token,
++		RefreshToken:          credential.RefreshToken,
++		ExpiresIn:             credential.ExpiresIn,
++		RefreshTokenExpiresIn: credential.RefreshTokenExpiresIn,
++		ExpiresAt:             cloneTime(credential.ExpiresAt),
++		RefreshTokenExpiresAt: cloneTime(credential.RefreshTokenExpiresAt),
++	}
++}
++
++// cloneTime returns a pointer to a copy of t, or nil when t is nil, so callers moving timestamps between the record
++// and gh.Credential never share the underlying *time.Time.
++func cloneTime(t *time.Time) *time.Time {
++	if t == nil {
++		return nil
++	}
++	return new(*t)
++}
++
++// normalizeToUTC returns a copy of the record with any expiration timestamps converted to UTC, so stored records use
++// a single canonical timezone regardless of how the caller constructed them.
++func normalizeToUTC(record refreshableTokenRecord) refreshableTokenRecord {
++	if record.ExpiresAt != nil {
++		utc := record.ExpiresAt.UTC()
++		record.ExpiresAt = &utc
++	}
++	if record.RefreshTokenExpiresAt != nil {
++		utc := record.RefreshTokenExpiresAt.UTC()
++		record.RefreshTokenExpiresAt = &utc
++	}
++	return record
++}
++
++func validateRefreshableCredential(credential gh.Credential) error {
++	if credential.Token == "" {
++		return errors.New("access token is empty")
++	}
++	if credential.RefreshToken == "" {
++		return errors.New("refresh token is empty")
++	}
++	return nil
++}
++
++func refreshablePath(hostname, username string) []string {
++	path := []string{hostsKey, hostname}
++	if username != "" {
++		path = append(path, usersKey, username)
++	}
++	return append(path, refreshableTokenKey)
++}
++
++func refreshableServiceName(hostname string) string {
++	// The "refreshable" marker is prefixed with an underscore, which is not a valid hostname character under the LDH
++	// rule, so the segment can never collide with the plain token service of a host literally named "refreshable".
++	return "gh:_refreshable:" + hostname
++}
++
++func isKeyNotFound(err error) bool {
++	var keyNotFound *ghConfig.KeyNotFoundError
++	return errors.As(err, &keyNotFound)
++}
+diff --git a/internal/config/refreshable_test.go b/internal/config/refreshable_test.go
+new file mode 100644
+index 00000000000..8d944bf1869
+--- /dev/null
++++ b/internal/config/refreshable_test.go
+@@ -0,0 +1,757 @@
++package config
++
++import (
++	"encoding/json"
++	"errors"
++	"fmt"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/cli/cli/v2/internal/gh"
++	ghmock "github.com/cli/cli/v2/internal/gh/mock"
++	"github.com/cli/cli/v2/internal/keyring"
++	"github.com/stretchr/testify/require"
++)
++
++func setRefreshableConfigField(t *testing.T, authCfg *AuthConfig, hostname, username, leaf, value string) {
++	t.Helper()
++	authCfg.cfg.Set(append(refreshablePath(hostname, username), leaf), value)
++}
++
++func setRefreshableKeyring(t *testing.T, hostname, username string, credential gh.Credential) {
++	t.Helper()
++	data, err := json.Marshal(recordFromCredential(credential))
++	require.NoError(t, err)
++	require.NoError(t, keyring.Set(refreshableServiceName(hostname), username, string(data)))
++}
++
++func TestRefreshableForUser(t *testing.T) {
++	expires := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
++	refreshExpires := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
++
++	tests := []struct {
++		name           string
++		setup          func(t *testing.T, authCfg *AuthConfig)
++		wantCredential gh.Credential
++		wantSecure     bool
++		wantErr        bool
++		wantErrIs      error
++	}{
++		{
++			name: "from config",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "access_token", "access")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token", "refresh")
++			},
++			wantCredential: gh.Credential{Source: "refreshable_oauth_token", Token: "access", RefreshToken: "refresh"},
++			wantSecure:     false,
++		},
++		{
++			name: "from config parses expiries",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "access_token", "access")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token", "refresh")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "expires_in", "3600")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "expires_at", expires.Format(time.RFC3339Nano))
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token_expires_in", "86400")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token_expires_at", refreshExpires.Format(time.RFC3339Nano))
++			},
++			wantCredential: gh.Credential{
++				Source:                "refreshable_oauth_token",
++				Token:                 "access",
++				RefreshToken:          "refresh",
++				ExpiresIn:             3600,
++				ExpiresAt:             &expires,
++				RefreshTokenExpiresIn: 86400,
++				RefreshTokenExpiresAt: &refreshExpires,
++			},
++			wantSecure: false,
++		},
++		{
++			name: "from config invalid expiry timestamp",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "access_token", "access")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token", "refresh")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "expires_at", "not-a-timestamp")
++			},
++			wantErr: true,
++		},
++		{
++			name: "from config invalid expires_in",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "access_token", "access")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token", "refresh")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "expires_in", "not-a-number")
++			},
++			wantErr: true,
++		},
++		{
++			name: "from keyring",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				setRefreshableKeyring(t, "github.com", "test-user", gh.Credential{
++					Token:                 "access",
++					RefreshToken:          "refresh",
++					ExpiresIn:             3600,
++					RefreshTokenExpiresIn: 86400,
++				})
++			},
++			wantCredential: gh.Credential{
++				Source:                "keyring",
++				Token:                 "access",
++				RefreshToken:          "refresh",
++				ExpiresIn:             3600,
++				RefreshTokenExpiresIn: 86400,
++			},
++			wantSecure: true,
++		},
++		{
++			name: "from keyring invalid json",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				require.NoError(t, keyring.Set(refreshableServiceName("github.com"), "test-user", "not-json"))
++			},
++			wantErr: true,
++		},
++		{
++			name:      "not found",
++			setup:     func(t *testing.T, authCfg *AuthConfig) {},
++			wantErrIs: errRefreshableNotFound,
++		},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			authCfg := newTestAuthConfig(t)
++			tt.setup(t, authCfg)
++
++			credential, secure, err := authCfg.refreshableForUser("github.com", "test-user")
++
++			if tt.wantErrIs != nil {
++				require.ErrorIs(t, err, tt.wantErrIs)
++				return
++			}
++			if tt.wantErr {
++				require.Error(t, err)
++				return
++			}
++			require.NoError(t, err)
++			require.Equal(t, tt.wantSecure, secure)
++			require.Equal(t, tt.wantCredential, credential)
++		})
++	}
++}
++
++func TestTokenForUserResolution(t *testing.T) {
++	tests := []struct {
++		name       string
++		setup      func(t *testing.T, authCfg *AuthConfig)
++		wantToken  string
++		wantSource string
++	}{
++		{
++			name: "falls back to refreshable config",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "access_token", "access")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token", "refresh")
++			},
++			wantToken:  "access",
++			wantSource: "refreshable_oauth_token",
++		},
++		{
++			name: "falls back to refreshable keyring",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				setRefreshableKeyring(t, "github.com", "test-user", gh.Credential{Token: "access", RefreshToken: "refresh"})
++			},
++			wantToken:  "access",
++			wantSource: "keyring",
++		},
++		{
++			// This state should not occur in practice: logging in with a refreshable token deletes or replaces any
++			// non-refreshable user and host tokens for that account. The case documents the resolution precedence
++			// regardless, so a stale non-expiring token still wins if one is ever present.
++			name: "prefers non-expiring token over refreshable",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				authCfg.cfg.Set([]string{hostsKey, "github.com", usersKey, "test-user", oauthTokenKey}, "plain-token")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "access_token", "access")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token", "refresh")
++			},
++			wantToken:  "plain-token",
++			wantSource: "oauth_token",
++		},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			authCfg := newTestAuthConfig(t)
++			tt.setup(t, authCfg)
++
++			cred, err := authCfg.TokenForUser("github.com", "test-user")
++
++			require.NoError(t, err)
++			require.Equal(t, tt.wantToken, cred.Token)
++			require.Equal(t, tt.wantSource, cred.Source)
++		})
++	}
++}
++
++func TestValidateRefreshableCredential(t *testing.T) {
++	tests := []struct {
++		name    string
++		cred    gh.Credential
++		wantErr bool
++	}{
++		{
++			name:    "missing access token",
++			cred:    gh.Credential{RefreshToken: "refresh"},
++			wantErr: true,
++		},
++		{
++			name:    "missing refresh token",
++			cred:    gh.Credential{Token: "access"},
++			wantErr: true,
++		},
++		{
++			name:    "valid",
++			cred:    gh.Credential{Token: "access", RefreshToken: "refresh"},
++			wantErr: false,
++		},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			err := validateRefreshableCredential(tt.cred)
++			if tt.wantErr {
++				require.Error(t, err)
++				return
++			}
++			require.NoError(t, err)
++		})
++	}
++}
++
++func TestSetActiveCredential(t *testing.T) {
++	tests := []struct {
++		name         string
++		setup        func(t *testing.T, authCfg *AuthConfig)
++		wantFound    bool
++		assertActive func(t *testing.T, authCfg *AuthConfig)
++	}{
++		{
++			name: "prefers refreshable over non-expiring",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				require.NoError(t, keyring.Set(keyringServiceName("github.com"), "test-user", "plain-token"))
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "access_token", "access")
++				setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token", "refresh")
++			},
++			wantFound: true,
++			assertActive: func(t *testing.T, authCfg *AuthConfig) {
++				// The refreshable credential stays in its per-user slot; there is no host-level active copy.
++				got, err := authCfg.cfg.Get(append(refreshablePath("github.com", "test-user"), "access_token"))
++				require.NoError(t, err)
++				require.Equal(t, "access", got)
++				// The non-expiring host active keyring slot is cleared so it cannot outrank the refreshable credential.
++				_, err = keyring.Get(keyringServiceName("github.com"), "")
++				require.Error(t, err)
++			},
++		},
++		{
++			name: "falls back to non-expiring keyring token",
++			setup: func(t *testing.T, authCfg *AuthConfig) {
++				require.NoError(t, keyring.Set(keyringServiceName("github.com"), "test-user", "plain-token"))
++			},
++			wantFound: true,
++			assertActive: func(t *testing.T, authCfg *AuthConfig) {
++				got, err := keyring.Get(keyringServiceName("github.com"), "")
++				require.NoError(t, err)
++				require.Equal(t, "plain-token", got)
++			},
++		},
++		{
++			name:      "not found",
++			setup:     func(t *testing.T, authCfg *AuthConfig) {},
++			wantFound: false,
++		},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			authCfg := newTestAuthConfig(t)
++			tt.setup(t, authCfg)
++
++			found, err := authCfg.setActiveCredential("github.com", "test-user")
++
++			require.NoError(t, err)
++			require.Equal(t, tt.wantFound, found)
++			if tt.assertActive != nil {
++				tt.assertActive(t, authCfg)
++			}
++		})
++	}
++}
++
++func TestActivateUserResolvesRefreshableCredential(t *testing.T) {
++	authCfg := newTestAuthConfig(t)
++	setRefreshableConfigField(t, authCfg, "github.com", "test-user", "access_token", "access")
++	setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token", "refresh")
++
++	require.NoError(t, authCfg.activateUser("github.com", "test-user"))
++
++	activeUser, err := authCfg.ActiveUser("github.com")
++	require.NoError(t, err)
++	require.Equal(t, "test-user", activeUser)
++
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
++	require.Equal(t, "access", token)
++	require.Equal(t, "refreshable_oauth_token", source)
++}
++
++func TestLogoutRemovesAllUserCredentialRecords(t *testing.T) {
++	// This populates every credential representation the write paths can produce for the user at once: a non-expiring
++	// token and a refreshable credential, in both the keyring and the config file. The non-expiring token also has a
++	// host active ("") slot, which refreshable credentials do not use. That combined state is not realistic - the
++	// write paths keep the storage forms mutually exclusive - but populating it lets the test prove that Logout leaves
++	// nothing behind for the user on the host.
++	authCfg := newTestAuthConfig(t)
++
++	credential := gh.Credential{Token: "access", RefreshToken: "refresh"}
++
++	// Non-expiring tokens in the keyring (per-user and host active slot).
++	require.NoError(t, keyring.Set(keyringServiceName("github.com"), "test-user", "keyring-user-token"))
++	require.NoError(t, keyring.Set(keyringServiceName("github.com"), "", "keyring-active-token"))
++
++	// Refreshable credential in the keyring (per-user slot only).
++	setRefreshableKeyring(t, "github.com", "test-user", credential)
++
++	// Non-expiring tokens in the config (per-user and host active slot).
++	authCfg.cfg.Set([]string{hostsKey, "github.com", usersKey, "test-user", oauthTokenKey}, "config-user-token")
++	authCfg.cfg.Set([]string{hostsKey, "github.com", oauthTokenKey}, "config-active-token")
++
++	// Refreshable credential in the config (per-user slot only).
++	setRefreshableConfigField(t, authCfg, "github.com", "test-user", "access_token", "access")
++	setRefreshableConfigField(t, authCfg, "github.com", "test-user", "refresh_token", "refresh")
++
++	authCfg.cfg.Set([]string{hostsKey, "github.com", userKey}, "test-user")
++
++	require.NoError(t, authCfg.Logout("github.com", "test-user"))
++
++	// Every non-expiring keyring record for the host, per-user and host active, is gone.
++	for _, user := range []string{"test-user", ""} {
++		_, err := keyring.Get(keyringServiceName("github.com"), user)
++		require.Error(t, err)
++	}
++	// The per-user refreshable keyring record is gone.
++	_, err := keyring.Get(refreshableServiceName("github.com"), "test-user")
++	require.Error(t, err)
++
++	// The whole host entry, and therefore every config-stored credential, is gone.
++	_, err = authCfg.cfg.Get([]string{hostsKey, "github.com"})
++	require.Error(t, err)
++	require.Empty(t, authCfg.UsersForHost("github.com"))
++}
++
++func TestSwitchUserActivatesRefreshableCredential(t *testing.T) {
++	authCfg := newTestAuthConfig(t)
++	_, err := authCfg.Login("github.com", "test-user-2", "test-token-2", "ssh", false)
++	require.NoError(t, err)
++
++	authCfg.cfg.Set([]string{hostsKey, "github.com", usersKey, "test-user-1"}, "")
++	setRefreshableConfigField(t, authCfg, "github.com", "test-user-1", "access_token", "access")
++	setRefreshableConfigField(t, authCfg, "github.com", "test-user-1", "refresh_token", "refresh")
++
++	require.NoError(t, authCfg.SwitchUser("github.com", "test-user-1"))
++
++	cred := authCfg.ActiveToken("github.com")
++	token, source := cred.Token, cred.Source
++	require.Equal(t, "access", token)
++	require.Equal(t, "refreshable_oauth_token", source)
++
++	activeUser, err := authCfg.ActiveUser("github.com")
++	require.NoError(t, err)
++	require.Equal(t, "test-user-1", activeUser)
++}
++
++func TestLoginRefreshable(t *testing.T) {
++	expiry := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
++	tests := []struct {
++		name       string
++		secure     bool
++		keyringErr bool
++		wantSecure bool
++	}{
++		{name: "secure storage", secure: true, wantSecure: true},
++		{name: "insecure storage", secure: false, wantSecure: false},
++		{name: "secure storage falls back when keyring errors", secure: true, keyringErr: true, wantSecure: false},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			authCfg := newTestAuthConfig(t)
++			if tt.keyringErr {
++				keyring.MockInitWithError(errors.New("keyring is unavailable"))
++			}
++			credential := gh.Credential{
++				Token:                 "access-token",
++				RefreshToken:          "refresh-token",
++				ExpiresIn:             3600,
++				ExpiresAt:             &expiry,
++				RefreshTokenExpiresIn: 86400,
++				RefreshTokenExpiresAt: &expiry,
++			}
++
++			insecureStorageUsed, err := authCfg.LoginRefreshable("github.com", "test-user", credential, "ssh", tt.secure)
++			require.NoError(t, err)
++			require.Equal(t, tt.wantSecure, !insecureStorageUsed)
++
++			gotCredential, secure, err := authCfg.refreshableForUser("github.com", "test-user")
++			require.NoError(t, err)
++			require.Equal(t, tt.wantSecure, secure)
++
++			// refreshableForUser tags the credential with the source it was read from, so compare against the stored
++			// credential with the expected source filled in.
++			wantCredential := credential
++			if tt.wantSecure {
++				wantCredential.Source = "keyring"
++			} else {
++				wantCredential.Source = "refreshable_oauth_token"
++			}
++			require.Equal(t, wantCredential, gotCredential)
++
++			// The user is active and the credential resolves as the active token.
++			activeUser, err := authCfg.ActiveUser("github.com")
++			require.NoError(t, err)
++			require.Equal(t, "test-user", activeUser)
++
++			token := authCfg.ActiveToken("github.com").Token
++			require.Equal(t, "access-token", token)
++
++			requireKeyWithValue(t, authCfg.cfg, []string{hostsKey, "github.com", gitProtocolKey}, "ssh")
++		})
++	}
++}
++
++func TestLoginRefreshableRejectsInvalidCredential(t *testing.T) {
++	valid := gh.Credential{Token: "access", RefreshToken: "refresh"}
++	tests := []struct {
++		name       string
++		hostname   string
++		username   string
++		credential gh.Credential
++	}{
++		{name: "empty hostname", hostname: "", username: "test-user", credential: valid},
++		{name: "empty username", hostname: "github.com", username: "", credential: valid},
++		{name: "missing access token", hostname: "github.com", username: "test-user", credential: gh.Credential{RefreshToken: "refresh"}},
++		{name: "missing refresh token", hostname: "github.com", username: "test-user", credential: gh.Credential{Token: "access"}},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			authCfg := newTestAuthConfig(t)
++
++			_, err := authCfg.LoginRefreshable(tt.hostname, tt.username, tt.credential, "ssh", true)
++
++			require.Error(t, err)
++		})
++	}
++}
++
++func TestLoginRefreshablePurgesNonExpiringLogin(t *testing.T) {
++	authCfg := newTestAuthConfig(t)
++
++	// A prior non-expiring login persists a token to disk so the reload observes it.
++	_, err := authCfg.Login("github.com", "test-user", "stale-token", "ssh", false)
++	require.NoError(t, err)
++
++	credential := gh.Credential{Token: "access", RefreshToken: "refresh"}
++	_, err = authCfg.LoginRefreshable("github.com", "test-user", credential, "ssh", false)
++	require.NoError(t, err)
++
++	// The stale non-expiring token is gone and the refreshable credential resolves instead.
++	requireNoKey(t, authCfg.cfg, []string{hostsKey, "github.com", usersKey, "test-user", oauthTokenKey})
++	cred, err := authCfg.TokenForUser("github.com", "test-user")
++	require.NoError(t, err)
++	require.Equal(t, "access", cred.Token)
++}
++
++func TestWithFreshConfigUnderLockInvokesReloadBeforeFn(t *testing.T) {
++	authCfg := newTestAuthConfig(t)
++
++	var order []string
++	authCfg.reloadConfig = func() error {
++		order = append(order, "reload")
++		return nil
++	}
++
++	err := authCfg.withFreshConfigForRefresh(func() error {
++		order = append(order, "fn")
++		return nil
++	})
++	require.NoError(t, err)
++
++	require.Equal(t, []string{"reload", "fn"}, order)
++}
++
++func TestWithFreshConfigUnderLockPropagatesReloadError(t *testing.T) {
++	authCfg := newTestAuthConfig(t)
++	sentinel := errors.New("reload boom")
++	authCfg.reloadConfig = func() error { return sentinel }
++
++	fnRan := false
++	err := authCfg.withFreshConfigForRefresh(func() error {
++		fnRan = true
++		return nil
++	})
++
++	require.ErrorIs(t, err, sentinel)
++	require.False(t, fnRan, "fn must not run when the reload fails")
++}
++
++func TestWithFreshConfigUnderLockPropagatesError(t *testing.T) {
++	authCfg := newTestAuthConfig(t)
++	sentinel := errors.New("boom")
++
++	err := authCfg.withFreshConfigForRefresh(func() error { return sentinel })
++
++	require.ErrorIs(t, err, sentinel)
++}
++
++func TestWithFreshConfigUnderLockSerializesInProcess(t *testing.T) {
++	authCfg := newTestAuthConfig(t)
++
++	const goroutines = 50
++	var (
++		wg        sync.WaitGroup
++		active    atomic.Int32
++		maxActive atomic.Int32
++		completed int
++	)
++
++	for range goroutines {
++		wg.Go(func() {
++			_ = authCfg.withFreshConfigForRefresh(func() error {
++				n := active.Add(1)
++				for {
++					m := maxActive.Load()
++					if n <= m || maxActive.CompareAndSwap(m, n) {
++						break
++					}
++				}
++				// completed is intentionally a plain int: it is only safe to touch because the mutex under test
++				// serializes fn, so a data race here would signal broken mutual exclusion.
++				completed++
++				time.Sleep(time.Millisecond)
++				active.Add(-1)
++				return nil
++			})
++		})
++	}
++	wg.Wait()
++
++	require.Equal(t, int32(1), maxActive.Load(), "fn ran concurrently, in-process serialization is broken")
++	require.Equal(t, goroutines, completed)
++}
++
++// renewingRefresher returns a mock refresher that always renews to a fresh, long lived credential.
++func renewingRefresher() *ghmock.TokenRefresherMock {
++	future := time.Now().Add(time.Hour)
++	return &ghmock.TokenRefresherMock{
++		RefreshFunc: func(refreshToken string, hostname string) (gh.RefreshableCredential, error) {
++			return gh.RefreshableCredential{
++				AccessToken:  "new-access",
++				RefreshToken: "new-refresh",
++				ExpiresAt:    &future,
++			}, nil
++		},
++	}
++}
++
++func loginRefreshableWithExpiry(t *testing.T, authCfg *AuthConfig, hostname, username, access, refresh string, expiresAt time.Time, secure bool) {
++	t.Helper()
++	_, err := authCfg.LoginRefreshable(hostname, username, gh.Credential{
++		Token:        access,
++		RefreshToken: refresh,
++		ExpiresAt:    &expiresAt,
++	}, "https", secure)
++	require.NoError(t, err)
++}
++
++func TestActiveTokenWithRefresh(t *testing.T) {
++	host := "github.com"
++	user := "test-user"
++
++	t.Run("refreshes and persists an expired refreshable credential", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		refresher := renewingRefresher()
++		authCfg.SetTokenRefresher(refresher)
++		loginRefreshableWithExpiry(t, authCfg, host, user, "old-access", "old-refresh", time.Now().Add(-time.Hour), false)
++
++		credential, status, err := authCfg.ActiveTokenWithRefresh(host)
++
++		require.NoError(t, err)
++		require.Equal(t, gh.RefreshStatusDone, status)
++		require.Equal(t, "new-access", credential.Token)
++		require.Equal(t, "new-refresh", credential.RefreshToken)
++		// The renewed credential is persisted, so a subsequent read returns it rather than the stale one.
++		require.Equal(t, "new-access", authCfg.ActiveToken(host).Token)
++		require.Len(t, refresher.RefreshCalls(), 1)
++		require.Equal(t, "old-refresh", refresher.RefreshCalls()[0].RefreshToken)
++		require.Equal(t, host, refresher.RefreshCalls()[0].Hostname)
++	})
++
++	t.Run("refreshes and persists to secure storage", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		refresher := renewingRefresher()
++		authCfg.SetTokenRefresher(refresher)
++		loginRefreshableWithExpiry(t, authCfg, host, user, "old-access", "old-refresh", time.Now().Add(-time.Hour), true)
++
++		credential, status, err := authCfg.ActiveTokenWithRefresh(host)
++
++		require.NoError(t, err)
++		require.Equal(t, gh.RefreshStatusDone, status)
++		require.Equal(t, "new-access", credential.Token)
++		// The renewed credential is written back to the keyring it was read from.
++		stored, secure, err := authCfg.refreshableForUser(host, user)
++		require.NoError(t, err)
++		require.True(t, secure)
++		require.Equal(t, "new-access", stored.Token)
++		require.Len(t, refresher.RefreshCalls(), 1)
++	})
++
++	t.Run("does not refresh a credential that is still valid", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		refresher := renewingRefresher()
++		authCfg.SetTokenRefresher(refresher)
++		loginRefreshableWithExpiry(t, authCfg, host, user, "old-access", "old-refresh", time.Now().Add(time.Hour), false)
++
++		credential, status, err := authCfg.ActiveTokenWithRefresh(host)
++
++		require.NoError(t, err)
++		require.Equal(t, gh.RefreshStatusUnnecessary, status)
++		require.Equal(t, "old-access", credential.Token)
++		require.Empty(t, refresher.RefreshCalls())
++	})
++
++	t.Run("reports failure and keeps the old credential when the exchange fails", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		authCfg.SetTokenRefresher(&ghmock.TokenRefresherMock{
++			RefreshFunc: func(refreshToken string, hostname string) (gh.RefreshableCredential, error) {
++				return gh.RefreshableCredential{}, errors.New("token endpoint unreachable")
++			},
++		})
++		loginRefreshableWithExpiry(t, authCfg, host, user, "old-access", "old-refresh", time.Now().Add(-time.Hour), false)
++
++		credential, status, err := authCfg.ActiveTokenWithRefresh(host)
++
++		require.Error(t, err)
++		require.Equal(t, gh.RefreshStatusFailed, status)
++		require.Equal(t, "old-access", credential.Token)
++		// The stale credential is left untouched so a later attempt can retry.
++		require.Equal(t, "old-access", authCfg.ActiveToken(host).Token)
++	})
++
++	t.Run("reports expiry and removes the credential when the refresh token is rejected", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		refresher := &ghmock.TokenRefresherMock{
++			RefreshFunc: func(refreshToken string, hostname string) (gh.RefreshableCredential, error) {
++				return gh.RefreshableCredential{}, fmt.Errorf("server rejected token: %w", gh.ErrRefreshTokenInvalid)
++			},
++		}
++		authCfg.SetTokenRefresher(refresher)
++		loginRefreshableWithExpiry(t, authCfg, host, user, "old-access", "old-refresh", time.Now().Add(-time.Hour), false)
++
++		credential, status, err := authCfg.ActiveTokenWithRefresh(host)
++
++		require.ErrorIs(t, err, gh.ErrRefreshTokenInvalid)
++		require.Equal(t, gh.RefreshStatusExpired, status)
++		require.Empty(t, credential.Token)
++		// The rejected credential is wiped, so it can no longer be resolved.
++		require.Empty(t, authCfg.ActiveToken(host).Token)
++		require.False(t, authCfg.HasActiveToken(host))
++
++		// A subsequent refresh attempt finds no credential and does not call the refresher again, so a dead refresh
++		// token cannot repeatedly hit the token endpoint.
++		credential, status, err = authCfg.ActiveTokenWithRefresh(host)
++		require.NoError(t, err)
++		require.Equal(t, gh.RefreshStatusInapplicable, status)
++		require.Empty(t, credential.Token)
++		require.Len(t, refresher.RefreshCalls(), 1)
++	})
++
++	t.Run("cannot refresh when no refresher is configured", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		loginRefreshableWithExpiry(t, authCfg, host, user, "old-access", "old-refresh", time.Now().Add(-time.Hour), false)
++
++		credential, status, err := authCfg.ActiveTokenWithRefresh(host)
++
++		require.NoError(t, err)
++		require.Equal(t, gh.RefreshStatusInapplicable, status)
++		require.Equal(t, "old-access", credential.Token)
++	})
++
++	t.Run("is inapplicable for a non-refreshable credential", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		refresher := renewingRefresher()
++		authCfg.SetTokenRefresher(refresher)
++		_, err := authCfg.Login(host, user, "plain-token", "https", false)
++		require.NoError(t, err)
++
++		credential, status, err := authCfg.ActiveTokenWithRefresh(host)
++
++		require.NoError(t, err)
++		require.Equal(t, gh.RefreshStatusInapplicable, status)
++		require.Equal(t, "plain-token", credential.Token)
++		require.Empty(t, refresher.RefreshCalls())
++	})
++}
++
++func TestTokenForUserWithRefresh(t *testing.T) {
++	host := "github.com"
++	user := "test-user"
++
++	t.Run("refreshes and persists an expired refreshable credential", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		refresher := renewingRefresher()
++		authCfg.SetTokenRefresher(refresher)
++		loginRefreshableWithExpiry(t, authCfg, host, user, "old-access", "old-refresh", time.Now().Add(-time.Hour), false)
++
++		credential, status, err := authCfg.TokenForUserWithRefresh(host, user)
++
++		require.NoError(t, err)
++		require.Equal(t, gh.RefreshStatusDone, status)
++		require.Equal(t, "new-access", credential.Token)
++		cred, err := authCfg.TokenForUser(host, user)
++		require.NoError(t, err)
++		require.Equal(t, "new-access", cred.Token)
++	})
++
++	t.Run("does not refresh a credential that is still valid", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		refresher := renewingRefresher()
++		authCfg.SetTokenRefresher(refresher)
++		loginRefreshableWithExpiry(t, authCfg, host, user, "old-access", "old-refresh", time.Now().Add(time.Hour), false)
++
++		credential, status, err := authCfg.TokenForUserWithRefresh(host, user)
++
++		require.NoError(t, err)
++		require.Equal(t, gh.RefreshStatusUnnecessary, status)
++		require.Equal(t, "old-access", credential.Token)
++		require.Empty(t, refresher.RefreshCalls())
++	})
++
++	t.Run("is inapplicable for a non-refreshable credential", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++		_, err := authCfg.Login(host, user, "plain-token", "https", false)
++		require.NoError(t, err)
++
++		credential, status, err := authCfg.TokenForUserWithRefresh(host, user)
++
++		require.NoError(t, err)
++		require.Equal(t, gh.RefreshStatusInapplicable, status)
++		require.Equal(t, "plain-token", credential.Token)
++	})
++
++	t.Run("propagates the read error when the user has no token", func(t *testing.T) {
++		authCfg := newTestAuthConfig(t)
++
++		credential, status, err := authCfg.TokenForUserWithRefresh(host, "missing-user")
++
++		require.Error(t, err)
++		require.Equal(t, gh.RefreshStatusInapplicable, status)
++		require.Empty(t, credential.Token)
++	})
++}
+diff --git a/internal/config/test.go b/internal/config/test.go
+index a2e10c5ee69..4e6ec401929 100644
+--- a/internal/config/test.go
++++ b/internal/config/test.go
+@@ -1,6 +1,7 @@
+ package config
+ 
+ import (
++	"context"
+ 	"io"
+ 	"os"
+ 	"path/filepath"
+@@ -30,7 +31,7 @@ func NewMockConfig() *ghmock.ConfigMock {
+ // since none of those go through the mock.
+ func NewMockConfigFromString(cfgString string) *ghmock.ConfigMock {
+ 	c := ghConfig.ReadFromString(cfgString)
+-	cfg := cfg{c}
++	cfg := cfg{cfg: c}
+ 	mock := &ghmock.ConfigMock{}
+ 	mock.GetOrDefaultFunc = func(host, key string) o.Option[gh.ConfigEntry] {
+ 		return cfg.GetOrDefault(host, key)
+@@ -50,6 +51,14 @@ func NewMockConfigFromString(cfgString string) *ghmock.ConfigMock {
+ 	mock.AuthenticationFunc = func() gh.AuthConfig {
+ 		return &AuthConfig{
+ 			cfg: c,
++			// Neutralize the cross-process lock and disk reload so tests never take a real filesystem lock or read
++			// from disk.
++			acquireRefreshLock: func(ctx context.Context, path string) (func(), error) {
++				return func() {}, nil
++			},
++			reloadConfig: func() error {
++				return nil
++			},
+ 			defaultHostOverride: func() (string, string) {
+ 				return "github.com", "default"
+ 			},
+@@ -144,7 +153,20 @@ func NewIsolatedTestConfig(t *testing.T, cfgString string) (*cfg, func(io.Writer
+ 	}
+ 
+ 	c := ghConfig.ReadFromString(cfgString)
+-	cfg := cfg{c}
++	cfg := cfg{cfg: c}
++	cfg.auth = &AuthConfig{
++		cfg: c,
++		// Neutralize the cross-process lock so tests never take a real filesystem lock.
++		acquireRefreshLock: func(ctx context.Context, path string) (func(), error) {
++			return func() {}, nil
++		},
++		// Neutralize the disk reload. This fixture stubs ghConfig.Read to return the string-parsed config c, but the
++		// real ghConfig.Reload bypasses that stub and reads the config files from the empty temp dir, which would
++		// replace c's contents and discard the config the test set up. A no-op keeps the in-memory config authoritative.
++		reloadConfig: func() error {
++			return nil
++		},
++	}
+ 
+ 	// The real implementation of config.Read uses a sync.Once
+ 	// to read config files and initialise package level variables
+@@ -152,9 +174,13 @@ func NewIsolatedTestConfig(t *testing.T, cfgString string) (*cfg, func(io.Writer
+ 	//
+ 	// This means that tests can't be isolated from each other, so
+ 	// we swap out the function here to return a new config each time.
++	prev := ghConfig.Read
+ 	ghConfig.Read = func(_ *ghConfig.Config) (*ghConfig.Config, error) {
+ 		return c, nil
+ 	}
++	t.Cleanup(func() {
++		ghConfig.Read = prev
++	})
+ 
+ 	// The config.Write method isn't defined in the same way as Read to allow
+ 	// the function to be swapped out and it does try to write to disk.
+diff --git a/internal/gh/gh.go b/internal/gh/gh.go
+index acf1f918e9a..6cd63a99909 100644
+--- a/internal/gh/gh.go
++++ b/internal/gh/gh.go
+@@ -10,6 +10,7 @@
+ package gh
+ 
+ import (
++	"errors"
+ 	"time"
+ 
+ 	o "github.com/cli/cli/v2/pkg/option"
+@@ -134,6 +135,39 @@ var TokenTypes = []TokenType{
+ 	TokenTypeRefresh,
+ }
+ 
++// RefreshStatus describes the outcome of attempting to refresh an authentication token.
++type RefreshStatus string
++
++const (
++	// RefreshStatusDone indicates that the token was refreshed.
++	RefreshStatusDone RefreshStatus = "refresh-done"
++	// RefreshStatusInapplicable indicates that the token cannot be refreshed.
++	RefreshStatusInapplicable RefreshStatus = "refresh-inapplicable"
++	// RefreshStatusFailed indicates that the token refresh failed for a transient reason, such as a network or
++	// storage error, so a later retry may succeed.
++	RefreshStatusFailed RefreshStatus = "refresh-failed"
++	// RefreshStatusExpired indicates that the refresh token itself was rejected by the server, so refreshing cannot
++	// succeed and the user must re-authenticate.
++	RefreshStatusExpired RefreshStatus = "refresh-expired"
++	// RefreshStatusUnnecessary indicates that the token does not need to be refreshed.
++	RefreshStatusUnnecessary RefreshStatus = "refresh-unnecessary"
++)
++
++// RefreshableCredential is an OAuth token pair that gh can renew, together with the expiration metadata returned by its
++// issuer. The expiration fields are optional because a server may issue a non-expiring credential. The ExpiresIn fields
++// carry the raw lifetime in seconds as returned by the issuer, alongside the absolute expiry times computed from them.
++//
++// It is an in-memory value passed across the TokenRefresher boundary; persistence and wire encoding are owned by the
++// storage layer, so it deliberately carries no json tags.
++type RefreshableCredential struct {
++	AccessToken           string
++	RefreshToken          string
++	ExpiresIn             int
++	RefreshTokenExpiresIn int
++	ExpiresAt             *time.Time
++	RefreshTokenExpiresAt *time.Time
++}
++
+ // Credential is a resolved authentication token together with its source and, when the token is refreshable, the OAuth
+ // refresh metadata. It is a single universal shape so a caller can inspect a resolved token without needing to know in
+ // advance whether it is refreshable: Token and Source are always meaningful, while the refresh fields are zero for a
+@@ -175,6 +209,21 @@ const (
+ 	TokenSourceDefault = "default"
+ )
+ 
++// ErrRefreshTokenInvalid is returned by a TokenRefresher when the OAuth server rejects the refresh token because it is
++// invalid, expired, or already used. Callers can test for it with errors.Is to distinguish an unusable refresh token,
++// which requires re-authenticating with 'gh auth login', from a transient failure that may succeed on a later retry.
++var ErrRefreshTokenInvalid = errors.New("refresh token is invalid or expired")
++
++// TokenRefresher performs the OAuth token refresh request. It knows nothing about when a refresh should happen or about
++// in-process or cross-process locking; those concerns belong to the caller. Its only job is to make the refresh request
++// for the given refresh token and hostname and parse the response, or the error, back to the caller.
++//
++//go:generate moq -rm -pkg ghmock -out mock/token_refresher.go . TokenRefresher
++type TokenRefresher interface {
++	// Refresh exchanges the given refresh token for a renewed credential on the given hostname.
++	Refresh(refreshToken string, hostname string) (RefreshableCredential, error)
++}
++
+ // AuthConfig is used for interacting with some persistent configuration for gh,
+ // with knowledge on how to access encrypted storage when necessary.
+ // Behavior is scoped to authentication specific tasks.
+@@ -182,6 +231,11 @@ type AuthConfig interface {
+ 	// HasActiveToken returns true when a token for the hostname is present.
+ 	HasActiveToken(hostname string) bool
+ 
++	// ActiveTokenWithRefresh retrieves the active credential for the given hostname and, when it is refreshable and
++	// its access token is expiring, renews and persists it. It may return a non-empty credential with an error, such
++	// as when refreshing fails. The caller decides whether to use the returned credential.
++	ActiveTokenWithRefresh(hostname string) (credential Credential, refreshResult RefreshStatus, err error)
++
+ 	// ActiveToken retrieves the active credential for the given hostname, searching environment variables, general
+ 	// configuration, and finally encrypted storage. It returns the last stored token as-is, including the current
+ 	// access token of a refreshable credential, and never contacts the token endpoint to refresh it. A caller that
+@@ -231,6 +285,12 @@ type AuthConfig interface {
+ 	// in encrypted storage and will fall back to the general insecure configuration.
+ 	Login(hostname, username, token, gitProtocol string, secureStorage bool) (insecureStorageUsed bool, err error)
+ 
++	// LoginRefreshable stores a refreshable credential for the given user, sets the git protocol, and marks the user
++	// active for the hostname. Like Login it prefers encrypted storage and falls back to the insecure configuration,
++	// reporting the fallback via the returned bool. Any non-expiring token stored for the same user is removed so it
++	// cannot outrank the refreshable record.
++	LoginRefreshable(hostname, username string, credential Credential, gitProtocol string, secureStorage bool) (insecureStorageUsed bool, err error)
++
+ 	// SwitchUser switches the active user for a given hostname.
+ 	SwitchUser(hostname, user string) error
+ 
+@@ -241,11 +301,21 @@ type AuthConfig interface {
+ 	// UsersForHost retrieves a list of users configured for a specific host.
+ 	UsersForHost(hostname string) []string
+ 
++	// TokenForUserWithRefresh retrieves the credential for a specified user and hostname and, when it is refreshable
++	// and its access token is expiring, renews and persists it. It may return a non-empty credential with an error,
++	// such as when refreshing fails. The caller decides whether to use the returned credential.
++	TokenForUserWithRefresh(hostname, username string) (credential Credential, refreshResult RefreshStatus, err error)
++
+ 	// TokenForUser retrieves the credential for a specified user and hostname. Like ActiveToken it returns the last
+ 	// stored token as-is, including the current access token of a refreshable credential, and never refreshes it; use
+ 	// TokenForUserWithRefresh when the token must be valid for API calls.
+ 	TokenForUser(hostname, user string) (credential Credential, err error)
+ 
++	// SetTokenRefresher supplies the refresher used to renew tokens. It is provided after construction because the
++	// refresher depends on the plain HTTP client, which is only available once the command factory has assembled its
++	// dependencies.
++	SetTokenRefresher(refresher TokenRefresher)
++
+ 	// The following methods are only for testing and that is a design smell we should consider fixing.
+ 
+ 	// SetActiveToken will override any token resolution and return the given token and source for all calls to
+diff --git a/internal/gh/mock/token_refresher.go b/internal/gh/mock/token_refresher.go
+new file mode 100644
+index 00000000000..fc526f1aabe
+--- /dev/null
++++ b/internal/gh/mock/token_refresher.go
+@@ -0,0 +1,83 @@
++// Code generated by moq; DO NOT EDIT.
++// github.com/matryer/moq
++
++package ghmock
++
++import (
++	"sync"
++
++	"github.com/cli/cli/v2/internal/gh"
++)
++
++// Ensure, that TokenRefresherMock does implement gh.TokenRefresher.
++// If this is not the case, regenerate this file with moq.
++var _ gh.TokenRefresher = &TokenRefresherMock{}
++
++// TokenRefresherMock is a mock implementation of gh.TokenRefresher.
++//
++//	func TestSomethingThatUsesTokenRefresher(t *testing.T) {
++//
++//		// make and configure a mocked gh.TokenRefresher
++//		mockedTokenRefresher := &TokenRefresherMock{
++//			RefreshFunc: func(refreshToken string, hostname string) (gh.RefreshableCredential, error) {
++//				panic("mock out the Refresh method")
++//			},
++//		}
++//
++//		// use mockedTokenRefresher in code that requires gh.TokenRefresher
++//		// and then make assertions.
++//
++//	}
++type TokenRefresherMock struct {
++	// RefreshFunc mocks the Refresh method.
++	RefreshFunc func(refreshToken string, hostname string) (gh.RefreshableCredential, error)
++
++	// calls tracks calls to the methods.
++	calls struct {
++		// Refresh holds details about calls to the Refresh method.
++		Refresh []struct {
++			// RefreshToken is the refreshToken argument value.
++			RefreshToken string
++			// Hostname is the hostname argument value.
++			Hostname string
++		}
++	}
++	lockRefresh sync.RWMutex
++}
++
++// Refresh calls RefreshFunc.
++func (mock *TokenRefresherMock) Refresh(refreshToken string, hostname string) (gh.RefreshableCredential, error) {
++	if mock.RefreshFunc == nil {
++		panic("TokenRefresherMock.RefreshFunc: method is nil but TokenRefresher.Refresh was just called")
++	}
++	callInfo := struct {
++		RefreshToken string
++		Hostname     string
++	}{
++		RefreshToken: refreshToken,
++		Hostname:     hostname,
++	}
++	mock.lockRefresh.Lock()
++	mock.calls.Refresh = append(mock.calls.Refresh, callInfo)
++	mock.lockRefresh.Unlock()
++	return mock.RefreshFunc(refreshToken, hostname)
++}
++
++// RefreshCalls gets all the calls that were made to Refresh.
++// Check the length with:
++//
++//	len(mockedTokenRefresher.RefreshCalls())
++func (mock *TokenRefresherMock) RefreshCalls() []struct {
++	RefreshToken string
++	Hostname     string
++} {
++	var calls []struct {
++		RefreshToken string
++		Hostname     string
++	}
++	mock.lockRefresh.RLock()
++	calls = mock.calls.Refresh
++	mock.lockRefresh.RUnlock()
++
++	return calls
++}
+diff --git a/pkg/cmd/factory/default.go b/pkg/cmd/factory/default.go
+index 0b79b4b6fc8..013c9219862 100644
+--- a/pkg/cmd/factory/default.go
++++ b/pkg/cmd/factory/default.go
+@@ -4,12 +4,15 @@ import (
+ 	"context"
+ 	"fmt"
+ 	"net/http"
++	"os"
+ 	"regexp"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/cli/cli/v2/api"
+ 	ghContext "github.com/cli/cli/v2/context"
+ 	"github.com/cli/cli/v2/git"
++	"github.com/cli/cli/v2/internal/authflow"
+ 	"github.com/cli/cli/v2/internal/browser"
+ 	"github.com/cli/cli/v2/internal/gh"
+ 	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
+@@ -24,6 +27,11 @@ var ssoHeader string
+ var ssoURLRE = regexp.MustCompile(`\burl=([^;]+)`)
+ 
+ func New(appVersion string, invokingAgent string, cfgFunc func() (gh.Config, error), ios *iostreams.IOStreams, executablePath string, telemetryDisabler ghtelemetry.Disabler) *cmdutil.Factory {
++	// Inject the OAuth token refresher into the AuthConfig so refreshable credentials can be renewed during ordinary
++	// commands. It is wrapped around cfgFunc before anything else so every consumer resolves the same refresher-aware
++	// configuration.
++	cfgFunc = configWithTokenRefresher(cfgFunc, tokenRefresherHttpClientFunc(ios, appVersion, invokingAgent, telemetryDisabler))
++
+ 	f := &cmdutil.Factory{
+ 		AppVersion:     appVersion,
+ 		InvokingAgent:  invokingAgent,
+@@ -209,6 +217,29 @@ func HttpClientFunc(cfgFunc func() (gh.Config, error), ios *iostreams.IOStreams,
+ 	}
+ }
+ 
++// tokenRefresherHttpClientFunc builds the HTTP client used to renew OAuth tokens. It mirrors plainHttpClientFunc but
++// sets LogHeadlineOnly so that, under GH_DEBUG=api, the refresh exchange is logged as a single head line rather than a
++// full request/response trace. A token refresh is a side-band exchange triggered from within an ordinary request's
++// round trip, so a verbose trace would interleave the refresh traffic in the middle of the request trace the user is
++// actually inspecting. Auth flows that should surface their own full traffic use f.PlainHttpClient instead.
++func tokenRefresherHttpClientFunc(ios *iostreams.IOStreams, appVersion string, invokingAgent string, telemetryDisabler ghtelemetry.Disabler) func() (*http.Client, error) {
++	return func() (*http.Client, error) {
++		// TESTING HACK ONLY: GH_DEBUG_REFRESH_TOKEN unset or "0" keeps head-line-only; any other value logs verbose refresh traffic.
++		refreshDebug := os.Getenv("GH_DEBUG_REFRESH_TOKEN")
++		opts := api.HTTPClientOptions{
++			Log:             ios.ErrOut,
++			LogColorize:     ios.ColorEnabled(),
++			LogHeadlineOnly: refreshDebug == "" || refreshDebug == "0",
++			AppVersion:      appVersion,
++			InvokingAgent:   invokingAgent,
++			// This is required to prevent automatic setting of auth and other headers.
++			SkipDefaultHeaders: true,
++			TelemetryDisabler:  telemetryDisabler,
++		}
++		return api.NewHTTPClient(opts)
++	}
++}
++
+ func plainHttpClientFunc(ios *iostreams.IOStreams, appVersion string, invokingAgent string, telemetryDisabler ghtelemetry.Disabler) func() (*http.Client, error) {
+ 	return func() (*http.Client, error) {
+ 		opts := api.HTTPClientOptions{
+@@ -228,6 +259,29 @@ func plainHttpClientFunc(ios *iostreams.IOStreams, appVersion string, invokingAg
+ 	}
+ }
+ 
++// configWithTokenRefresher returns a config accessor that injects the OAuth token refresher into the AuthConfig the
++// first time the configuration is resolved, so refreshable credentials can be renewed during ordinary commands. The
++// refresher uses a plain HTTP client that sets no auth headers, since the token endpoint is reached without an
++// existing token. Injection runs once because Authentication returns a single shared AuthConfig; if the plain client
++// cannot be built, injection is skipped and token refresh simply stays inapplicable rather than failing the command.
++func configWithTokenRefresher(cfgFunc func() (gh.Config, error), plainClientFunc func() (*http.Client, error)) func() (gh.Config, error) {
++	var once sync.Once
++	return func() (gh.Config, error) {
++		cfg, err := cfgFunc()
++		if err != nil {
++			return nil, err
++		}
++		once.Do(func() {
++			plainClient, err := plainClientFunc()
++			if err != nil {
++				return
++			}
++			cfg.Authentication().SetTokenRefresher(authflow.NewTokenRefresher(plainClient))
++		})
++		return cfg, nil
++	}
++}
++
+ func externalHttpClientFunc(ios *iostreams.IOStreams, appVersion string) func() (*http.Client, error) {
+ 	return func() (*http.Client, error) {
+ 		return api.NewExternalHTTPClient(api.ExternalHTTPClientOptions{
+diff --git a/pkg/cmd/factory/default_test.go b/pkg/cmd/factory/default_test.go
+index c41b77506d4..d521bf8148d 100644
+--- a/pkg/cmd/factory/default_test.go
++++ b/pkg/cmd/factory/default_test.go
+@@ -1,6 +1,7 @@
+ package factory
+ 
+ import (
++	"errors"
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"net/url"
+@@ -400,6 +401,44 @@ func TestPlainHttpClient(t *testing.T) {
+ 	assert.Nil(t, receivedHeaders.Values("Time-Zone"))
+ }
+ 
++func TestTokenRefresherHttpClient(t *testing.T) {
++	// The token refresher client renews tokens from within an ordinary request. Under GH_DEBUG=api it must log only a
++	// head line, never a full request/response trace, so a refresh does not interleave a verbose trace in the middle
++	// of the request the user is inspecting.
++	t.Setenv("GH_DEBUG", "api")
++
++	var receivedHeaders *http.Header
++	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		receivedHeaders = &r.Header
++		w.WriteHeader(http.StatusNoContent)
++	}))
++	defer ts.Close()
++
++	ios, _, _, stderr := iostreams.Test()
++
++	client, err := tokenRefresherHttpClientFunc(ios, "v1.2.3", "", &telemetry.NoOpService{})()
++	require.NoError(t, err)
++
++	req, err := http.NewRequest("POST", ts.URL, nil)
++	require.NoError(t, err)
++	res, err := client.Do(req)
++	require.NoError(t, err)
++
++	assert.Equal(t, 204, res.StatusCode)
++	assert.Equal(t, []string{"GitHub CLI v1.2.3"}, receivedHeaders.Values("User-Agent"))
++	assert.Equal(t, []string{"2022-11-28"}, receivedHeaders.Values("X-GitHub-Api-Version"))
++	assert.Nil(t, receivedHeaders.Values("Authorization"))
++	assert.Nil(t, receivedHeaders.Values("Content-Type"))
++	assert.Nil(t, receivedHeaders.Values("Accept"))
++	assert.Nil(t, receivedHeaders.Values("Time-Zone"))
++
++	// Head lines are present, but the verbose request/response header lines are not.
++	logOutput := stderr.String()
++	assert.Contains(t, logOutput, "* Request to "+ts.URL)
++	assert.NotContains(t, logOutput, "> POST")
++	assert.NotContains(t, logOutput, "< HTTP")
++}
++
+ func TestNewGitClient(t *testing.T) {
+ 	tests := []struct {
+ 		name          string
+@@ -443,3 +482,69 @@ func defaultConfig() *ghmock.ConfigMock {
+ 	cfg.Set("nonsense.com", "oauth_token", "BLAH")
+ 	return cfg
+ }
++
++// recordingAuthConfig is a gh.AuthConfig that records SetTokenRefresher calls. It embeds the interface so it satisfies
++// gh.AuthConfig without implementing every method; only SetTokenRefresher is exercised by these tests.
++type recordingAuthConfig struct {
++	gh.AuthConfig
++	setCalls      int
++	lastRefresher gh.TokenRefresher
++}
++
++func (r *recordingAuthConfig) SetTokenRefresher(refresher gh.TokenRefresher) {
++	r.setCalls++
++	r.lastRefresher = refresher
++}
++
++func TestConfigWithTokenRefresher(t *testing.T) {
++	t.Run("injects a refresher once across multiple config resolutions", func(t *testing.T) {
++		authCfg := &recordingAuthConfig{}
++		cfg := &ghmock.ConfigMock{AuthenticationFunc: func() gh.AuthConfig { return authCfg }}
++		plainCalls := 0
++		plainClientFunc := func() (*http.Client, error) {
++			plainCalls++
++			return &http.Client{}, nil
++		}
++
++		wrapped := configWithTokenRefresher(func() (gh.Config, error) { return cfg, nil }, plainClientFunc)
++
++		got, err := wrapped()
++		require.NoError(t, err)
++		require.Same(t, cfg, got)
++		require.Equal(t, 1, authCfg.setCalls)
++		require.NotNil(t, authCfg.lastRefresher)
++
++		// A second resolution reuses the already-injected refresher rather than building another.
++		_, err = wrapped()
++		require.NoError(t, err)
++		require.Equal(t, 1, authCfg.setCalls)
++		require.Equal(t, 1, plainCalls)
++	})
++
++	t.Run("skips injection when the plain client cannot be built", func(t *testing.T) {
++		authCfg := &recordingAuthConfig{}
++		cfg := &ghmock.ConfigMock{AuthenticationFunc: func() gh.AuthConfig { return authCfg }}
++		plainClientFunc := func() (*http.Client, error) { return nil, errors.New("no client") }
++
++		wrapped := configWithTokenRefresher(func() (gh.Config, error) { return cfg, nil }, plainClientFunc)
++
++		got, err := wrapped()
++		require.NoError(t, err)
++		require.Same(t, cfg, got)
++		require.Equal(t, 0, authCfg.setCalls)
++	})
++
++	t.Run("propagates a configuration error without injecting", func(t *testing.T) {
++		plainCalls := 0
++		plainClientFunc := func() (*http.Client, error) {
++			plainCalls++
++			return &http.Client{}, nil
++		}
++
++		wrapped := configWithTokenRefresher(func() (gh.Config, error) { return nil, errors.New("config boom") }, plainClientFunc)
++
++		_, err := wrapped()
++		require.EqualError(t, err, "config boom")
++		require.Equal(t, 0, plainCalls)
++	})
++}

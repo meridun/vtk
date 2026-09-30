@@ -496,6 +496,31 @@ public static class Program
                     stdout.Write($"{i}\tWire up coverage for the number {i} filter family\tfeat/{i}-some-longish-branch-name-for-padding\t{state}\t2026-07-05T09:00:00Z\n");
                 }
                 return code;
+            case ("pr", "diff"):
+                // Unified diff on the `gh pr` key (#167): the PR argument
+                // selects the size — "big" clears the #135 fold floor
+                // (64 KiB, folds to per-file stats), anything else is a
+                // few-line diff that must return byte-identical.
+                stdout.Write("diff --git a/README.md b/README.md\n" +
+                             "index 6546403..eb7bc39 100644\n" +
+                             "--- a/README.md\n" +
+                             "+++ b/README.md\n" +
+                             "@@ -1,2 +1,3 @@\n" +
+                             " # vtk\n" +
+                             "+pr-diff-marker-167 small line\n" +
+                             " intro\n");
+                if (args.Length >= 3 && args[2] == "big")
+                {
+                    stdout.Write("diff --git a/internal/big.go b/internal/big.go\n" +
+                                 "index 0000000..1111111 100644\n" +
+                                 "--- a/internal/big.go\n" +
+                                 "+++ b/internal/big.go\n" +
+                                 "@@ -1,1 +1,1201 @@\n" +
+                                 " package big\n");
+                    for (var i = 0; i < 1200; i++)
+                        stdout.Write($"+// pr-diff-marker-167 padding line {i}: extra content to grow the raw diff past the fold floor\n");
+                }
+                return code;
             case ("run", "list"):
                 stdout.Write("completed\tsuccess\tCI\tbuild.yml\tmain\tpush\t7788990011\t45s\t2026-07-06T11:00:00Z\n");
                 stdout.Write("in_progress\t\tCI\tbuild.yml\tfeat/9\tpush\t7788990012\t\t2026-07-06T11:30:00Z\n");
