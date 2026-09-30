@@ -39,14 +39,23 @@ public class InvocationLogSmokeTests : IDisposable
         const int n = 8;
         File.WriteAllText(Path.Combine(_h.Repo, "untracked.txt"), "x\n");
 
+        // #176: in a just-committed repo every `git status` refreshes the
+        // racy index entries and rewrites .git/index; on Windows a sibling
+        // opening the index mid-replace dies 128 with "fatal: .git/index:
+        // index file open failed: Permission denied" (reproduced with raw
+        // git, no vtk). GIT_OPTIONAL_LOCKS=0 is git's knob for concurrent
+        // tooling: status skips that optional write, so the herd exercises
+        // only the vtk append race this test exists for. The command line
+        // vtk sees is unchanged.
+        var env = new Dictionary<string, string> { ["GIT_OPTIONAL_LOCKS"] = "0" };
         var tasks = Enumerable.Range(0, n)
-            .Select(_ => Task.Run(() => _h.Run(_h.Repo, "git", "status")))
+            .Select(_ => Task.Run(() => _h.RunEnv(_h.Repo, env, "git", "status")))
             .ToArray();
         var results = await Task.WhenAll(tasks);
 
         foreach (var r in results)
         {
-            Assert.Equal(0, r.code); // parity: raw `git status` exits 0
+            Assert.True(r.code == 0, $"exit {r.code}, stderr:\n{r.stderr}"); // parity: raw `git status` exits 0
             Assert.DoesNotContain(GapLogFailed, r.stderr);
             // Spool replace-race losers degrade to raw passthrough (#125);
             // either way the output is complete.
