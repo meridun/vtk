@@ -1,0 +1,77 @@
+  ✖ computes the total (0.6799ms)
+  ✖ fetches the gateway (0.1479ms)
+  ✖ serializes the receipt (1.0026ms)
+✖ orders (3.2807ms)
+ℹ tests 38
+ℹ suites 10
+ℹ pass 32
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 1
+ℹ duration_ms 131.5675
+
+✖ failing tests:
+
+test at test\orders.test.js:6:3
+✖ computes the total (0.6799ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  12 !== 11
+  
+      at TestContext.<anonymous> (C:\proj\shop\test\orders.test.js:6:43)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 12,
+    expected: 11,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\orders.test.js:7:3
+✖ fetches the gateway (0.1479ms)
+  Error: gateway timeout
+      at TestContext.<anonymous> (C:\proj\shop\test\orders.test.js:7:49)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at test\orders.test.js:8:3
+✖ serializes the receipt (1.0026ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+      id: 1,
+      items: [
+        'a',
+  +     'b'
+  -     'c'
+      ]
+    }
+  
+      at TestContext.<anonymous> (C:\proj\shop\test\orders.test.js:9:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { id: 1, items: [ 'a', 'b' ] },
+    expected: { id: 1, items: [ 'a', 'c' ] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

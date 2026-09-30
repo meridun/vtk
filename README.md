@@ -54,7 +54,8 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   line — including the no-banner shape modern npm emits under pipe capture, where the inner
   tool can't be detected at all. The tail also pins up to 3 runner summary lines that fit
   (mocha `N passing`/`failing`/`pending`, jest `Tests: … passed`/`failed`, eslint
-  `N problems`) from above the last lines, nearest first, inside the same 512-byte cap
+  `N problems`, node --test `ℹ tests`/`pass`/`fail N`) from above the last lines, nearest
+  first, inside the same 512-byte cap
   (#134) — so a `1200 passing` line followed by leftover console noise survives the fold
   instead of needing a `vtk show` round trip; the pin scan sees through ANSI color codes
   (#163), and a pinned colored line is emitted verbatim. Below the floor, output passes through byte-identical (so
@@ -97,6 +98,17 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   fatal/config errors (no `N passing`/`failing`/`pending` summary line) pass through raw on
   content, with the child's exit code always returned unchanged. The `npm run test` wrapped form
   is covered via the npm run dispatch layer; full raw is recoverable via `vtk show`.
+- **node --test filter** — `node --test` (Node's built-in runner, default spec reporter; `--test`
+  in any position after `node`, #168): folds the passing/suite/skipped tree lines away and keeps
+  the `ℹ tests N` … `ℹ duration_ms N` summary block plus everything after it — the
+  `✖ failing tests:` region (location, assertion, diff, stack), the `--experimental-test-coverage`
+  table, anything else node appends — verbatim. Failing `✖` tree lines, `ℹ` diagnostics, and
+  output your tests print above the summary stay inline. Measured 0–95% on fixtures (green run
+  95%, failing runs 36–43%, a module-load crash 0% since there is nothing to fold). Filtered on
+  exit `{0, 1}` (node exits 1 when any test fails — a report, not a crash); fatal exits and the
+  TAP reporter carry no summary block and pass through raw, exit code unchanged. `npm test`
+  scripts that expand to `node --test` engage the filter via the npm run dispatch layer; full
+  raw is recoverable via `vtk show`.
 - **gh filter family** — `gh issue list`, `gh pr list`, `gh run list`: table output compacts to
   one line per row (`#<n> <state> <title> (<age>)`; runs show `<conclusion> <title> · <workflow>`),
   labels/branch/runID noise dropped. Measured savings 33–48% on fixtures.

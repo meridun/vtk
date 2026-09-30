@@ -1,0 +1,71 @@
+▶ cart
+  ✔ adds item 0 (1.2848ms)
+  ✔ adds item 1 (0.0902ms)
+  ✔ adds item 2 (0.059ms)
+  ✔ adds item 3 (0.055ms)
+  ✔ adds item 4 (0.0761ms)
+  ✔ adds item 5 (0.0672ms)
+  ✔ adds item 6 (0.0642ms)
+  ✔ adds item 7 (0.0754ms)
+  ✔ adds item 8 (0.0708ms)
+  ✔ adds item 9 (0.0604ms)
+  ✔ adds item 10 (0.0515ms)
+  ✔ adds item 11 (0.0457ms)
+  ﹣ skips shipping (0.0548ms) # no shipping yet
+  ✔ todo tax (0.1239ms) # TODO
+  ✔ sums prices (0.1242ms)
+✔ cart (3.6669ms)
+▶ orders
+  ✔ creates order 0 (1.3099ms)
+  ✔ creates order 1 (0.0801ms)
+  ✔ creates order 2 (0.0656ms)
+  ✔ creates order 3 (0.0585ms)
+  ✔ creates order 4 (0.0496ms)
+  ✔ creates order 5 (0.0758ms)
+  ✔ creates order 6 (0.0644ms)
+  ✔ creates order 7 (0.0536ms)
+  ✔ creates order 8 (0.0743ms)
+  ✔ creates order 9 (0.0611ms)
+  ✖ computes the total (1.0033ms)
+✖ orders (4.1087ms)
+ℹ tests 26
+ℹ suites 2
+ℹ pass 23
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 1
+ℹ duration_ms 93.7211
+ℹ start of coverage report
+ℹ ----------------------------------------------------------
+ℹ file      | line % | branch % | funcs % | uncovered lines
+ℹ ----------------------------------------------------------
+ℹ src       |        |          |         | 
+ℹ  cart.js  |  75.00 |   100.00 |   75.00 | 3
+ℹ ----------------------------------------------------------
+ℹ all files |  75.00 |   100.00 |   75.00 | 
+ℹ ----------------------------------------------------------
+ℹ end of coverage report
+
+✖ failing tests:
+
+test at test\orders.test.js:5:3
+✖ computes the total (1.0033ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  12 !== 11
+  
+      at TestContext.<anonymous> (C:\proj\shop\test\orders.test.js:5:41)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 12,
+    expected: 11,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

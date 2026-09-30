@@ -1,0 +1,48 @@
+▶ cart
+  ✔ adds item 0 (1.2738ms)
+  ✔ adds item 1 (0.0858ms)
+  ✔ adds item 2 (0.059ms)
+  ✔ adds item 3 (0.0526ms)
+  ✔ adds item 4 (0.0753ms)
+  ✔ adds item 5 (0.0636ms)
+  ✔ adds item 6 (0.0575ms)
+  ✔ adds item 7 (0.0796ms)
+  ✔ adds item 8 (0.0757ms)
+  ✔ adds item 9 (0.0598ms)
+  ✔ adds item 10 (0.0504ms)
+  ✔ adds item 11 (0.0455ms)
+  ﹣ skips shipping (0.0538ms) # no shipping yet
+  ✔ todo tax (0.1521ms) # TODO
+  ✔ sums prices (0.1174ms)
+✔ cart (3.6533ms)
+▶ orders
+  ✔ creates order 0 (1.2192ms)
+  ✔ creates order 1 (0.0806ms)
+  ✔ creates order 2 (0.0631ms)
+  ✔ creates order 3 (0.0592ms)
+  ✔ creates order 4 (0.0506ms)
+  ✔ creates order 5 (0.0743ms)
+  ✔ creates order 6 (0.0633ms)
+  ✔ creates order 7 (0.0541ms)
+  ✔ creates order 8 (0.0714ms)
+  ✔ creates order 9 (0.0544ms)
+  ✔ computes the total (0.1322ms)
+✔ orders (3.1111ms)
+ℹ tests 26
+ℹ suites 2
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 1
+ℹ duration_ms 93.0553
+ℹ start of coverage report
+ℹ ----------------------------------------------------------
+ℹ file      | line % | branch % | funcs % | uncovered lines
+ℹ ----------------------------------------------------------
+ℹ src       |        |          |         | 
+ℹ  cart.js  |  75.00 |   100.00 |   75.00 | 3
+ℹ ----------------------------------------------------------
+ℹ all files |  75.00 |   100.00 |   75.00 | 
+ℹ ----------------------------------------------------------
+ℹ end of coverage report

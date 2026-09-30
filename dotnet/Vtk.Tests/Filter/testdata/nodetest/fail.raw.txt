@@ -1,0 +1,131 @@
+▶ auth
+  ✔ hashes the password (0.5643ms)
+  ✔ rejects a short password (0.0983ms)
+  ✔ issues a session token (0.0923ms)
+  ✔ expires the token (0.0926ms) # TODO
+✔ auth (1.7511ms)
+▶ cart
+  ▶ totals
+    ✔ sums line items (0.6099ms)
+    ✔ applies a discount code (0.1432ms)
+    ✔ rounds to cents (0.1028ms)
+  ✔ totals (1.5227ms)
+  ▶ shipping
+    ✔ free over threshold (0.6158ms)
+    ✔ flat rate under threshold (0.1082ms)
+    ﹣ skips digital goods (0.1067ms) # not implemented
+  ✔ shipping (1.0868ms)
+✔ cart (3.2419ms)
+▶ inventory
+  ▶ stock levels
+    ✔ tracks on-hand quantity for A-100 (0.7425ms)
+    ✔ tracks on-hand quantity for A-101 (0.0931ms)
+    ✔ tracks on-hand quantity for A-102 (0.0797ms)
+    ✔ tracks on-hand quantity for B-200 (0.0838ms)
+    ✔ tracks on-hand quantity for B-201 (0.0703ms)
+    ✔ tracks on-hand quantity for C-300 (0.0833ms)
+    ✔ tracks on-hand quantity for C-301 (0.0753ms)
+    ✔ tracks on-hand quantity for C-302 (0.0762ms)
+    ✔ tracks on-hand quantity for D-400 (0.0927ms)
+  ✔ stock levels (2.7301ms)
+  ▶ reservations
+    ✔ reserves stock for a pending order (0.2835ms)
+    ✔ releases stock on cancellation (0.1369ms)
+    ✔ rejects reservation above on-hand (0.146ms)
+    ✔ expires stale reservations (0.1174ms)
+  ✔ reservations (0.9353ms)
+  ▶ reorder points
+    ✔ flags SKUs below the reorder point (0.1681ms)
+    ✔ ignores discontinued SKUs (0.1857ms)
+    ✔ computes the reorder quantity (0.0921ms)
+  ✔ reorder points (0.6114ms)
+✔ inventory (4.8805ms)
+▶ orders
+  ✔ creates an order (0.5599ms)
+  ✖ computes the total (0.6799ms)
+  ✖ fetches the gateway (0.1479ms)
+  ✖ serializes the receipt (1.0026ms)
+✖ orders (3.2807ms)
+▶ pricing
+  ✔ applies the list price (0.6192ms)
+  ✔ applies a percentage discount (0.0995ms)
+  ✔ applies a fixed discount (0.1052ms)
+  ✔ never goes below zero (0.0931ms)
+  ✔ rounds half up to cents (0.087ms)
+  ✔ adds sales tax by region (0.4886ms)
+  ✔ exempts tax-free regions (0.0931ms)
+  ﹣ handles currency conversion (0.0867ms) # needs rate fixture
+✔ pricing (2.7761ms)
+ℹ tests 38
+ℹ suites 10
+ℹ pass 32
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 1
+ℹ duration_ms 131.5675
+
+✖ failing tests:
+
+test at test\orders.test.js:6:3
+✖ computes the total (0.6799ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  12 !== 11
+  
+      at TestContext.<anonymous> (C:\proj\shop\test\orders.test.js:6:43)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 12,
+    expected: 11,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\orders.test.js:7:3
+✖ fetches the gateway (0.1479ms)
+  Error: gateway timeout
+      at TestContext.<anonymous> (C:\proj\shop\test\orders.test.js:7:49)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at test\orders.test.js:8:3
+✖ serializes the receipt (1.0026ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+      id: 1,
+      items: [
+        'a',
+  +     'b'
+  -     'c'
+      ]
+    }
+  
+      at TestContext.<anonymous> (C:\proj\shop\test\orders.test.js:9:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { id: 1, items: [ 'a', 'b' ] },
+    expected: { id: 1, items: [ 'a', 'c' ] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
