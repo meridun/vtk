@@ -90,18 +90,38 @@ public static partial class Git
         };
     }
 
-    /// <summary>Compacts default `git log` output to one line per commit: short hash, decorations if present, subject.</summary>
+    /// <summary>
+    /// Compacts default `git log` output to one line per commit: short hash,
+    /// decorations if present, subject. Hunk-shaped output (`git log -p`) is
+    /// size-floored like <see cref="Diff"/> / <see cref="Show"/> (#164,
+    /// applying the #135 floor): below <see cref="Fold.FloorBytes"/> it is
+    /// returned unchanged; at or above it each commit line is followed by that
+    /// commit's per-file stats (the `Show` shape), so the hunks the agent asked
+    /// for are recoverable rather than silently dropped.
+    /// </summary>
     public static string Log(string raw)
     {
+        var lines = raw.Split('\n');
+        var hasHunks = lines.Any(l => DiffFileRe().IsMatch(l));
+        if (hasHunks && raw.Length < Fold.FloorBytes) return raw; // hunks below the fold floor stay inline (#135/#164)
+
         var outLines = new List<string>();
         var cur = "";
         var haveSubject = false;
-        foreach (var line in raw.Split('\n'))
+        var block = new List<string>(); // the current commit's lines, for its per-commit stats
+        void Flush()
+        {
+            if (cur == "") return;
+            outLines.Add(cur);
+            if (hasHunks) outLines.AddRange(FormatStats(DiffStats(block)));
+            block.Clear();
+        }
+        foreach (var line in lines)
         {
             var m = CommitRe().Match(line);
             if (m.Success)
             {
-                if (cur != "") outLines.Add(cur);
+                Flush();
                 var h = m.Groups[1].Value;
                 if (h.Length > 7) h = h[..7];
                 cur = h;
@@ -110,13 +130,14 @@ public static partial class Git
                 haveSubject = false;
                 continue;
             }
+            block.Add(line);
             if (cur != "" && !haveSubject && line.StartsWith("    ") && line.Trim() != "")
             {
                 cur += " " + line.Trim();
                 haveSubject = true;
             }
         }
-        if (cur != "") outLines.Add(cur);
+        Flush();
         return outLines.Count == 0 ? raw : string.Join("\n", outLines);
     }
 
@@ -128,11 +149,13 @@ public static partial class Git
         public bool Binary;
     }
 
-    private static List<FileStat> DiffStats(string raw)
+    private static List<FileStat> DiffStats(string raw) => DiffStats(raw.Split('\n'));
+
+    private static List<FileStat> DiffStats(IEnumerable<string> lines)
     {
         var stats = new List<FileStat>();
         FileStat? cur = null;
-        foreach (var line in raw.Split('\n'))
+        foreach (var line in lines)
         {
             var m = DiffFileRe().Match(line);
             if (m.Success)

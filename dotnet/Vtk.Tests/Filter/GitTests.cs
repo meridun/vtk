@@ -25,6 +25,8 @@ public class GitTests
         // real captures above it (see HunkFixturesSitAtOrAboveTheFloor).
         yield return new object[] { "diff_large_real", (Func<string, string>)Git.Diff, 0.98 };
         yield return new object[] { "show_large_real", (Func<string, string>)Git.Show, 0.99 };
+        // `git log -p` joins the hunk fold (#164): per-commit stats shape above the floor.
+        yield return new object[] { "log_p_large_real", (Func<string, string>)Git.Log, 0.97 };
         yield return new object[] { "add_crlf_warning", (Func<string, string>)Git.Add, 0.99 };
         yield return new object[] { "commit_multi", (Func<string, string>)Git.Commit, 0.40 };
         yield return new object[] { "push_new_branch", (Func<string, string>)Git.Push, 0.0 };
@@ -59,6 +61,7 @@ public class GitTests
     {
         yield return new object[] { "diff_two_files", (Func<string, string>)Git.Diff };
         yield return new object[] { "show_commit", (Func<string, string>)Git.Show };
+        yield return new object[] { "log_p_small", (Func<string, string>)Git.Log };
     }
 
     [Theory]
@@ -92,10 +95,41 @@ public class GitTests
     [Theory]
     [InlineData("diff_large_real")]
     [InlineData("show_large_real")]
+    [InlineData("log_p_large_real")]
     public void HunkFixturesSitAtOrAboveTheFloor(string name)
     {
         var raw = File.ReadAllText(Path.Combine(FixtureDir, name + ".raw.txt"));
         Assert.True(raw.Length >= Fold.FloorBytes, $"fixture below the fold floor: {raw.Length} chars");
+    }
+
+    [Fact]
+    public void LogWithoutHunksCompactsRegardlessOfFloor()
+    {
+        // Plain `git log` carries no `diff --git` headers, so the #164 floor
+        // never applies: a body grown past Fold.FloorBytes still compacts to
+        // the same one-line-per-commit output as the small fixture.
+        var raw = File.ReadAllText(Path.Combine(FixtureDir, "log_default.raw.txt"));
+        var want = File.ReadAllText(Path.Combine(FixtureDir, "log_default.want.txt"));
+        var big = raw + "\n    " + new string('x', Fold.FloorBytes);
+        Assert.True(big.Length >= Fold.FloorBytes);
+        Assert.Equal(want, Git.Log(big));
+    }
+
+    [Fact]
+    public void LogHunkShapeKeepsCommitsWithoutADiffAsBareLines()
+    {
+        // A merge commit in `git log -p` has no diff: its entry is the bare
+        // one-liner, and the next commit's stats attach to that commit, not
+        // to the merge. Grown to the floor so the hunk shape engages.
+        var raw = File.ReadAllText(Path.Combine(FixtureDir, "log_p_small.raw.txt"));
+        var at = raw + "\n " + new string('x', Fold.FloorBytes - raw.Length - 2);
+        var lines = Git.Log(at).Split('\n');
+        Assert.StartsWith("ae71d5f Merge pull request", lines[0]);
+        Assert.StartsWith("18ab93e test(spool):", lines[1]);
+        Assert.Equal("dotnet/Vtk.Tests/Spool/StoreTests.cs | +1 -1", lines[2]);
+        Assert.StartsWith("077b716 test(smoke):", lines[3]);
+        Assert.Equal("dotnet/Vtk.Tests/Smoke/InvocationLogSmokeTests.cs | +81 -0", lines[4]);
+        Assert.Equal(5, lines.Length);
     }
 
     [Fact]

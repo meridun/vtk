@@ -25,11 +25,13 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   Global options ahead of the subcommand (`-C <dir>`, `-c <k=v>`, `--no-pager`/`-P`,
   `-p`/`--paginate`, `--git-dir[=<path>]`, `--work-tree[=<path>]`) still engage the filter for
   `status`, `branch`, `add`, `commit`, `push`, `pull`; `diff`, `show`, `log` behind a global
-  option pass through unfiltered (#152). Hunk-shaped `git diff` / `git show` output below 64 KiB
-  (the shared fold floor) passes through byte-identical — agents run these to read the hunks, so
-  folding them only cost a `vtk show` round trip; at or above the floor the per-file stats shape
-  plus an `OK <id>` recovery line still applies (#135). `--stat` / `--numstat` and `show -s`
-  shapes are unchanged. `git branch` listings print one entry per line with the `*` / `+`
+  option pass through unfiltered (#152). Hunk-shaped `git diff` / `git show` / `git log -p`
+  output below 64 KiB (the shared fold floor) passes through byte-identical — agents run these to
+  read the hunks, so folding them only cost a `vtk show` round trip; at or above the floor the
+  per-file stats shape plus an `OK <id>` recovery line still applies (#135, #164) — for
+  `git log -p` that is one line per commit, each followed by its own `file | +N -M` stats (merge
+  commits without a diff stay bare lines). `--stat` / `--numstat` and `show -s` shapes are
+  unchanged. `git branch` listings print one entry per line with the `*` / `+`
   markers kept, the `remotes/` prefix stripped, and a local branch that is also listed as
   `origin/<same>` collapsed to one `<name> (tracked)` entry (#166); `--show-current`, `-vv`,
   `--format`, and other non-listing shapes pass through byte-identical.
@@ -50,7 +52,8 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   (mocha `N passing`/`failing`/`pending`, jest `Tests: … passed`/`failed`, eslint
   `N problems`) from above the last lines, nearest first, inside the same 512-byte cap
   (#134) — so a `1200 passing` line followed by leftover console noise survives the fold
-  instead of needing a `vtk show` round trip. Below the floor, output passes through byte-identical (so
+  instead of needing a `vtk show` round trip; the pin scan sees through ANSI color codes
+  (#163), and a pinned colored line is emitted verbatim. Below the floor, output passes through byte-identical (so
   terse, load-bearing scripts like `npm run sdlc` are never touched), and failures are never
   folded — nonzero exits keep their full output inline. Unfolded gaps are attributed to the
   inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
@@ -81,7 +84,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   through unchanged, gap-logged.
 - **mocha filter** — `mocha`, `npx mocha` (spec reporter): folds passing/pending/suite spec-tree
   lines away and keeps the summary (`N passing`/`M failing`/`K pending`) plus every failure-detail
-  block (name + assertion + stack) verbatim — the signal an agent needs. Measured 23–94% on
+  block (name + assertion + stack) — the signal an agent needs. Colored output (`--color`, or
+  `"color": true` in `.mocharc.json`) is recognized too (#163): kept lines are emitted with ANSI
+  codes stripped, while `vtk show` returns the raw colored bytes. Measured 23–94% on
   fixtures (savings scale with the pass:fail ratio: a green run collapses to a single summary line,
   a failure-heavy run keeps most of its bytes). Filtered on any exit `0`–`255`: mocha exits with
   its failure count (`min(failures, 255)`), so a multi-failure run is a report, not a crash;

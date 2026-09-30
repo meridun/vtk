@@ -284,6 +284,82 @@ public class MochaSmokeTests : IDisposable
         SmokeAssert.NoOk(outp);
         Assert.Contains("No test files found", outp + err);
     }
+
+    private static Dictionary<string, string> Color(int n) => new()
+    {
+        ["VTK_FAKE_MOCHA_CODE"] = n.ToString(),
+        ["VTK_FAKE_MOCHA_COLOR"] = "1",
+    };
+
+    /// <summary>
+    /// mocha with `color: true` in .mocharc.json (#163) wraps its summary in
+    /// SGR codes even on a pipe. The colored green run must collapse to the
+    /// same stripped summary line as the uncolored one, not pass through raw.
+    /// </summary>
+    [Fact]
+    public void ColoredGreenRunCollapsesToStrippedSummaryLine()
+    {
+        var (raw, rawCode) = _h.RunRawTool(Color(0), "npx", "mocha");
+        Assert.Equal(0, rawCode);
+        Assert.Contains("\u001b[32m 7 passing\u001b[0m", raw);
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, Color(0), "npx", "mocha");
+        Assert.Equal(rawCode, code); // parity
+        SmokeHarness.MustOkId(outp);
+        Assert.DoesNotContain("\u001b", outp, StringComparison.Ordinal);
+        Assert.DoesNotContain("✔", outp);
+        var lines = outp.Trim().Split('\n');
+        Assert.True(lines.Length == 2, $"colored green run should be summary + OK (2 lines), got {lines.Length}:\n{outp}");
+        Assert.Equal("7 passing (3ms)", lines[0]);
+        Assert.True(err == "", $"unexpected stderr: {err}");
+    }
+
+    /// <summary>
+    /// Colored failing run (#163): summary plus failure blocks, stripped of
+    /// codes, at mocha's own exit code; the spool keeps the raw bytes with
+    /// the codes intact and the telemetry row carries no output content.
+    /// </summary>
+    [Fact]
+    public void ColoredFailingRunKeepsStrippedBlocksWithParityAndRawRecovery()
+    {
+        var (outp, err, code) = _h.RunFaked(_h.Repo, Color(2), "npx", "mocha");
+        Assert.Equal(2, code); // parity: mocha exits its failure count
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.StartsWith("5 passing (4ms)\n2 failing\n\n  1) cart\n", outp);
+        foreach (var want in new[] { "computes total", "charges card", "gateway timeout" })
+            Assert.Contains(want, outp);
+        Assert.DoesNotContain("starts empty", outp);
+        Assert.DoesNotContain("\u001b", outp, StringComparison.Ordinal);
+
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("\u001b[32m 5 passing\u001b[0m", shown);
+        Assert.Contains("starts empty", shown);
+
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"mocha\"", log);
+        Assert.DoesNotContain("gateway timeout", log);
+        Assert.True(err == "", $"unexpected stderr: {err}");
+    }
+
+    /// <summary>
+    /// `npm test` whose mocha runs colored (#163): the row is attributed to
+    /// the mocha filter, not folded under npm-run-fold.
+    /// </summary>
+    [Fact]
+    public void NpmTestColoredRunAttributesToMochaNotFold()
+    {
+        var (outp, _, code) = _h.RunFaked(_h.Repo, Color(2), "npm", "test");
+        Assert.Equal(2, code); // parity through the npm dispatch layer
+        SmokeHarness.MustOkId(outp);
+        Assert.StartsWith("5 passing (4ms)\n2 failing\n", outp);
+        Assert.DoesNotContain("\u001b", outp, StringComparison.Ordinal);
+        Assert.DoesNotContain("> mocha", outp);
+        var log = _h.InvocationLog();
+        Assert.Contains("\"cmd\":\"mocha", log);
+        Assert.Contains("\"reason\":\"mocha\"", log);
+        Assert.DoesNotContain("npm-run-fold", log);
+    }
 }
 
 /// <summary>Port of test/smoke/npm_smoke_test.go: strip the npm banner, delegate to the inner tool's filter, attribute gaps to the inner tool.</summary>
@@ -547,6 +623,33 @@ public class NpmFoldSmokeTests : IDisposable
                 Assert.Contains("case 0001", r.stdout);
         }
         Assert.True(folded >= 1, "neither concurrent invocation folded");
+    }
+
+    /// <summary>
+    /// The #134 shape with a colored summary line (#163): the fold's pin scan
+    /// matches on the ANSI-stripped text and emits the line verbatim, codes
+    /// included (the fold rewrites nothing).
+    /// </summary>
+    [Fact]
+    public void BigBannerlessColoredMochaSummaryStillPinsAboveTail()
+    {
+        var env = new Dictionary<string, string>
+        {
+            ["VTK_FAKE_NPM_ALIAS_SCRIPT"] = "bignoise",
+            ["VTK_FAKE_MOCHA_COLOR"] = "1",
+        };
+        var (raw, rawCode) = _h.RunRawTool(env, "npm", "test");
+        Assert.Equal(0, rawCode);
+        Assert.Contains("\u001b[32m 1500 passing\u001b[0m", raw);
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, env, "npm", "test");
+        Assert.Equal(rawCode, code); // parity
+        SmokeHarness.MustOkId(outp);
+        Assert.StartsWith("\u001b[92m \u001b[0m\u001b[32m 1500 passing\u001b[0m\u001b[90m (58ms)\u001b[0m\n[TraderQueryAction.complete] No socket to emit response\n", outp);
+        Assert.Equal(5, outp.Split("No socket to emit response").Length - 1);
+        Assert.DoesNotContain("case 0001", outp);
+        Assert.True(outp.Length < 700, $"fold output not compact ({outp.Length} bytes):\n{outp}\nstderr: {err}");
+        Assert.Contains("\"reason\":\"npm-run-fold\"", _h.InvocationLog());
     }
 
     [Fact]

@@ -125,6 +125,13 @@ public class FoldTests
             "n1\nn2\nn3\nn4\nn5"
         },
         {
+            // #163: the real `mocha --color` summary line. Matched on the
+            // ANSI-stripped text, emitted verbatim with its codes.
+            "colored mocha summary pins and is emitted verbatim",
+            "tree\n\x1b[92m \x1b[0m\x1b[32m 7 passing\x1b[0m\x1b[90m (3ms)\x1b[0m\n\nn1\nn2\nn3\nn4\nn5\n",
+            "\x1b[92m \x1b[0m\x1b[32m 7 passing\x1b[0m\x1b[90m (3ms)\x1b[0m\nn1\nn2\nn3\nn4\nn5"
+        },
+        {
             "CRLF body keeps the CR on the pinned line",
             "tree\r\n  7 passing (5ms)\r\n\r\nn1\r\nn2\r\nn3\r\nn4\r\nn5\r\n",
             "  7 passing (5ms)\r\nn1\r\nn2\r\nn3\r\nn4\r\nn5\r"
