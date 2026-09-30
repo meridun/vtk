@@ -1,6 +1,6 @@
 # SDLC conformance profile: vtk
 
-Bindings per the agentic-sdlc spec (`agentic-sdlc/docs/Composability.md`).
+Bindings per the model-repo SDLC spec ([`Development_SdlcComposability.md`](https://github.com/meridun/model-repo/blob/dev/docs/Development_SdlcComposability.md)).
 
 - **Spine:** `intake → queued → build → verify → audit → ship`, collapsed tail (human PR merge is
   the `ready` gate; `shipping → complete` = merge-and-close).
