@@ -1,0 +1,31 @@
+
+Running 8 tests using 2 workers
+
+  x  1 [chromium] › tests\flaky.spec.js:2:1 › loads the map on retry (5ms)
+  ok 2 [chromium] › tests\cart.spec.js:3:3 › cart › adds an item (4ms)
+  ok 3 [chromium] › tests\cart.spec.js:4:3 › cart › removes an item (1ms)
+  ok 4 [chromium] › tests\cart.spec.js:5:3 › cart › computes the total (1ms)
+  -  5 [chromium] › tests\cart.spec.js:6:8 › cart › applies a coupon
+  ok 6 [chromium] › tests\inventory.spec.js:2:1 › lists items (1ms)
+  ok 7 [chromium] › tests\inventory.spec.js:3:1 › finds an item by name (1ms)
+  ok 8 [chromium] › tests\inventory.spec.js:4:1 › rejects an unknown item (4ms)
+  ok 9 [chromium] › tests\flaky.spec.js:2:1 › loads the map on retry (retry #1) (4ms)
+
+
+  1) [chromium] › tests\flaky.spec.js:2:1 › loads the map on retry ─────────────────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeGreaterThan[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: > [32m0[39m
+    Received:   [31m0[39m
+
+      1 | const { test, expect } = require('@playwright/test');
+    > 2 | test('loads the map on retry', async ({}, testInfo) => { expect(testInfo.retry).toBeGreaterThan(0); });
+        |                                                                                 ^
+      3 |
+        at C:\work\shop\tests\flaky.spec.js:2:81
+
+  1 flaky
+    [chromium] › tests\flaky.spec.js:2:1 › loads the map on retry ──────────────────────────────────
+  1 skipped
+  6 passed (1.1s)

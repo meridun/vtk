@@ -1,0 +1,49 @@
+
+Running 10 tests using 2 workers
+
+  ok  1 [chromium] › tests\cart.spec.js:3:3 › cart › adds an item (4ms)
+  x   2 [chromium] › tests\checkout.spec.js:3:3 › checkout › charges the card (6ms)
+  ok  3 [chromium] › tests\cart.spec.js:4:3 › cart › removes an item (1ms)
+  ok  4 [chromium] › tests\cart.spec.js:5:3 › cart › computes the total (1ms)
+  -   5 [chromium] › tests\cart.spec.js:6:8 › cart › applies a coupon
+  ok  6 [chromium] › tests\inventory.spec.js:2:1 › lists items (1ms)
+  ok  7 [chromium] › tests\inventory.spec.js:3:1 › finds an item by name (1ms)
+  ok  8 [chromium] › tests\inventory.spec.js:4:1 › rejects an unknown item (4ms)
+  x   9 [chromium] › tests\checkout.spec.js:4:3 › checkout › sends a receipt (2ms)
+  ok 10 [chromium] › tests\checkout.spec.js:5:3 › checkout › empties the cart (4ms)
+
+
+  1) [chromium] › tests\checkout.spec.js:3:3 › checkout › charges the card ─────────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m11[39m
+    Received: [31m12[39m
+
+      1 | const { test, expect } = require('@playwright/test');
+      2 | test.describe('checkout', () => {
+    > 3 |   test('charges the card', async () => { expect(12).toBe(11); });
+        |                                                     ^
+      4 |   test('sends a receipt', async () => { throw new Error('gateway timeout'); });
+      5 |   test('empties the cart', async () => { expect([]).toHaveLength(0); });
+      6 | });
+        at C:\work\shop\tests\checkout.spec.js:3:53
+
+  2) [chromium] › tests\checkout.spec.js:4:3 › checkout › sends a receipt ──────────────────────────
+
+    Error: gateway timeout
+
+      2 | test.describe('checkout', () => {
+      3 |   test('charges the card', async () => { expect(12).toBe(11); });
+    > 4 |   test('sends a receipt', async () => { throw new Error('gateway timeout'); });
+        |                                               ^
+      5 |   test('empties the cart', async () => { expect([]).toHaveLength(0); });
+      6 | });
+      7 |
+        at C:\work\shop\tests\checkout.spec.js:4:47
+
+  2 failed
+    [chromium] › tests\checkout.spec.js:3:3 › checkout › charges the card ──────────────────────────
+    [chromium] › tests\checkout.spec.js:4:3 › checkout › sends a receipt ───────────────────────────
+  1 skipped
+  7 passed (1.6s)

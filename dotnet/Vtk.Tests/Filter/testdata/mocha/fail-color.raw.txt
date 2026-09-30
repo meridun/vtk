@@ -1,0 +1,40 @@
+
+[0m[0m
+[0m  cart[0m
+  [32m  [32m✔[39m[0m[90m starts empty[0m
+  [32m  [32m✔[39m[0m[90m adds an item[0m
+  [31m  1) computes total[0m
+  [32m  [32m✔[39m[0m[90m is serializable[0m
+
+[0m  checkout[0m
+  [32m  [32m✔[39m[0m[90m validates address[0m
+  [31m  2) charges card[0m
+  [32m  [32m✔[39m[0m[90m sends receipt[0m
+
+
+[92m [0m[32m 5 passing[0m[90m (4ms)[0m
+[31m  2 failing[0m
+
+[0m  1) cart
+       computes total:
+
+      [31mAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+12 !== 11
+[0m
+      [32m+ expected[0m [31m- actual[0m
+
+      [31m-12[0m
+      [32m+11[0m
+      [0m[90m
+      at Context.<anonymous> (test\mixed.test.js:5:37)
+      at process.processImmediate (node:internal/timers:504:21)
+[0m
+[0m  2) checkout
+       charges card:
+[0m[31m     Error: gateway timeout[0m[90m
+      at Context.<anonymous> (test\mixed.test.js:10:36)
+      at process.processImmediate (node:internal/timers:504:21)
+[0m
+
+

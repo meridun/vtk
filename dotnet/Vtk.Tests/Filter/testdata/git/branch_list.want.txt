@@ -1,1 +1,3 @@
-feature/x, * main, topic
+feature/x
+* main
+topic

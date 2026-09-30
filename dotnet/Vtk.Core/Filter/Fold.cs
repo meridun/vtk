@@ -35,9 +35,13 @@ public static partial class Fold
     // Runner summary lines that carry the verdict regardless of where they
     // sit (#134): mocha "  N passing (12ms)" / "N failing" / "N pending"
     // (mirrors Mocha.SummaryRe), jest "Tests:  1 failed, 5 passed, 6 total",
-    // eslint "✖ 3 problems (3 errors, 0 warnings)". Content-sniffed
+    // eslint "✖ 3 problems (3 errors, 0 warnings)", node --test "ℹ tests 10"
+    // / "ℹ pass 8" / "ℹ fail 2" (#168; the spec reporter's "ℹ" and the TAP
+    // reporter's "#" prefixes — a prefix is required so prose never pins).
+    // Matched against the ANSI-stripped line so a colored mocha summary still
+    // pins (#163); the line itself is emitted verbatim. Content-sniffed
     // dispatch is deliberately not what this is — the fold stays a fold.
-    [GeneratedRegex(@"^\s*\d+\s+(passing|failing|pending)\b|^\s*Tests:\s.*\b\d+\s+(passed|failed)\b|^\W*\d+\s+problems?\b")]
+    [GeneratedRegex(@"^\s*\d+\s+(passing|failing|pending)\b|^\s*Tests:\s.*\b\d+\s+(passed|failed)\b|^\W*\d+\s+problems?\b|^\s*(?:ℹ|#)\s+(?:tests|pass|fail)\s+\d+\s*$")]
     private static partial Regex SummaryRe();
 
     /// <summary>
@@ -71,7 +75,7 @@ public static partial class Fold
         var pinnedBytes = 0;
         for (var i = start0 - 1; i >= 0 && pinned.Count < PinnedMaxLines; i--)
         {
-            if (!SummaryRe().IsMatch(lines[i])) continue;
+            if (!SummaryRe().IsMatch(Ansi.Strip(lines[i]))) continue;
             var cost = lines[i].Length + 1;
             if (pinnedBytes + cost > TailMaxBytes) break;
             pinnedBytes += cost;

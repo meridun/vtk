@@ -1,0 +1,4 @@
+Running 7 tests using 1 worker
+
+  1 skipped
+  6 passed (599ms)

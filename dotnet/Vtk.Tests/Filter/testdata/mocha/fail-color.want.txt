@@ -1,0 +1,23 @@
+5 passing (4ms)
+2 failing
+
+  1) cart
+       computes total:
+
+      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+12 !== 11
+
+      + expected - actual
+
+      -12
+      +11
+      
+      at Context.<anonymous> (test\mixed.test.js:5:37)
+      at process.processImmediate (node:internal/timers:504:21)
+
+  2) checkout
+       charges card:
+     Error: gateway timeout
+      at Context.<anonymous> (test\mixed.test.js:10:36)
+      at process.processImmediate (node:internal/timers:504:21)

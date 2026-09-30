@@ -1,0 +1,16 @@
+
+Running 8 tests using 2 workers
+
+  ok 1 [chromium] › tests\cart.spec.js:3:3 › cart › adds an item (4ms)
+  ok 2 [chromium] › tests\inventory.spec.js:2:1 › lists items (4ms)
+  ok 3 [chromium] › tests\cart.spec.js:4:3 › cart › removes an item (1ms)
+  ok 4 [chromium] › tests\inventory.spec.js:3:1 › finds an item by name (1ms)
+  ok 5 [chromium] › tests\cart.spec.js:5:3 › cart › computes the total (1ms)
+  -  7 [chromium] › tests\cart.spec.js:6:8 › cart › applies a coupon
+  ok 6 [chromium] › tests\inventory.spec.js:4:1 › rejects an unknown item (2ms)
+seeded 3 rows
+warn: slow query
+  ok 8 [chromium] › tests\log.spec.js:2:1 › logs progress (1ms)
+
+  1 skipped
+  7 passed (611ms)
