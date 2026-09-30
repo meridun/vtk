@@ -96,6 +96,14 @@ public static class Program
         var match = Prefix.Unwrap(args);
         var found = Registry.Default().TryLookup(match, out var entry);
 
+        // Binary-producing commands (`git archive`, `git bundle create`,
+        // #171) have no text to compact: pass through untouched, on a TTY or
+        // not, and log `binary` so they never rank as a coverage gap.
+        if (Binary.Matches(match))
+        {
+            return Passthrough(st, args, IsTTY(), Store.ReasonBinary, match);
+        }
+
         // Interactive invocations bypass filtering entirely: interposing a
         // pipe would break the wrapped command's own TTY detection. A
         // bypassed covered command is not a coverage gap (tty-bypass); an
