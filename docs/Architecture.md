@@ -110,6 +110,16 @@ outgrows a screen.)
   the dispatch fix itself is [#152](https://github.com/meridun/vtk/issues/152) and the npm
   inner-delegation attribution bug is [#153](https://github.com/meridun/vtk/issues/153) —
   [#139](https://github.com/meridun/vtk/issues/139)
+- Nonzero-exit output **tail-folds at or above the shared `Fold.FloorBytes`** (Q1 option B —
+  amends #93 / #131 "failures stay inline"): when the child exits outside the entry's allowlist
+  (or the filter elided nothing) and raw length is at or above the floor, vtk spools the full
+  raw and emits a bounded line-aligned tail (~8 KiB) plus `Error:` / `AssertionError` /
+  `##[error]` lines scanned from above the tail up to a small cap, then `OK <id>`; exit code
+  untouched, sub-floor failures byte-identical. Applies to **every family including uncovered
+  `no-filter` commands** (Q2 option B; a folded no-filter failure still counts as a `gaps`
+  coverage row, emitted under a new `failure-fold` reason). `vtk gain` cap-awareness stays a
+  doc caveat only; any accounting change is a follow-up from #137 telemetry (Q3) —
+  [#165](https://github.com/meridun/vtk/issues/165)
 
 ## Pipeline
 
