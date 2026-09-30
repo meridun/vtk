@@ -106,6 +106,33 @@ public static partial class Gh
         return string.Join("\n", outLines);
     }
 
+    /// <summary>
+    /// The `gh pr` family dispatcher: routes `gh pr diff` output (unified
+    /// diff, at least one `diff --git a/… b/…` header) to <see cref="Git.Diff"/>
+    /// so the #135 size floor applies — below <see cref="Fold.FloorBytes"/>
+    /// the hunks return byte-identical, exactly as direct `git diff` — and
+    /// everything else to <see cref="PrList"/>, by content shape (the
+    /// `Run` pattern: the registry key "gh pr" cannot see the sub-subcommand,
+    /// #167). `--json` payloads and unrecognized shapes (`gh pr view`,
+    /// `gh pr checks`) pass through unchanged.
+    /// </summary>
+    public static string Pr(string raw)
+    {
+        if (IsJson(raw)) return raw;
+        if (IsUnifiedDiff(raw)) return Git.Diff(raw);
+        return PrList(raw);
+    }
+
+    /// <summary>Reports whether raw carries at least one unified-diff file header (`diff --git a/x b/x`).</summary>
+    internal static bool IsUnifiedDiff(string raw)
+    {
+        foreach (var line in raw.Split('\n'))
+        {
+            if (line.StartsWith("diff --git a/", StringComparison.Ordinal)) return true;
+        }
+        return false;
+    }
+
     // The set of `gh run list` first-column status values; anything else in
     // field 0 means the input is not a run-list table (pass through).
     private static readonly HashSet<string> RunStatus = new()

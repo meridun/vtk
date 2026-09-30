@@ -195,6 +195,12 @@ public sealed class Registry
         r.Register("git push", Git.Push);
         r.Register("git pull", Git.Pull);
         r.Register("git branch", Git.Branch);
+        // Registry reuse (#167): `git merge` prints the same transfer/diffstat
+        // shape as `git pull` (conflict output exits 1 and stays raw under the
+        // exit-0 allowlist); `git grep -n` prints `path:line:content` like
+        // plain grep (no-match exit 1 stays raw, matching `grep`).
+        r.Register("git merge", Git.Pull);
+        r.Register("git grep", Files.Grep);
         // eslint reports "problems found" via exit 1; that output is the whole
         // point to compact. Exit 2+ is a fatal/config error and stays raw.
         r.RegisterCodes("eslint", Eslint.Filter, 0, 1);
@@ -218,7 +224,10 @@ public sealed class Registry
         // gh list families: TSV human output on success (exit 0). `gh --json`
         // forms hit the same keys but pass through structurally intact.
         r.Register("gh issue", Gh.IssueList);
-        r.Register("gh pr", Gh.PrList);
+        // `gh pr` dispatches by content shape (#167): `gh pr diff` output
+        // carries unified-diff headers and routes to Git.Diff (with its #135
+        // floor); list tables go to PrList; view/checks shapes pass through.
+        r.Register("gh pr", Gh.Pr);
         // `gh run` dispatches by content shape: run-list tables and CI job
         // logs (`run view --log` / `--log-failed`, #96). Exit 1 is in the
         // allowlist for the report-style `--exit-status` forms, which
