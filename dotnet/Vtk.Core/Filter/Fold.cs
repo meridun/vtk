@@ -1,10 +1,12 @@
 // The generic size-floored success fold (#93, registry option C), shared by
 // the wrapper families that route through it: `npm run` (#93/#120) and
 // `powershell -File <script>` (#131). Success output at or above the byte
-// floor folds behind `OK <id>` with a short summary tail inline; below it —
-// and on any failure — output stays inline, so terse load-bearing runs pass
-// through automatically with no exempt list. The CLI runner owns the
-// exit-code gate, the spool, and the telemetry; everything here is pure.
+// floor folds behind `OK <id>` with a short summary tail inline; below it
+// output stays inline, so terse load-bearing runs pass through
+// automatically with no exempt list. Nonzero exits at or above the same
+// floor take the larger failure tail instead (#165, every family). The CLI
+// runner owns the exit-code gate, the spool, and the telemetry; everything
+// here is pure.
 using System.Text.RegularExpressions;
 
 namespace Vtk.Core.Filter;
@@ -32,6 +34,20 @@ public static partial class Fold
     /// </summary>
     public const int PinnedMaxLines = 3;
 
+    /// <summary>
+    /// Maximum total size (chars) of the failure tail <see cref="FailureTail"/>
+    /// keeps inline (#165): line-aligned, no line-count cap — a crash
+    /// loop's final stack trace is the load-bearing part and sits at the end.
+    /// </summary>
+    public const int FailureTailMaxBytes = 8 * 1024;
+
+    /// <summary>
+    /// Maximum number of error lines <see cref="FailureTail"/> pins from
+    /// above the positional failure tail (#165). Their bytes count inside
+    /// <see cref="FailureTailMaxBytes"/>.
+    /// </summary>
+    public const int FailureErrorMaxLines = 20;
+
     // Runner summary lines that carry the verdict regardless of where they
     // sit (#134): mocha "  N passing (12ms)" / "N failing" / "N pending"
     // (mirrors Mocha.SummaryRe), jest "Tests:  1 failed, 5 passed, 6 total",
@@ -43,6 +59,15 @@ public static partial class Fold
     // dispatch is deliberately not what this is — the fold stays a fold.
     [GeneratedRegex(@"^\s*\d+\s+(passing|failing|pending)\b|^\s*Tests:\s.*\b\d+\s+(passed|failed)\b|^\W*\d+\s+problems?\b|^\s*(?:ℹ|#)\s+(?:tests|pass|fail)\s+\d+\s*$")]
     private static partial Regex SummaryRe();
+
+    // Error lines worth pinning from above a failure tail (#165): GitHub
+    // Actions `##[error]`, or a line that opens with `Error:` /
+    // `TypeError:` / `AssertionError [ERR_...]` (node, mocha, jest, .NET).
+    // Matched against the ANSI-stripped line; the line itself is emitted
+    // verbatim. Stack frames (`    at ...`) never pin — the tail keeps the
+    // final trace positionally.
+    [GeneratedRegex(@"^\W*(?:##\[error\]|[A-Za-z]*Error\b)")]
+    private static partial Regex ErrorLineRe();
 
     /// <summary>
     /// The generic "summary stays inline" slice of a folded body: its last
@@ -67,7 +92,7 @@ public static partial class Fold
 
         // Positional boundary with the full budget fixes which lines are
         // "above the tail" and therefore pin candidates.
-        var start0 = PositionalStart(lines, end, TailMaxBytes);
+        var start0 = PositionalStart(lines, end, TailMaxBytes, TailMaxLines);
 
         // Pin the summary lines nearest the tail, newest first, while they
         // fit; +1 each for the newline joining them to what follows.
@@ -86,7 +111,49 @@ public static partial class Fold
         // The remaining budget is never larger than the full one, so the
         // recomputed boundary is at or after start0: no pinned line can
         // also fall inside the positional tail.
-        var start = pinned.Count == 0 ? start0 : PositionalStart(lines, end, TailMaxBytes - pinnedBytes);
+        var start = pinned.Count == 0 ? start0 : PositionalStart(lines, end, TailMaxBytes - pinnedBytes, TailMaxLines);
+
+        var kept = new List<string>(pinned.Count + (end - start));
+        foreach (var i in pinned) kept.Add(lines[i]);
+        for (var i = start; i < end; i++) kept.Add(lines[i]);
+        return kept.Count == 0 ? "" : string.Join("\n", kept);
+    }
+
+    /// <summary>
+    /// The failure-side fold tail (#165, registry Q1 option B): the last
+    /// lines of a nonzero-exit body, line-aligned, up to
+    /// <see cref="FailureTailMaxBytes"/> chars — where a crash loop leaves
+    /// its final stack trace — preceded by up to
+    /// <see cref="FailureErrorMaxLines"/> error lines (`Error:`,
+    /// `AssertionError`, `##[error]`, ...) pinned from above that positional
+    /// tail, nearest first, so a diagnostic that scrolled past the tail
+    /// still surfaces. Pinned lines take budget priority; the whole result
+    /// never exceeds <see cref="FailureTailMaxBytes"/>. Lines are emitted
+    /// verbatim and in original order; nothing is moved or duplicated. Same
+    /// shape as <see cref="Tail"/>, sized for failures rather than
+    /// summaries. Pure — the full body is always recoverable from the spool.
+    /// </summary>
+    public static string FailureTail(string body)
+    {
+        var lines = body.Split('\n');
+        var end = lines.Length;
+        while (end > 0 && lines[end - 1].Trim() == "") end--;
+
+        var start0 = PositionalStart(lines, end, FailureTailMaxBytes, int.MaxValue);
+
+        var pinned = new List<int>();
+        var pinnedBytes = 0;
+        for (var i = start0 - 1; i >= 0 && pinned.Count < FailureErrorMaxLines; i--)
+        {
+            if (!ErrorLineRe().IsMatch(Ansi.Strip(lines[i]))) continue;
+            var cost = lines[i].Length + 1;
+            if (pinnedBytes + cost > FailureTailMaxBytes) break;
+            pinnedBytes += cost;
+            pinned.Add(i);
+        }
+        pinned.Reverse();
+
+        var start = pinned.Count == 0 ? start0 : PositionalStart(lines, end, FailureTailMaxBytes - pinnedBytes, int.MaxValue);
 
         var kept = new List<string>(pinned.Count + (end - start));
         foreach (var i in pinned) kept.Add(lines[i]);
@@ -96,11 +163,11 @@ public static partial class Fold
 
     // The index of the first line of the positional tail: lines are taken
     // from `end` backwards while both the line cap and `budget` hold.
-    private static int PositionalStart(string[] lines, int end, int budget)
+    private static int PositionalStart(string[] lines, int end, int budget, int maxLines)
     {
         var start = end;
         var total = 0;
-        while (start > 0 && end - start < TailMaxLines)
+        while (start > 0 && end - start < maxLines)
         {
             // +1 for the joining newline on every line after the first.
             var cost = lines[start - 1].Length + (start == end ? 0 : 1);

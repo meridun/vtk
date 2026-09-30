@@ -137,7 +137,7 @@ public static class Program
 
         if (!found)
         {
-            return Passthrough(st, args, false, Store.ReasonNoFilter, match);
+            return RunUncovered(st, args, match);
         }
         return RunFiltered(st, entry, args, match);
     }
@@ -222,6 +222,10 @@ public static class Program
                 LogInvocation(st, match, raw.Length, raw.Length, filtered: true, tty: false, Npm.FoldName);
                 return result.ExitCode;
             }
+            // Failure at or above the floor: the failure tail-fold (#165),
+            // still a genuine npm-family gap row; below it, full raw.
+            if (raw.Length >= Fold.FloorBytes && TryFailureFold(st, args, match, raw, raw, filtered: false))
+                return result.ExitCode;
             return EmitRawAttr(match, Store.ReasonNoFilter);
         }
 
@@ -237,8 +241,11 @@ public static class Program
         if (!entry.Filters(result.ExitCode))
         {
             // Inner filter exists but this exit code is outside its
-            // allowlist (a genuine failure): keep full raw output,
-            // attributed to the inner tool.
+            // allowlist (a genuine failure): at or above the floor the
+            // failure tail-fold (#165) bounds it, attributed to the inner
+            // tool; below it, full raw.
+            if (strip.Body.Length >= Fold.FloorBytes && TryFailureFold(st, strip.Inner, strip.Inner, raw, strip.Body, filtered: true))
+                return result.ExitCode;
             return EmitRawAttr(strip.Inner, Store.ReasonNonzeroExit);
         }
 
@@ -307,6 +314,13 @@ public static class Program
         // A fold failure falls through to the pre-fold behavior below (which
         // itself degrades to raw on spool failure — never lost output).
         if (code == 0 && body.Length >= Fold.FloorBytes && TryFold(st, inner, inner, raw, body, Npm.FoldName))
+            return code;
+
+        // Failure at or above the floor (#165): the failure tail-fold bounds
+        // the body whether the inner tool is uncovered (still a gap row) or
+        // its filter ran and elided nothing (covered, not a gap). Same
+        // degrade-to-raw fallthrough as the success fold.
+        if (code != 0 && body.Length >= Fold.FloorBytes && TryFailureFold(st, inner, inner, raw, body, filtered))
             return code;
 
         if (body.Length >= raw.Length)
@@ -388,8 +402,13 @@ public static class Program
         }
         if (result.ExitCode != 0)
         {
-            // Failures never fold: the script's error/test-failure output is
-            // the load-bearing case. Full raw, still a coverage gap.
+            // Failures at or above the floor take the failure tail-fold
+            // (#165) — the script's error/test-failure output is the
+            // load-bearing case, and the bounded tail keeps its end where
+            // the harness cap would have kept its head; below the floor,
+            // full raw. Either way still a genuine powershell-family gap.
+            if (raw.Length >= Fold.FloorBytes && TryFailureFold(st, args, match, raw, raw, filtered: false))
+                return result.ExitCode;
             return EmitRaw(Store.ReasonNoFilter);
         }
         if (raw.Length >= Fold.FloorBytes)
@@ -443,6 +462,65 @@ public static class Program
     }
 
     /// <summary>
+    /// The failure-side fold (#165, registry Q1 option B; every family, Q2
+    /// option B): spools the full raw and emits the body's bounded failure
+    /// tail (<see cref="Fold.FailureTail"/>) plus `OK &lt;id&gt;`, logged under
+    /// <see cref="Store.ReasonFailureFold"/> with the spool id.
+    /// <paramref name="filtered"/> is true when the family is covered (its
+    /// filter declined the exit code or elided nothing) and false when no
+    /// filter exists — the row then still counts as a coverage gap. Callers
+    /// gate on a nonzero exit and <see cref="Fold.FloorBytes"/>; the exit
+    /// code itself is never touched. Returns false — emitting nothing —
+    /// when the tail computation throws or the spool write fails, so the
+    /// caller degrades to raw (invariant 2).
+    /// </summary>
+    private static bool TryFailureFold(Store st, string[] spoolArgv, string[] logArgv, string raw, string body, bool filtered)
+    {
+        if (!TryApplyFilter(Fold.FailureTail, body, out var tail)) return false;
+        string id;
+        try
+        {
+            id = st.Write(Directory.GetCurrentDirectory(), spoolArgv, raw, DateTime.UtcNow);
+        }
+        catch
+        {
+            return false;
+        }
+        if (tail != "")
+        {
+            Console.Out.Write(tail);
+            if (!tail.EndsWith('\n')) Console.Out.WriteLine();
+        }
+        Console.Out.WriteLine($"OK {id}");
+        LogInvocation(st, logArgv, raw.Length, tail.Length, filtered, tty: false, Store.ReasonFailureFold, spoolId: id);
+        return true;
+    }
+
+    /// <summary>
+    /// An uncovered command off a TTY (#165, Q2 option B): captured rather
+    /// than streamed so a failure at or above <see cref="Fold.FloorBytes"/>
+    /// can take the failure tail-fold; every other outcome is the same
+    /// per-stream passthrough as before, logged `no-filter` — a coverage
+    /// gap either way, since no filter ran. Exit-code parity on every
+    /// branch; a fold failure degrades to raw.
+    /// </summary>
+    private static int RunUncovered(Store st, string[] args, string[] match)
+    {
+        var result = ProcessRunner.RunCaptured(args);
+        var raw = result.Combined;
+        if (!result.SpawnFailed && result.ExitCode != 0 && raw.Length >= Fold.FloorBytes
+            && TryFailureFold(st, args, match, raw, raw, filtered: false))
+        {
+            return result.ExitCode;
+        }
+        Console.Out.Write(result.Stdout);
+        Console.Error.Write(result.Stderr);
+        // A child that never started is not a coverage gap (#118).
+        LogInvocation(st, match, raw.Length, raw.Length, filtered: false, tty: false, result.SpawnFailed ? Store.ReasonSpawnFail : Store.ReasonNoFilter);
+        return result.ExitCode;
+    }
+
+    /// <summary>
     /// Runs the command with output untouched. Unless the output is a TTY,
     /// bytes are counted so the gap entry is measurable. <paramref name="logArgs"/>
     /// (when given) is the prefix-unwrapped argv used for gap attribution
@@ -493,7 +571,10 @@ public static class Program
         {
             // Child exit is outside this filter's allowlist (a genuine
             // failure for most tools; a fatal/config error for report-style
-            // ones). When in doubt, pass through unchanged.
+            // ones). At or above the floor the failure tail-fold (#165)
+            // bounds it; below, pass through unchanged.
+            if (raw.Length >= Fold.FloorBytes && TryFailureFold(st, args, match, raw, raw, filtered: true))
+                return result.ExitCode;
             return EmitRaw(Store.ReasonNonzeroExit);
         }
 
@@ -505,7 +586,11 @@ public static class Program
 
         if (compact.Length >= raw.Length)
         {
-            // Nothing elided: raw output, no ID.
+            // Nothing elided. On a nonzero exit at or above the floor (a
+            // crash the filter could not shape — no summary line) the
+            // failure tail-fold (#165) bounds it; otherwise raw output, no ID.
+            if (result.ExitCode != 0 && raw.Length >= Fold.FloorBytes && TryFailureFold(st, args, match, raw, raw, filtered: true))
+                return result.ExitCode;
             Console.Out.Write(result.Stdout);
             Console.Error.Write(result.Stderr);
             LogInvocation(st, match, raw.Length, raw.Length, filtered: true, tty: false, entry.Name);

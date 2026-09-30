@@ -133,7 +133,7 @@ public sealed class SmokeHarness : IDisposable
 
     /// <summary>
     /// A scratch bin dir of fake external tools (eslint, gh, mocha, playwright, cross-env,
-    /// npx, npm, dbmate, ls, grep, find, powershell, pwsh), lazily materialized as .cmd shims around the
+    /// npx, npm, dbmate, ls, grep, find, powershell, pwsh, crashtool), lazily materialized as .cmd shims around the
     /// vtk-faketool binary the test project references. Prepended to the
     /// child PATH by <see cref="RunFaked"/>, this is the C# analog of the Go
     /// smoke suite's per-tool fakes compiled into a temp dir — vtk resolves
@@ -149,7 +149,7 @@ public sealed class SmokeHarness : IDisposable
             if (!File.Exists(dll))
                 throw new FileNotFoundException($"vtk-faketool.dll not found beside the tests: {dll}");
             var dir = MakeTempDir();
-            foreach (var name in new[] { "eslint", "gh", "mocha", "cross-env", "npx", "npm", "dbmate", "ls", "grep", "find", "powershell", "pwsh", "cat", "playwright" })
+            foreach (var name in new[] { "eslint", "gh", "mocha", "cross-env", "npx", "npm", "dbmate", "ls", "grep", "find", "powershell", "pwsh", "cat", "playwright", "crashtool" })
             {
                 File.WriteAllText(Path.Combine(dir, name + ".cmd"),
                     $"@dotnet \"{dll}\" --as {name} %*\r\n");
@@ -176,10 +176,15 @@ public sealed class SmokeHarness : IDisposable
         psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
         psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
         using var proc = Process.Start(psi)!;
-        var stdout = proc.StandardOutput.ReadToEnd();
-        var stderr = proc.StandardError.ReadToEnd();
+        // Drain both pipes concurrently: a child that fills the stderr pipe
+        // while the harness is blocked on stdout never closes stdout (#94,
+        // the same deadlock ProcessRunner guards against) — the #165 big
+        // stderr failure shapes hit exactly that.
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        Task.WaitAll(stdoutTask, stderrTask);
         proc.WaitForExit();
-        return (stdout, stderr, proc.ExitCode);
+        return (stdoutTask.Result, stderrTask.Result, proc.ExitCode);
     }
 
     /// <summary>
@@ -248,10 +253,13 @@ public sealed class SmokeHarness : IDisposable
             foreach (var (k, v) in env)
                 psi.EnvironmentVariables[k] = v;
         using var proc = Process.Start(psi)!;
-        var stdout = proc.StandardOutput.ReadToEnd();
-        var stderr = proc.StandardError.ReadToEnd();
+        // Concurrent drain (#94 pattern): the big-stderr fakes (#165) block
+        // on a full stderr pipe under a sequential read.
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        Task.WaitAll(stdoutTask, stderrTask);
         proc.WaitForExit();
-        return (stdout + stderr, proc.ExitCode);
+        return (stdoutTask.Result + stderrTask.Result, proc.ExitCode);
     }
 
     private ProcessStartInfo BasePsi(string dir, string[] args)

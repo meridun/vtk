@@ -10,9 +10,9 @@ namespace Vtk.Tests.Smoke;
 /// <c>Git.Diff</c> with its #135 floor; `git grep -n` (real git) rides
 /// <c>Files.Grep</c>; `git merge` (real git) rides <c>Git.Pull</c>. Each
 /// family logs under its own entry name (never a `no-filter` gap row), the
-/// exit-1 shapes (grep no-match, merge conflict, gh failure) stay raw with
-/// exit-code parity, and the invocation log never carries output content
-/// (invariant 3).
+/// exit-1 shapes (grep no-match, merge conflict, gh failure) keep exit-code
+/// parity — raw below the fold floor, tail-folded at or above it (#165) — and
+/// the invocation log never carries output content (invariant 3).
 /// </summary>
 [Collection("Smoke")]
 public class RegistryReuseSmokeTests : IDisposable
@@ -113,16 +113,53 @@ public class RegistryReuseSmokeTests : IDisposable
     }
 
     [Fact]
-    public void GhPrDiffNonzeroExitStaysRawWithParity()
+    public void GhPrDiffNonzeroExitBelowFloorStaysRawWithParity()
+    {
+        var (raw, rawCode) = _h.RunRawTool(GhCode(1), "gh", "pr", "diff", "42");
+        Assert.Equal(1, rawCode);
+        Assert.True(raw.Length < FloorBytes, $"fake diff unexpectedly at/above the floor ({raw.Length})");
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, GhCode(1), "gh", "pr", "diff", "42");
+        Assert.Equal(rawCode, code); // parity: exit 1 is outside the `gh pr` allowlist
+        SmokeAssert.NoOk(outp + err);
+        // Below the floor a failure is byte-identical raw (#165, invariant 2).
+        Assert.Equal(raw, outp + err);
+        Assert.Contains("\"reason\":\"nonzero-exit\"", _h.InvocationLog());
+    }
+
+    [Fact]
+    public void GhPrDiffNonzeroExitAboveFloorFoldsToTailWithParity()
     {
         var (raw, rawCode) = _h.RunRawTool(GhCode(1), "gh", "pr", "diff", "big");
         Assert.Equal(1, rawCode);
+        Assert.True(raw.Length >= FloorBytes, $"fake diff below the floor ({raw.Length})");
 
         var (outp, err, code) = _h.RunFaked(_h.Repo, GhCode(1), "gh", "pr", "diff", "big");
         Assert.Equal(rawCode, code); // parity: exit 1 is outside the `gh pr` allowlist
-        SmokeAssert.NoOk(outp + err);
-        Assert.Equal(raw, outp + err); // failure output survives unaltered (invariant 2)
-        Assert.Contains("\"reason\":\"nonzero-exit\"", _h.InvocationLog());
+        // A failure at or above the floor takes the failure tail-fold (#165):
+        // bounded tail + OK <id>, full raw recoverable, `failure-fold` row
+        // attributed to the covered `gh pr` family (not a coverage gap).
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.True(outp.Length <= 8 * 1024 + 16, $"failure fold not bounded ({outp.Length} bytes); stderr: {err}");
+        Assert.Contains(DiffMarker + " padding line 1199", outp);
+        Assert.DoesNotContain(DiffMarker + " padding line 0:", outp);
+        Assert.DoesNotContain("internal/big.go | +1200 -0", outp); // tail, not stats
+
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("# cmd: gh pr diff big", shown);
+        Assert.Contains(DiffMarker + " padding line 0:", shown);
+        Assert.Contains(DiffMarker + " padding line 1199", shown);
+
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"failure-fold\"", log);
+        Assert.Contains("\"filtered\":true", log);
+        Assert.DoesNotContain("\"reason\":\"nonzero-exit\"", log);
+        Assert.DoesNotContain(DiffMarker, log); // invariant 3
+
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("gh pr", SmokeAssert.GapTable(gaps));
     }
 
     // ---- git grep -> Files.Grep --------------------------------------------

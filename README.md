@@ -62,8 +62,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   (#134) — so a `1200 passing` line followed by leftover console noise survives the fold
   instead of needing a `vtk show` round trip; the pin scan sees through ANSI color codes
   (#163), and a pinned colored line is emitted verbatim. Below the floor, output passes through byte-identical (so
-  terse, load-bearing scripts like `npm run sdlc` are never touched), and failures are never
-  folded — nonzero exits keep their full output inline. Unfolded gaps are attributed to the
+  terse, load-bearing scripts like `npm run sdlc` are never touched), and failures below the
+  floor keep their full output inline (at or above it the failure tail-fold below applies,
+  #165). Unfolded gaps are attributed to the
   inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
   npm. When the inner filter exists and ran but had nothing to elide (a mocha crash before
   any spec, say), the invocation is logged as filtered under that filter's name — the same
@@ -78,10 +79,25 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   shared floor constant with the npm fold) collapses to a short summary tail (same shape as the
   npm fold, including the pinned runner summary lines, #134) plus an `OK <id>`
   recovery line, with the full raw output recoverable via `vtk show`. Below the floor, output
-  passes through byte-identical; failures are never folded — a red test run keeps its full
-  output inline with the script's exit code returned unchanged. Both spellings (± `.exe`, any
+  passes through byte-identical; a failure below the floor keeps its full output inline (a red
+  test run's exit code is returned unchanged either way; at or above the floor the failure
+  tail-fold below applies, #165). Both spellings (± `.exe`, any
   case) are covered; `-Command`/`-EncodedCommand` invocations bypass the fold and pass through
   gap-logged. Measured ≈99.8% on a 146 KB real-run fold.
+- **failure tail-fold** (#165) — any nonzero exit whose output is 64 KiB or more (the shared
+  fold floor), in every family including commands with no filter: the child's exit code is
+  outside the filter's allowlist, or its filter ran and could not shape the output (a test
+  runner that crashed before printing a summary). The full raw output is spooled and the tail
+  is emitted in its place: the last ~8 KiB, line-aligned, preceded by up to 20 `Error:` /
+  `AssertionError` / `##[error]` lines pulled from above the tail, then `OK <id>`. Exit code
+  untouched; failures below the floor stay byte-identical raw. The agent harness keeps the head
+  of oversized tool output, so this replaces a truncated log whose stack trace was cut with a
+  bounded one that ends in it. Logged under the `failure-fold` reason; a folded failure of a
+  command with no filter still counts as a coverage gap in `vtk gaps`. To gate on size, an
+  uncovered command's output is captured until exit when vtk's stdout is not a terminal (it
+  was streamed before); on a real terminal every command still passes through interactively.
+  Measured 92% on the 106 KB real node-crash fixture (106,377 B → 8,141 B) and 96% on a 207 KB
+  real-run crash (206,686 B → 8,187 B).
 - **launcher-prefix unwrap** (#97) — filter matching sees through transparent launcher prefixes:
   `cross-env VAR=x <cmd>`, `npx <cmd>` (with `--yes`/`-y`/`--no-install`), and bare leading
   `VAR=x` tokens, stacked in any combination, unwrap to the inner command before filter lookup —
@@ -186,10 +202,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   pattern text is never written); output and exit codes of `show` are unchanged.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
   reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`,
-  `spawn-fail`, `binary`), and filtered
+  `spawn-fail`, `binary`, `failure-fold`), and filtered
   invocations record the engaged filter's registry name (e.g. `gh run`) as theirs, so the
   invocation log names which filter handled each call; `vtk gaps`
-  reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
+  reports only true coverage gaps (`no-filter`, plus `failure-fold` rows where no filter
+  existed for the command), aggregated by command family and sorted by raw
   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
   Families are keyed `argv[0] argv[1]` for commands with a registered pair key (`git`, `gh`,
   `npx`, `dbmate`; known git global options such as `-C <dir>` / `--no-pager` are normalized
@@ -230,7 +247,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   gross never moves; net is the honest figure. `show` rows are never counted as calls.
   Caveat on the economics: raw bytes are counted as saved even where the agent's own
   `| tail -N` (or similar) would have discarded them, so gross overstates savings on piped
-  runs.
+  runs; likewise the agent harness caps tool output (Claude Code keeps the head), so raw bytes
+  above that cap — the oversized failures the `failure-fold` reason bounds (#165) — were never
+  all model-visible, and the dollar line overstates the stakes on that class.
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm`/`winget`/`choco`/`reg` route
   through vtk without being prefixed. Marker-delimited and idempotent, with
@@ -408,7 +427,9 @@ user-scoped ACLs of `%LocalAppData%` (POSIX 0700 permissions are a no-op on NTFS
 ## Core behavior (design contract)
 
 - **Always safe**: `vtk <cmd>` never changes the command's semantics or exit code. If no filter
-  matches, output passes through unchanged (and the fallback is logged).
+  matches, output passes through unchanged (and the fallback is logged); the one exception is
+  a failure of 64 KiB or more, which folds to a bounded tail + `OK <id>` with the full output
+  spooled (#165) — the exit code still passes through untouched.
 - **Chain-friendly**: works per-command inside `&&` chains.
 - **Measurable**: `vtk gain` reports cumulative token savings; fallback logs
   (`vtk gaps`) report the gap.

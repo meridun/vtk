@@ -129,6 +129,7 @@ vtk <cmd> [args...]
   ├─ 1. Dispatch: match <cmd> (+ subcommand) against the filter registry
   │      match  → run command, capture output, spool raw, apply filter, emit compact result
   │      no match → run command with output passed through untouched, write gap entry
+  │      (off-TTY the output is captured until exit so an oversized failure can tail-fold)
   │      wrapper (`npm run <script>`) → capture once, strip the wrapper banner, re-dispatch
   │      the body to the inner tool's filter; an uncovered inner tool gap-logs under the
   │      inner tool's family, not the wrapper's
@@ -141,8 +142,10 @@ vtk <cmd> [args...]
   │      Interactive/TTY-detected invocations bypass filtering entirely. On the filtered
   │      success path, stdout and stderr are folded into one compact result on stdout;
   │      per-stream separation is preserved on all raw, passthrough, and degraded paths.
-  │      Nonzero child exits skip filtering — failures always emit raw — except codes a
-  │      filter declares in its exit-code allowlist (report-style tools; see registry #7).
+  │      Nonzero child exits skip filtering — failures emit raw — except codes a filter
+  │      declares in its exit-code allowlist (report-style tools; see registry #7). A
+  │      failure at or above the fold floor (any family, covered or not) spools the raw and
+  │      emits a bounded tail + `OK <id>` instead of raw; below the floor it is byte-identical.
   │
   └─ 3. Sweep: opportunistically delete spool entries past TTL (no daemon)
 ```

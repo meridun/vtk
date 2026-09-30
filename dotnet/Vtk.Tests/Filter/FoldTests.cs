@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Vtk.Core.Filter;
 using Xunit;
 
@@ -185,5 +186,128 @@ public class FoldTests
         var huge = "  7 passing " + new string('x', Fold.TailMaxBytes);
         var body = huge + "\nn1\nn2\nn3\nn4\nn5\n";
         Assert.Equal("n1\nn2\nn3\nn4\nn5", Fold.Tail(body));
+    }
+
+    // ---- Failure tail (#165, registry Q1 option B) ---------------------------
+
+    private static readonly string FoldFixtureDir = Path.Combine(
+        AppContext.BaseDirectory, "Filter", "testdata", "fold");
+
+    [Fact]
+    public void FailureTail_RealNodeCrashCapture_MatchesGolden()
+    {
+        // Captured from a real node v24 run (stdout then stderr, the order
+        // CapturedResult.Combined concatenates them): 1400 progress lines
+        // with four retryable `Error: connect ECONNREFUSED` lines mid-stream,
+        // then an AssertionError stack on stderr at exit 1. The oversized
+        // failure shape from the #165 evidence, at 106 KB.
+        var raw = File.ReadAllText(Path.Combine(FoldFixtureDir, "node_crash_real.raw.txt"));
+        var want = File.ReadAllText(Path.Combine(FoldFixtureDir, "node_crash_real.want.txt"));
+        Assert.True(raw.Length >= Fold.FloorBytes,
+            $"fixture below the fold floor: {raw.Length} bytes");
+
+        var tail = Fold.FailureTail(raw);
+        Assert.Equal(want, tail);
+
+        // The final stack trace is inline, in original order, at the end.
+        Assert.Contains("AssertionError [ERR_ASSERTION]: batch count drifted during flush", tail);
+        Assert.Contains("at Object.<anonymous> (C:\\src\\demo\\scripts\\flush-batches.js:13:8)", tail);
+        Assert.EndsWith("Node.js v24.18.0", tail.TrimEnd('\r', '\n'));
+        // The retry errors that scrolled past the positional tail are pinned
+        // above it, verbatim; their stack frames are not.
+        Assert.StartsWith("Error: connect ECONNREFUSED 127.0.0.1:5432 (retry 1/4)\n", tail);
+        Assert.Contains("Error: connect ECONNREFUSED 127.0.0.1:5432 (retry 4/4)", tail);
+        Assert.Single(Regex.Matches(tail, "afterConnect")); // only the frame inside the positional tail
+        // The bulk folds away.
+        Assert.DoesNotContain("processed batch 0001/1400", tail);
+
+        // Bounded and line-aligned: measured savings on the capture.
+        Assert.True(tail.Length <= Fold.FailureTailMaxBytes, $"tail is {tail.Length} chars");
+        var saved = raw.Length - tail.Length;
+        Assert.True(saved >= raw.Length * 0.90,
+            $"failure fold saved only {saved} of {raw.Length} bytes");
+    }
+
+    public static TheoryData<string, string, string> FailureCases => new()
+    {
+        {
+            "sub-budget body is returned whole, trailing blank lines dropped",
+            "line 1\nError: boom\nline 3\n\n\n",
+            "line 1\nError: boom\nline 3"
+        },
+        {
+            "error line inside the positional tail is not moved or duplicated",
+            "a\nError: x\nb\n",
+            "a\nError: x\nb"
+        },
+        {
+            "##[error] and TypeError pin above the tail; stack frames and prose do not",
+            new string('p', 9000) + "\n##[error]step failed\n    at Object.run (x.js:1:1)\nTypeError: bad\nthe error was logged above\n" + new string('q', 9000) + "\ntail line\n",
+            "##[error]step failed\nTypeError: bad\ntail line"
+        },
+        {
+            "CRLF body keeps the CR on the pinned line",
+            new string('p', 9000) + "\r\nAssertionError [ERR_ASSERTION]: x\r\n" + new string('q', 9000) + "\r\ntail\r\n",
+            "AssertionError [ERR_ASSERTION]: x\r\ntail\r"
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(FailureCases))]
+    public void FailureTail_Cases(string name, string body, string want)
+    {
+        var tail = Fold.FailureTail(body);
+        Assert.Equal(want, tail);
+        Assert.True(tail.Length <= Fold.FailureTailMaxBytes, name);
+    }
+
+    [Fact]
+    public void FailureTail_PinsNearestErrorLinesUpToTheCap()
+    {
+        // 30 error lines above an oversized filler line and a 100-line tail:
+        // the 20 nearest the tail pin, in original order, ahead of the
+        // positional tail.
+        var errors = Enumerable.Range(1, 30).Select(i => $"Error: failure {i:00}");
+        var tailLines = Enumerable.Range(1, 100).Select(i => $"line {i:000}");
+        var body = string.Join("\n", errors.Append(new string('f', 9000)).Concat(tailLines)) + "\n";
+        var tail = Fold.FailureTail(body);
+        var lines = tail.Split('\n');
+        Assert.Equal(Fold.FailureErrorMaxLines + 100, lines.Length);
+        Assert.Equal("Error: failure 11", lines[0]);
+        Assert.Equal("Error: failure 30", lines[Fold.FailureErrorMaxLines - 1]);
+        Assert.Equal("line 001", lines[Fold.FailureErrorMaxLines]);
+        Assert.Equal("line 100", lines[^1]);
+    }
+
+    [Fact]
+    public void FailureTail_PinnedBytesCountInsideTheBudget_LineAligned()
+    {
+        // A body far past the budget: the positional tail is cut on a line
+        // boundary, the pinned error line takes budget priority, and the
+        // whole result never exceeds FailureTailMaxBytes.
+        var noise = new string('n', 1000);
+        var body = "Error: early diagnostic\n" + string.Join("\n", Enumerable.Repeat(noise, 40)) + "\n";
+        var tail = Fold.FailureTail(body);
+        Assert.StartsWith("Error: early diagnostic\n", tail);
+        Assert.True(tail.Length <= Fold.FailureTailMaxBytes, $"tail is {tail.Length} chars");
+        var kept = tail.Split('\n');
+        Assert.All(kept.Skip(1), l => Assert.Equal(noise, l));
+        Assert.Equal(1 + (Fold.FailureTailMaxBytes - "Error: early diagnostic\n".Length) / (noise.Length + 1), kept.Length);
+    }
+
+    [Fact]
+    public void FailureTail_ColoredErrorLinePinsVerbatim()
+    {
+        var colored = "\x1b[31mError: No test files found\x1b[39m";
+        var body = colored + "\n" + new string('x', 9000) + "\ntail\n";
+        Assert.Equal(colored + "\ntail", Fold.FailureTail(body));
+    }
+
+    [Fact]
+    public void FailureTail_OversizedFinalLine_YieldsBareFold()
+    {
+        // Same rule as Tail: a final line over budget is dropped, not truncated.
+        var body = "Error: x\n" + new string('y', Fold.FailureTailMaxBytes + 1) + "\n";
+        Assert.Equal("Error: x", Fold.FailureTail(body));
     }
 }
