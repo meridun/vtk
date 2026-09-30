@@ -176,6 +176,39 @@ public class RegistryTests
     }
 
     /// <summary>
+    /// `playwright test` resolves on exit 0 and 1 (a failing run is a
+    /// report, #169) and not on 2+; `npx playwright test` reaches the same
+    /// entry through the #97 launcher unwrap, so no twin key exists.
+    /// </summary>
+    [Theory]
+    [InlineData("playwright test")]
+    [InlineData("npx playwright test tests/e2e")]
+    [InlineData("npx --yes playwright test --reporter=list")]
+    public void Default_PlaywrightTest_AllowsExitZeroAndOne(string cmd)
+    {
+        var r = Registry.Default();
+        var argv = Prefix.Unwrap(cmd.Split(' '));
+        Assert.True(r.TryLookup(argv, out var entry));
+        Assert.Equal("playwright test", entry.Name);
+        Assert.True(entry.Filters(0) && entry.Filters(1));
+        Assert.False(entry.Filters(2));
+        Assert.False(entry.Filters(-1));
+    }
+
+    /// <summary>Other playwright subcommands stay unfiltered; the pair key makes them their own gap rows (#139).</summary>
+    [Theory]
+    [InlineData("playwright show-report")]
+    [InlineData("playwright install")]
+    [InlineData("playwright")]
+    public void Default_Playwright_OtherSubcommandsMiss(string cmd)
+    {
+        var r = Registry.Default();
+        Assert.False(r.TryLookup(cmd.Split(' '), out _));
+        Assert.Contains("playwright", r.PairKeyedCommands);
+        Assert.Equal(cmd, r.GapFamily(cmd));
+    }
+
+    /// <summary>
     /// `node --test` resolves via the regex path (#168) — `--test` in any
     /// position after `node`, flags/values ahead of it tolerated — on exit
     /// 0 and 1 (a failing run is a report). The exact token is required, so

@@ -1,0 +1,21 @@
+Running 8 tests using 2 workers
+
+  x  1 [chromium] › tests\flaky.spec.js:2:1 › loads the map on retry (5ms)
+
+  1) [chromium] › tests\flaky.spec.js:2:1 › loads the map on retry ─────────────────────────────────
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      1 | const { test, expect } = require('@playwright/test');
+    > 2 | test('loads the map on retry', async ({}, testInfo) => { expect(testInfo.retry).toBeGreaterThan(0); });
+        |                                                                                 ^
+      3 |
+        at C:\work\shop\tests\flaky.spec.js:2:81
+
+  1 flaky
+    [chromium] › tests\flaky.spec.js:2:1 › loads the map on retry ──────────────────────────────────
+  1 skipped
+  6 passed (1.1s)
