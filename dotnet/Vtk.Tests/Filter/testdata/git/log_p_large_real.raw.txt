@@ -1,0 +1,1749 @@
+commit ae71d5fe688253d308c7e0131c6cd6beee67fe19
+Merge: 55e9502 18ab93e
+Author: Fixture Bot <fixtures@example.com>
+Date:   Mon Sep 7 00:30:53 2026 -0400
+
+    Merge pull request #162 from meridun/fix/155-invocation-log-append-retry
+    
+    fix(spool): retry invocations.jsonl append past concurrent-writer sharing violation (#155)
+
+commit 18ab93ebf59cb208e410aedd11c7b56380b14d83
+Author: Fixture Bot <fixtures@example.com>
+Date:   Mon Sep 7 00:26:22 2026 -0400
+
+    test(spool): correct stale retry-budget comment on LogInvocation test (#155)
+    
+    Audit advisory 1: the LogInvocation retry budget is a 500 ms jittered window, not the
+    25/50/100 ms ladder the Write path uses.
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/dotnet/Vtk.Tests/Spool/StoreTests.cs b/dotnet/Vtk.Tests/Spool/StoreTests.cs
+index b8924ec..1eaf639 100644
+--- a/dotnet/Vtk.Tests/Spool/StoreTests.cs
++++ b/dotnet/Vtk.Tests/Spool/StoreTests.cs
+@@ -128,7 +128,7 @@ public class StoreTests : IDisposable
+         var otherAppender = new FileStream(meta, FileMode.Append, FileAccess.Write, FileShare.Read);
+         var release = Task.Run(async () =>
+         {
+-            await Task.Delay(60); // shorter than the 25+50+100 ms retry budget
++            await Task.Delay(60); // well inside the 500 ms append retry budget
+             otherAppender.Dispose();
+         });
+         try
+
+commit 077b71658996f90ed4691247bb617cb512b469f4
+Author: Fixture Bot <fixtures@example.com>
+Date:   Mon Sep 7 00:21:30 2026 -0400
+
+    test(smoke): concurrent vtk herd keeps every invocations.jsonl row (#155)
+    
+    Real-binary smoke for the append retry: 8 concurrent vtk git status and the
+    #134 pair of concurrent vtk npm test must log exactly one parseable row each,
+    with no 'vtk: gap log failed:' on stderr and unchanged exit codes. Fails on
+    the pre-fix dev binary (sharing violation drops rows), passes on the branch.
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/dotnet/Vtk.Tests/Smoke/InvocationLogSmokeTests.cs b/dotnet/Vtk.Tests/Smoke/InvocationLogSmokeTests.cs
+new file mode 100644
+index 0000000..5cec997
+--- /dev/null
++++ b/dotnet/Vtk.Tests/Smoke/InvocationLogSmokeTests.cs
+@@ -0,0 +1,81 @@
++using System.Text.Json;
++using Xunit;
++
++namespace Vtk.Tests.Smoke;
++
++/// <summary>
++/// End-to-end smoke for #155: concurrent vtk processes appending to the same
++/// <c>invocations.jsonl</c> must not lose telemetry rows to a Windows sharing
++/// violation. Runs a herd of real vtk invocations against one isolated home
++/// and requires exactly one parseable row per invocation, no
++/// <c>vtk: gap log failed:</c> on stderr, and unchanged exit codes. Earlier
++/// concurrent smokes assert <c>&gt;= 1</c> rows because the pre-#155 append
++/// dropped ~1 in 10; this one asserts <c>== N</c>.
++/// </summary>
++[Collection("Smoke")]
++public class InvocationLogSmokeTests : IDisposable
++{
++    private readonly SmokeHarness _h = new();
++    public void Dispose() => _h.Dispose();
++
++    private const string GapLogFailed = "vtk: gap log failed:";
++
++    private string[] Rows()
++    {
++        var path = Path.Combine(_h.Home, "vtk", "invocations.jsonl");
++        if (!File.Exists(path)) return Array.Empty<string>();
++        return File.ReadAllLines(path).Where(l => l.Length > 0).ToArray();
++    }
++
++    private static string Cmd(string row)
++    {
++        using var doc = JsonDocument.Parse(row); // throws on a clobbered/partial row
++        return doc.RootElement.GetProperty("cmd").GetString()!;
++    }
++
++    [Fact]
++    public async Task ConcurrentGitStatusHerdLogsEveryRow()
++    {
++        const int n = 8;
++        File.WriteAllText(Path.Combine(_h.Repo, "untracked.txt"), "x\n");
++
++        var tasks = Enumerable.Range(0, n)
++            .Select(_ => Task.Run(() => _h.Run(_h.Repo, "git", "status")))
++            .ToArray();
++        var results = await Task.WhenAll(tasks);
++
++        foreach (var r in results)
++        {
++            Assert.Equal(0, r.code); // parity: raw `git status` exits 0
++            Assert.DoesNotContain(GapLogFailed, r.stderr);
++            // Spool replace-race losers degrade to raw passthrough (#125);
++            // either way the output is complete.
++            Assert.True(r.stdout.Contains("OK ") || r.stdout.Contains("untracked.txt"), "incomplete output:\n" + r.stdout);
++        }
++
++        var rows = Rows();
++        Assert.Equal(n, rows.Length);
++        Assert.All(rows, row => Assert.Equal("git status", Cmd(row)));
++    }
++
++    [Fact]
++    public async Task ConcurrentNpmTestPairLogsBothRows()
++    {
++        // The #134 shape that surfaced the bug: two `vtk npm test` at once.
++        var env = new Dictionary<string, string> { ["VTK_FAKE_MOCHA_CODE"] = "1" };
++        var t1 = Task.Run(() => _h.RunFaked(_h.Repo, env, "npm", "test"));
++        var t2 = Task.Run(() => _h.RunFaked(_h.Repo, env, "npm", "test"));
++        var results = await Task.WhenAll(t1, t2);
++
++        foreach (var r in results)
++        {
++            Assert.Equal(1, r.code); // parity through the npm dispatch layer
++            Assert.DoesNotContain(GapLogFailed, r.stderr);
++        }
++
++        var rows = Rows();
++        Assert.Equal(2, rows.Length);
++        // #153: the inner filter owns attribution, so the row names mocha.
++        Assert.All(rows, row => Assert.Contains("mocha", Cmd(row)));
++    }
++}
+
+commit 23eab67a37140a5b828d085f1275f306c9d7a99c
+Author: Fixture Bot <fixtures@example.com>
+Date:   Mon Sep 7 00:14:45 2026 -0400
+
+    fix(spool): retry invocations.jsonl append past concurrent-writer sharing violation (#155)
+    
+    Store.LogInvocation opened the metadata log with FileMode.Append and
+    FileShare.Read and gave up on the first IOException, so a second
+    concurrent vtk invocation lost its telemetry row (stderr note only).
+    Keep the exclusive-writer open mode (FileMode.Append seeks to EOF at
+    open, so shared writers could clobber each other) and wait it out
+    instead: a 500 ms jittered retry loop around the open. On final failure
+    the exception still propagates to the existing App.cs catch, so stdout,
+    exit code, and the spool are untouched.
+    
+    Tests: hold the log as a real second appender and release inside the
+    retry window; 16 in-process appenders must yield exactly 16 rows. Both
+    Windows-gated (sharing violations are Windows semantics).
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/dotnet/Vtk.Core/Spool/Store.cs b/dotnet/Vtk.Core/Spool/Store.cs
+index 589924c..19cabb5 100644
+--- a/dotnet/Vtk.Core/Spool/Store.cs
++++ b/dotnet/Vtk.Core/Spool/Store.cs
+@@ -188,11 +188,42 @@ public sealed class Store
+     {
+         inv = inv with { Cmd = Redact(inv.Cmd) };
+         var json = JsonSerializer.Serialize(inv);
+-        using var fs = new FileStream(MetaPath, FileMode.Append, FileAccess.Write, FileShare.Read);
++        // FileShare.Read (no Write sharing) makes concurrent appenders
++        // mutually exclusive: FileMode.Append seeks to EOF at open rather
++        // than using O_APPEND, so two writers opened at the same EOF would
++        // clobber each other's row. The loser sees a sharing violation
++        // (IOException) on Windows; a bounded, jittered retry waits out the
++        // other appenders' short writes (#155). On final failure the
++        // exception propagates so the caller degrades to its stderr note —
++        // never touching stdout, exit code, or the spool.
++        using var fs = OpenAppendWithRetry(MetaPath);
+         using var writer = new StreamWriter(fs, Encoding.UTF8);
+         writer.WriteLine(json);
+     }
+ 
++    // Each append holds the file for microseconds, so a herd of concurrent
++    // vtk invocations serialises well inside this budget. Jittered sleeps
++    // keep the losers from re-colliding in lockstep (a fixed 25/50/100 ms
++    // ladder does exactly that under a 16-way race).
++    private static readonly TimeSpan AppendRetryBudget = TimeSpan.FromMilliseconds(500);
++
++    private static FileStream OpenAppendWithRetry(string path)
++    {
++        var deadline = Environment.TickCount64 + (long)AppendRetryBudget.TotalMilliseconds;
++        for (; ; )
++        {
++            try
++            {
++                return new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
++            }
++            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
++            {
++                if (Environment.TickCount64 >= deadline) throw;
++                Thread.Sleep(Random.Shared.Next(2, 12));
++            }
++        }
++    }
++
+     /// <summary>Returns all logged entries, skipping malformed lines.</summary>
+     public List<Invocation> Invocations()
+     {
+diff --git a/dotnet/Vtk.Tests/Spool/StoreTests.cs b/dotnet/Vtk.Tests/Spool/StoreTests.cs
+index 5524545..b8924ec 100644
+--- a/dotnet/Vtk.Tests/Spool/StoreTests.cs
++++ b/dotnet/Vtk.Tests/Spool/StoreTests.cs
+@@ -111,6 +111,76 @@ public class StoreTests : IDisposable
+         Assert.Contains("second", _store.Read(id));
+     }
+ 
++    [Fact]
++    public async Task LogInvocation_RetriesPastConcurrentAppender()
++    {
++        // #155: two concurrent vtk invocations append to invocations.jsonl;
++        // the second open hits a sharing violation while the first appender
++        // holds the file (FileShare.Read, no Write sharing). Hold the log
++        // open as a real second appender, release it on another thread
++        // inside the retry window, and require the row to land rather than
++        // be dropped. Sharing violations are Windows semantics — skip elsewhere.
++        if (!OperatingSystem.IsWindows()) return;
++
++        _store.LogInvocation(new Invocation { Cmd = "git status", RawBytes = 10, Filtered = true });
++        var meta = Path.Combine(_dir, "invocations.jsonl");
++
++        var otherAppender = new FileStream(meta, FileMode.Append, FileAccess.Write, FileShare.Read);
++        var release = Task.Run(async () =>
++        {
++            await Task.Delay(60); // shorter than the 25+50+100 ms retry budget
++            otherAppender.Dispose();
++        });
++        try
++        {
++            _store.LogInvocation(new Invocation { Cmd = "git log", RawBytes = 20, Filtered = true });
++        }
++        finally
++        {
++            await release;
++        }
++
++        var rows = _store.Invocations();
++        Assert.Equal(new[] { "git status", "git log" }, rows.Select(r => r.Cmd));
++    }
++
++    [Fact]
++    public void LogInvocation_ConcurrentAppenders_KeepEveryRow()
++    {
++        // #155: N in-process appenders racing on the same log must yield
++        // exactly N parseable rows — none dropped to a sharing violation,
++        // none clobbered by an overlapping EOF write. Windows-gated: the
++        // sharing violation the retry absorbs is a Windows semantic.
++        if (!OperatingSystem.IsWindows()) return;
++
++        const int n = 16;
++        var threads = new Thread[n];
++        var failures = new List<Exception>();
++        for (var i = 0; i < n; i++)
++        {
++            var cmd = "git log --oneline -" + i;
++            threads[i] = new Thread(() =>
++            {
++                try
++                {
++                    _store.LogInvocation(new Invocation { Cmd = cmd, RawBytes = 100, OutBytes = 10, Filtered = true });
++                }
++                catch (Exception ex)
++                {
++                    lock (failures) failures.Add(ex);
++                }
++            });
++        }
++        foreach (var t in threads) t.Start();
++        foreach (var t in threads) t.Join();
++
++        Assert.Empty(failures);
++        var rows = _store.Invocations();
++        Assert.Equal(n, rows.Count);
++        Assert.Equal(n, rows.Select(r => r.Cmd).Distinct().Count());
++        Assert.Equal(n, File.ReadAllLines(Path.Combine(_dir, "invocations.jsonl")).Count(l => l.Length > 0));
++    }
++
+     [Fact]
+     public void Read_UnknownId_Throws()
+     {
+
+commit 55e950207d6e222a5e13a9885edda844c7062d67
+Merge: 52f89d8 f847b0d
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 06:43:27 2026 -0400
+
+    Merge pull request #159 from meridun/feat/137-show-recovery-telemetry
+    
+    feat(show,gaps,gain): log vtk show and report fold-recovery rate per filter (#137)
+
+commit f847b0de576f9d0fd8b42328299bfeebca806653
+Merge: 6e8801d 52f89d8
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 06:43:05 2026 -0400
+
+    Merge origin/dev into feat/137-show-recovery-telemetry (#137)
+    
+    Resolve conflicts with #136 (spool cwd keying), #139 (gap families keyed
+    per Registry.GapFamily) and #153 (npm inner-filter attribution): the npm
+    banner-stripped row keeps the #153 filtered/reason attribution and adds
+    the #137 spool id; PrintGapsReport takes the Registry and still emits the
+    recovered-folds section; README keeps both the cwd-keyed spool note and
+    the show-telemetry note.
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+commit 52f89d80f95186cbfeeae4fa2db5f6a376e03226
+Merge: cae6ff1 0c2b842
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 06:36:27 2026 -0400
+
+    Merge pull request #161 from meridun/fix/153-npm-inner-filter-attribution
+    
+    fix(npm): attribute "inner filter ran, elided nothing" rows to the filter (#153)
+
+commit cae6ff1d82e2c19a7fa28c8aeca9d105b448f7fe
+Merge: f9a5f3d 13b251d
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 06:35:49 2026 -0400
+
+    Merge pull request #160 from meridun/fix/139-gaps-pair-families
+    
+    fix(gaps): key gap families by subcommand for pair-keyed tools and report dispatch gaps (#139)
+
+commit f9a5f3db9ce22324a5c0c103586b079d0de203e5
+Merge: 85e2653 76f96ce
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 06:35:06 2026 -0400
+
+    Merge pull request #158 from meridun/fix/136-spool-id-cwd
+    
+    fix(spool): key the spool id on (cwd, argv) and warn on cross-directory show (#136)
+
+commit 85e2653cf3a47d2b77ab48f8c31a92894a5701d8
+Merge: ea62c05 7815fff
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 06:34:35 2026 -0400
+
+    Merge pull request #157 from meridun/fix/135-git-hunk-fold-floor
+    
+    fix(git): pass git diff / git show hunk output through below the 64 KiB fold floor (#135)
+
+commit 0c2b84278ab2063ccb43534e27262c0645f56435
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 03:24:23 2026 -0400
+
+    docs(readme,coverage): npm inner-filter rows that elided nothing are attributed to the filter (#153)
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/README.md b/README.md
+index 1b7bdc8..53727a9 100644
+--- a/README.md
++++ b/README.md
+@@ -47,7 +47,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
+   terse, load-bearing scripts like `npm run sdlc` are never touched), and failures are never
+   folded — nonzero exits keep their full output inline. Unfolded gaps are attributed to the
+   inner tool's family when the banner reveals it — `vtk gaps` points at the real tool, not
+-  npm. The full raw output, banner included, stays recoverable via `vtk show`. Measured 44–58%
++  npm. When the inner filter exists and ran but had nothing to elide (a mocha crash before
++  any spec, say), the invocation is logged as filtered under that filter's name — the same
++  attribution the direct path uses (#153) — so `vtk gaps` never proposes a filter that already
++  shipped. The full raw output, banner included, stays recoverable via `vtk show`. Measured 44–58%
+   on banner-strip/delegation fixtures and ≈99.8% on a 122 KB folded run; savings compound with
+   the inner filter's on large reports. Aliases behave byte-identically to their `npm run`
+   spellings; off-TTY `npm start` buffers output until exit (same as `npm run start`), and on a
+diff --git a/docs/ToolCoverage.md b/docs/ToolCoverage.md
+index 6d187e4..0a18ce4 100644
+--- a/docs/ToolCoverage.md
++++ b/docs/ToolCoverage.md
+@@ -31,7 +31,7 @@ hand-written filter always wins its command.
+ | Git (core) | status, log, diff, show, add, commit, push, pull, branch (+ passthrough for all other subcommands) | 59–80% | shipped — measured 47–89% on typical fixtures (status 84%, log 82%, diff 84%, show 85%, push-with-progress 89%; low end 2–11% on already-terse output, 100% on noise-only). Global-option forms (#152): `git -C <dir>`, `-c <k=v>`, `--no-pager`/`-P`, `-p`/`--paginate`, `--git-dir[=<path>]`, `--work-tree[=<path>]` ahead of the subcommand are normalized for registry lookup only (the executed command line is untouched) and engage the filter for `status`, `branch`, `add`, `commit`, `push`, `pull`; `diff`, `show`, `log` behind a global option stay passthrough and keep gap-logging (their folds are usually recovered, so normalizing them would add recovery round trips; revisit on #137 telemetry) |
+ | Git (rest) | fetch, stash, worktree | 59–80% | planned |
+ | GitHub | `gh pr view/checks`, `gh run list`, `gh issue list`, `gh api` | 26–87% | shipped (list shapes + CI-log fold) — list shapes measured 33–48% on fixtures (`gh issue list` 33%, `gh pr list` 46%, `gh run list` 48%); compacts list-table output to `#<n> <state> <title> (<age>)` (runs: `<conclusion> <title> · <workflow>`). `gh run view --log`/`--log-failed` CI-log fold (#96): passing (job, step) sections collapse to `OK <job> (n lines)` keeping `##[warning]` lines; failing sections (`##[error]` / nonzero step exit) stay inline with job/step/timestamp prefixes, ANSI stripped; a failure-scoped log with no explicit marker keeps its last 20 lines as a tail. Measured 56–91% on fixtures (mixed 3-job run 84%, marker-failed 56%, no-marker 91%). `gh run` filters exit `{0,1}` (a failed run's log is a report; shape guards — ≥10 tab+timestamp log rows, ≥90% log-shaped — pass non-log error output through raw with stream separation intact); other gh entries filter exit `0` only. `view` summary/`--json`/`api` shapes pass through structurally intact |
+-| npm/npx | `npm run`, `npx` | 70–90% | shipped (`npm run` dispatch, #8) — measured 44–58% on fixtures (eslint-delegated `npm run lint` 44%, banner-only strip on short script output 58%; savings compound with the inner filter's on large reports). Strips the npm banner, delegates the body to the inner tool's registered filter, gap-attributes uncovered inner tools to their own family (not npm); full raw (banner included) recoverable via `OK <id>`. Size-floored fold for unrecognized inner tools shipped (#93, registry option C): exit-0 output ≥ 64 KiB folds to a ≤5-line summary tail + `OK <id>` — on both the banner-present path (attributed to the inner family) and the no-banner path modern npm takes under pipe capture (attributed to npm, since the inner tool is undiscoverable without the banner); below the floor output stays byte-identical inline but is logged `filtered=true`, so terse load-bearing scripts (`npm run sdlc`) leave the gap table with output untouched; any nonzero exit never folds (full raw, still a gap). Measured ≈99.8% on a 122 KB real-run fold, 79.8% cumulative over the 10-call real-run smoke sequence; spool-failure degrades to full raw. Pinned summary lines shipped (#134, registry option B): the shared fold tail (`npm run`, lifecycle aliases, `powershell -File`) pins up to 3 runner summary lines that fit — mocha `N passing`/`failing`/`pending`, jest `Tests: … passed`/`failed`, eslint `N problems` — from above the positional 5-line tail, nearest first, counted inside the 512 B cap, so a mocha summary followed by trailing console noise no longer needs a `vtk show` round trip (the 96%-recovered fold family from the IsekaiOnline telemetry); measured ≈99.7% on a 95 KB real mocha capture (94,925 B → 301 B) and on the 100 KB real-run smoke. Transparent launcher-prefix unwrap shipped (#97): filter lookup and telemetry attribution strip `cross-env VAR=x [...]`, `npx` (`--yes`/`-y`/`--no-install`), and bare leading `VAR=x` prefixes to a fixpoint — direct and inside `npm run` expansions — so existing filters engage on wrapped traffic at their own measured savings (wrapped mocha/eslint verified end-to-end); the executed command line is untouched, non-transparent shapes (`npx -p pkg ...`) still pass through gap-logged, and `cross-env` no longer appears as its own gap family. Lifecycle aliases shipped (#120): `npm test`/`t`/`tst`/`start`/`stop`/`restart` route through the same dispatch layer (banner strip → inner delegation → #93 size-floored fold) as their `npm run` spellings, byte-identical behavior — real-run `npm test` fold measured ≈99.7% (114,060 B → 329 B emitted); off-TTY `npm start` buffers until exit like `npm run start`; nonzero exits stay full raw; flag-first spellings (`npm --prefix x test`) and non-script subcommands (`install`/`ci`/`ls`/`audit`) still fall through to gap-logged passthrough |
++| npm/npx | `npm run`, `npx` | 70–90% | shipped (`npm run` dispatch, #8) — measured 44–58% on fixtures (eslint-delegated `npm run lint` 44%, banner-only strip on short script output 58%; savings compound with the inner filter's on large reports). Strips the npm banner, delegates the body to the inner tool's registered filter, gap-attributes uncovered inner tools to their own family (not npm); full raw (banner included) recoverable via `OK <id>`. Size-floored fold for unrecognized inner tools shipped (#93, registry option C): exit-0 output ≥ 64 KiB folds to a ≤5-line summary tail + `OK <id>` — on both the banner-present path (attributed to the inner family) and the no-banner path modern npm takes under pipe capture (attributed to npm, since the inner tool is undiscoverable without the banner); below the floor output stays byte-identical inline but is logged `filtered=true`, so terse load-bearing scripts (`npm run sdlc`) leave the gap table with output untouched; any nonzero exit never folds (full raw, still a gap). Measured ≈99.8% on a 122 KB real-run fold, 79.8% cumulative over the 10-call real-run smoke sequence; spool-failure degrades to full raw. Pinned summary lines shipped (#134, registry option B): the shared fold tail (`npm run`, lifecycle aliases, `powershell -File`) pins up to 3 runner summary lines that fit — mocha `N passing`/`failing`/`pending`, jest `Tests: … passed`/`failed`, eslint `N problems` — from above the positional 5-line tail, nearest first, counted inside the 512 B cap, so a mocha summary followed by trailing console noise no longer needs a `vtk show` round trip (the 96%-recovered fold family from the IsekaiOnline telemetry); measured ≈99.7% on a 95 KB real mocha capture (94,925 B → 301 B) and on the 100 KB real-run smoke. Transparent launcher-prefix unwrap shipped (#97): filter lookup and telemetry attribution strip `cross-env VAR=x [...]`, `npx` (`--yes`/`-y`/`--no-install`), and bare leading `VAR=x` prefixes to a fixpoint — direct and inside `npm run` expansions — so existing filters engage on wrapped traffic at their own measured savings (wrapped mocha/eslint verified end-to-end); the executed command line is untouched, non-transparent shapes (`npx -p pkg ...`) still pass through gap-logged, and `cross-env` no longer appears as its own gap family. Lifecycle aliases shipped (#120): `npm test`/`t`/`tst`/`start`/`stop`/`restart` route through the same dispatch layer (banner strip → inner delegation → #93 size-floored fold) as their `npm run` spellings, byte-identical behavior — real-run `npm test` fold measured ≈99.7% (114,060 B → 329 B emitted); off-TTY `npm start` buffers until exit like `npm run start`; nonzero exits stay full raw; flag-first spellings (`npm --prefix x test`) and non-script subcommands (`install`/`ci`/`ls`/`audit`) still fall through to gap-logged passthrough. Inner-filter attribution (#153): when the inner tool's filter ran but elided nothing (e.g. a mocha module-load crash with no summary line), the row logs `filtered=true, reason=<filter>` on the raw, below-bar, and spooled outcomes — matching the direct path — so `vtk gaps` no longer lists shipped inner filters; unrecognized inner tools keep `no-filter`, output bytes unchanged |
+ | Files/search | `ls`, `grep`, `find` | 60–75% | shipped — measured 17–75% on fixtures (`ls` 140-entry dir 75%, `grep -l` 75%, `grep -rn` 34%, `find` walk 17% — savings scale with list size; real gap-log target `vtk ls serverjs` 74.6%). Column-packed rows capped at 40 entries with `(+N more)` tail, grep capped at 5 matches/file, full listing behind `OK <id>`; `ls -l` long format passes through raw; exit 0 only (grep's no-match exit 1 stays raw). Hook routing shipped (#114): the PreToolUse rewrite intercepts plain top-level `grep`/`ls`/`find` in bash tool-call flavors (Claude Bash + Copilot `bash`; Copilot `powershell` excluded — PS `ls` alias / Windows `find.exe` homonym would change what runs). Hook-only by design: no `vtk install` shell wrappers for these families, since a shell function also wraps mid-pipeline calls |
+ | Files/search (rest) | `read`, `tree` | 60–75% | planned — both now shipped/validated upstream (rtk-ai/rtk) |
+ | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned — `err`/`log`/`json`/`env` now shipped/validated upstream (rtk-ai/rtk); `summary`/`diff` planned |
+
+commit 4a38761b745765efdd2635ab8f963ef8afc70e90
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 03:14:24 2026 -0400
+
+    fix(npm): attribute "inner filter ran, elided nothing" rows to the filter (#153)
+    
+    In the `npm run <script>` delegation path, an inner filter that exists and
+    ran but did not shrink the body fell into EmitNpmBody, which logged the row
+    as filtered=false reason=no-filter -- the branch written for unrecognized
+    inner tools. Those rows made `vtk gaps` propose a `Filter: mocha` for a
+    shipped filter. EmitNpmBody now takes the resolved filter name and logs
+    filtered=true under it on the raw, below-bar, and spooled outcomes, matching
+    the direct path's "nothing elided" row; unrecognized inner tools keep
+    no-filter, spool-fail and the fold identity are unchanged. Output bytes and
+    exit codes are untouched.
+    
+    Fake npm gains a `testcrash` script (banner + mocha module-load error, no
+    summary line, exit 1); smoke test asserts the mocha attribution and that the
+    no-filter case still logs a gap.
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/dotnet/Vtk.Cli/App.cs b/dotnet/Vtk.Cli/App.cs
+index f3f9e36..1395530 100644
+--- a/dotnet/Vtk.Cli/App.cs
++++ b/dotnet/Vtk.Cli/App.cs
+@@ -224,7 +224,7 @@ public static class Program
+             // Banner stripped but the inner tool has no filter: emit the
+             // banner-stripped body (already a saving) and log the gap under
+             // the inner tool's family so `vtk gaps` prioritizes the real tool.
+-            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode);
++            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode, filterName: null);
+         }
+         if (!entry.Filters(result.ExitCode))
+         {
+@@ -241,10 +241,12 @@ public static class Program
+         }
+         // Compare the compacted output against the raw the agent would
+         // otherwise see: if the inner filter did not shrink the body, still
+-        // prefer the banner-stripped body when that alone is a saving.
++        // prefer the banner-stripped body when that alone is a saving. The
++        // filter ran and elided nothing, so the row is attributed to it
++        // (filtered=true, its name) — not a coverage gap (#153).
+         if (compact.Length >= strip.Body.Length)
+         {
+-            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode);
++            return EmitNpmBody(st, strip.Inner, raw, strip.Body, result.ExitCode, entry.Name);
+         }
+         if (!ClearsSavingsBar(raw.Length, compact.Length))
+         {
+@@ -282,9 +284,16 @@ public static class Program
+     /// raw under an ID for recovery; otherwise it is a plain passthrough.
+     /// Attribution is always to the inner tool's family. Any spool failure
+     /// degrades to full raw so no output is ever lost.
++    /// <paramref name="filterName"/> is the inner filter that ran and elided
++    /// nothing (logged filtered=true under its name, matching the direct
++    /// path's "nothing elided" row), or null when the inner tool has no
++    /// filter (logged filtered=false, no-filter: a real coverage gap) (#153).
+     /// </summary>
+-    private static int EmitNpmBody(Store st, string[] inner, string raw, string body, int code)
++    private static int EmitNpmBody(Store st, string[] inner, string raw, string body, int code, string? filterName)
+     {
++        var filtered = filterName != null;
++        var reason = filterName ?? Store.ReasonNoFilter;
++
+         // Unrecognized inner tool with a successful, floor-clearing body:
+         // the size-floored fold (#93, option C) beats banner-only stripping.
+         // A fold failure falls through to the pre-fold behavior below (which
+@@ -294,22 +303,23 @@ public static class Program
+ 
+         if (body.Length >= raw.Length)
+         {
+-            // No saving from stripping the banner: emit the raw and gap-log
+-            // the inner family so the tool still surfaces in `vtk gaps`.
++            // No saving from stripping the banner: emit the raw, logged
++            // under the inner family so the tool still surfaces in `vtk gaps`
++            // when it has no filter.
+             Console.Out.Write(raw);
+             if (raw != "" && !raw.EndsWith('\n')) Console.Out.WriteLine();
+-            LogInvocation(st, inner, raw.Length, raw.Length, filtered: false, tty: false, Store.ReasonNoFilter);
++            LogInvocation(st, inner, raw.Length, raw.Length, filtered, tty: false, reason);
+             return code;
+         }
+ 
+         if (!ClearsSavingsBar(raw.Length, body.Length))
+         {
+             // Banner stripping saved bytes but below the savings bar (#52):
+-            // emit the body inline, no spool, no `OK`. Still a coverage gap
+-            // for the inner tool, logged with the bytes the body saved.
++            // emit the body inline, no spool, no `OK`. Logged with the bytes
++            // the body saved; a coverage gap only when no inner filter exists.
+             Console.Out.Write(body);
+             if (body != "" && !body.EndsWith('\n')) Console.Out.WriteLine();
+-            LogInvocation(st, inner, raw.Length, body.Length, filtered: false, tty: false, Store.ReasonNoFilter);
++            LogInvocation(st, inner, raw.Length, body.Length, filtered, tty: false, reason);
+             return code;
+         }
+ 
+@@ -332,9 +342,9 @@ public static class Program
+             if (!body.EndsWith('\n')) Console.Out.WriteLine();
+         }
+         Console.Out.WriteLine($"OK {id}");
+-        // Banner stripped but no inner filter ran: this is still a coverage
+-        // gap for the inner tool, recorded with the bytes the body saved.
+-        LogInvocation(st, inner, raw.Length, body.Length, filtered: false, tty: false, Store.ReasonNoFilter);
++        // Banner stripped; recorded with the bytes the body saved. A coverage
++        // gap for the inner tool only when it has no filter.
++        LogInvocation(st, inner, raw.Length, body.Length, filtered, tty: false, reason);
+         return code;
+     }
+ 
+diff --git a/dotnet/Vtk.FakeTool/Program.cs b/dotnet/Vtk.FakeTool/Program.cs
+index 5ed07e0..b786a34 100644
+--- a/dotnet/Vtk.FakeTool/Program.cs
++++ b/dotnet/Vtk.FakeTool/Program.cs
+@@ -158,6 +158,18 @@ public static class Program
+     private const string MochaFatalRaw =
+         "\u001b[31mError: No test files found: \"nope/**/*.test.js\"\u001b[39m\n";
+ 
++    // Captured from mocha 11.7.5 when a spec file requires a missing module
++    // (exit 1): no summary line, so the mocha filter passes it through.
++    private const string MochaCrashRaw =
++        "Error: Cannot find module './helpers/db'\n" +
++        "Require stack:\n" +
++        "- C:\\src\\demo\\test\\cart.test.js\n" +
++        "    at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)\n" +
++        "    at Module._load (node:internal/modules/cjs/loader:1051:27)\n" +
++        "    at Module.require (node:internal/modules/cjs/loader:1311:19)\n" +
++        "    at require (node:internal/modules/helpers:179:18)\n" +
++        "    at Object.<anonymous> (C:\\src\\demo\\test\\cart.test.js:2:12)\n";
++
+     // `npx <tool>`: the Go suite copied the fake mocha to npx(.exe) so that
+     // `npx mocha` resolved to it. Emulate the same, tolerating the
+     // transparent flags real npx traffic carries (#97): mocha and eslint are
+@@ -295,6 +307,9 @@ public static class Program
+     //   itest     -> mocha spec run behind a cross-env banner line (#97, the
+     //                telemetry shape `> cross-env INTEGRATION=1 mocha ...`;
+     //                exit/payload from VTK_FAKE_MOCHA_CODE)
++    //   testcrash -> banner then a mocha module-load error with no summary
++    //                line, exit 1: the mocha filter runs and elides nothing,
++    //                so the row must still be attributed to mocha (#153)
+     //   db:status -> dbmate status report (exit 0)
+     //   bigraw    -> NO banner (npm >= 11 suppresses it off-TTY, #93) and a
+     //                large (>64KB) plain payload: the size-floored fold shape
+@@ -354,6 +369,10 @@ public static class Program
+                 return Mocha(stdout, stderr, banner: "> demo@1.0.0 test\n> mocha --reporter spec\n\n");
+             case "itest":
+                 return Mocha(stdout, stderr, banner: "> demo@1.0.0 itest\n> cross-env INTEGRATION=1 mocha --reporter spec\n\n");
++            case "testcrash":
++                stdout.Write("> demo@1.0.0 testcrash\n> mocha --reporter spec\n\n");
++                stderr.Write(MochaCrashRaw);
++                return 1;
+             case "db:status":
+                 stdout.Write("> demo@1.0.0 db:status\n> dbmate status\n\n");
+                 stdout.Write(DbmateStatusOut);
+diff --git a/dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs b/dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs
+index 86275d0..5a23d93 100644
+--- a/dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs
++++ b/dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs
+@@ -320,6 +320,39 @@ public class NpmDispatchSmokeTests : IDisposable
+         Assert.Equal(0, gapsCode);
+         Assert.Contains("node", gaps);
+         Assert.DoesNotContain("npm", gaps);
++        // An unrecognized inner tool is a real coverage gap (#153).
++        var log = _h.InvocationLog();
++        Assert.Contains("\"cmd\":\"node", log);
++        Assert.Contains("\"filtered\":false", log);
++        Assert.Contains("\"reason\":\"no-filter\"", log);
++    }
++
++    [Fact]
++    public void NpmRunWithUnshrinkableMochaBodyAttributesRowToMochaFilter()
++    {
++        // #153: the inner filter exists and ran but elided nothing (a mocha
++        // module-load error carries no summary line). The banner-stripped
++        // body prints inline (saving below the #52 bar, no `OK`), exit code
++        // is mocha's own, and the row is attributed to the mocha filter —
++        // filtered=true, reason=mocha — like the direct path's "nothing
++        // elided" row, so `vtk gaps` never proposes a filter that ships.
++        var (outp, err, code) = _h.RunFaked(_h.Repo, null, "npm", "run", "testcrash");
++        Assert.Equal(1, code); // parity
++        Assert.DoesNotContain("demo@1.0.0", outp + err);
++        Assert.DoesNotContain("> mocha", outp + err);
++        Assert.Contains("Cannot find module './helpers/db'", outp + err);
++        Assert.Contains("at Module._load", outp + err);
++        SmokeAssert.NoOk(outp);
++        var log = _h.InvocationLog();
++        Assert.Contains("\"cmd\":\"mocha --reporter spec\"", log);
++        Assert.Contains("\"filtered\":true", log);
++        Assert.Contains("\"reason\":\"mocha\"", log);
++        Assert.DoesNotContain("\"reason\":\"no-filter\"", log);
++        // Metadata never carries output content.
++        Assert.DoesNotContain("Cannot find module", log);
++        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
++        Assert.Equal(0, gapsCode);
++        Assert.DoesNotContain("mocha", gaps);
+     }
+ 
+     [Fact]
+
+commit 13b251d76b66e96504249a465d8dcd414a649827
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 02:35:52 2026 -0400
+
+    docs(readme): vtk gaps pair-keyed families and dispatch-gap line (#139)
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/README.md b/README.md
+index 1b7bdc8..5c0324f 100644
+--- a/README.md
++++ b/README.md
+@@ -140,13 +140,20 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
+   invocation log names which filter handled each call; `vtk gaps`
+   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
+   bytes, plus a DEGRADED section when a filter panicked and degraded to raw passthrough.
++  Families are keyed `argv[0] argv[1]` for commands with a registered pair key (`git`, `gh`,
++  `npx`, `dbmate`; known git global options such as `-C <dir>` / `--no-pager` are normalized
++  first) and `argv[0]` otherwise, so a multiplexer's row names the missing subcommand
++  (`git rev-parse`, `gh api`) rather than one umbrella `git` (#139); `vtk gain` keeps the
++  `argv[0]` grain.
+   A child that never started (unresolvable command, self-flag typo) still exits 127 and is
+   still logged, but under `spawn-fail` — it never ranks a gap family.
+   `vtk gaps --file-issues` (#61) turns recurring gap families into `stage:intake` filter issues
+   via `gh`: dry-run by default (`--yes` to create), `--min-bytes`/`--min-calls` thresholds
+   (defaults 50 KiB / 3 calls, floors 4096 B / 2), and dedupe against open `Filter:` issues so
+   re-running never refiles. Issue bodies carry family + call/byte counts only — never output
+-  content. `--since <N>d|<N>h|<ISO-8601 date>` (#140) windows the report (and the
++  content; for pair-keyed commands the title carries the subcommand (`Filter: git rev-parse`),
++  and a family that already resolves in the registry prints as a `dispatch gap` line instead of
++  a proposed filter (#139). `--since <N>d|<N>h|<ISO-8601 date>` (#140) windows the report (and the
+   `--file-issues` thresholds) to invocations logged at or after the bound (UTC); opt-in —
+   without it the output is unchanged. A `window: since <utc> (<spec>)` header line is printed
+   only when the flag is given; invalid or out-of-range specs exit 2 with usage.
+
+commit 647e2f5a64068350a6c19527cf77d4fd033cac4a
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 02:30:20 2026 -0400
+
+    test(smoke): gaps keys unfiltered git subcommands by pair after global-option normalization (#139)
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/dotnet/Vtk.Tests/Smoke/SmokeTests.cs b/dotnet/Vtk.Tests/Smoke/SmokeTests.cs
+index 8d51ea5..bea4960 100644
+--- a/dotnet/Vtk.Tests/Smoke/SmokeTests.cs
++++ b/dotnet/Vtk.Tests/Smoke/SmokeTests.cs
+@@ -230,6 +230,32 @@ public class SmokeTests : IDisposable
+         Assert.DoesNotContain("Unhandled exception", hugeErr);
+     }
+ 
++    [Fact]
++    public void GapsKeysPairFamiliesAfterGitGlobalOptions()
++    {
++        // #139 through the real binary: unfiltered git subcommands aggregate
++        // under `git <sub>` (never one undifferentiated `git` row), known git
++        // global options are normalized before the subcommand is chosen, and
++        // a filtered subcommand never ranks. `vtk gain` keeps the argv[0] grain.
++        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "rev-parse", "HEAD").code);
++        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "-C", ".", "rev-parse", "HEAD").code);
++        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "--no-pager", "log", "-1").code);
++        Assert.Equal(0, _h.RunNull(_h.Repo, "git", "status").code);
++
++        var (gapsOut, _, gapsCode) = _h.Run(_h.Repo, "gaps");
++        Assert.Equal(0, gapsCode);
++        Assert.Matches(@"(?m)^git rev-parse\s+2\s", gapsOut);
++        Assert.Matches(@"(?m)^git log\s+1\s", gapsOut);
++        Assert.DoesNotMatch(@"(?m)^git\s+\d", gapsOut);
++        Assert.DoesNotContain("git status", gapsOut);
++        Assert.DoesNotContain("--no-pager", gapsOut);
++
++        var (gainOut, _, gainCode) = _h.Run(_h.Repo, "gain");
++        Assert.Equal(0, gainCode);
++        Assert.Matches(@"(?m)^git\s+4\s", gainOut);
++        Assert.DoesNotContain("git rev-parse", gainOut);
++    }
++
+     private static int CountOccurrences(string haystack, string needle)
+     {
+         var count = 0;
+
+commit 381933fc10baf1fb0c8636066632b83cdff7a52c
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 02:17:51 2026 -0400
+
+    fix(gaps): key gap families by argv[0] argv[1] for pair-keyed commands; report dispatch gaps (#139)
+    
+    `vtk gaps` and `--file-issues` aggregated by argv[0], so multiplexers with
+    shipped filters (git, gh, npx) surfaced as one undifferentiated gap and
+    `--file-issues` proposed `Filter: git` that no build can act on.
+    
+    - Registry.GapFamily: "argv[0] argv[1]" when argv[0] owns any exact pair key
+      (Registry.PairKeyedCommands), after GitOptions.Strip normalizes known git
+      global options (#152), else argv[0]. Pure over the redacted cmd string.
+    - Store.Gaps/Degraded/FileIssueGaps take an optional family-key function;
+      default stays the first token, and Gain keeps argv[0] (out of scope).
+    - GapsIssues: families that already resolve in the registry print as a
+      "dispatch gap" line instead of a proposed Filter: issue; the open-title
+      dedupe parse is pair-aware so its keys match the aggregation grain.
+    - Tests: GapFamily table, PairKeyedCommands, Store pair-key aggregation,
+      pair-aware parse + round-trip, dispatch-gap split.
+    - docs/ToolCoverage.md: fallback-logging note describes the new grain.
+    
+    Read-only reporting over metadata: no change to the wrap path, exit-code
+    parity, passthrough, or what the invocation log stores.
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/docs/ToolCoverage.md b/docs/ToolCoverage.md
+index 6d187e4..9236246 100644
+--- a/docs/ToolCoverage.md
++++ b/docs/ToolCoverage.md
+@@ -64,5 +64,11 @@ raw bytes emitted — the top of that list is the next filter to write. Covered-
+ invocations (tty-bypass, nonzero-exit, filter-panic, spool-fail) are excluded, as are
+ spawn-fail entries — a child that never started (unresolvable command, self-flag typo) is
+ logged but is not a coverage gap, so junk argv never ranks a family; panicking filters
+-surface separately in the DEGRADED section. This table
++surface separately in the DEGRADED section. Families are keyed `argv[0] argv[1]` for commands
++that own a registered pair key (`git`, `gh`, `npx`, `dbmate`), after normalizing known git global
++options (`-C <dir>`, `-c k=v`, `--no-pager`, `--git-dir`), and `argv[0]` otherwise — so a
++multiplexer names its actual missing subcommand (`git rev-parse`, `gh api`) rather than one
++undifferentiated family; `--file-issues` reports a family that already resolves in the registry
++as a *dispatch gap* line instead of proposing a `Filter:` issue, and dedupes open `Filter:` titles
++at the same grain (`vtk gain` keeps the `argv[0]` grain). This table
+ should be re-prioritized from real gap data once vtk is in daily use.
+diff --git a/dotnet/Vtk.Cli/App.cs b/dotnet/Vtk.Cli/App.cs
+index f3f9e36..3641d09 100644
+--- a/dotnet/Vtk.Cli/App.cs
++++ b/dotnet/Vtk.Cli/App.cs
+@@ -735,7 +735,8 @@ public static class Program
+         if (o.Since is { } win)
+             Console.Out.WriteLine($"window: since {SinceSpec.Format(win)} ({sinceSpec})");
+ 
+-        if (!fileIssues) return PrintGapsReport(st, o.Since);
++        var reg = Registry.Default();
++        if (!fileIssues) return PrintGapsReport(st, o.Since, reg);
+ 
+         // Sane floors: below-floor thresholds clamp up (anti-spam guard) so
+         // an over-eager invocation can't file trivial gaps.
+@@ -749,14 +750,14 @@ public static class Program
+             Console.Error.WriteLine($"vtk gaps: --min-calls {o.MinCalls} below floor; using {GapsIssues.FloorMinCalls}");
+             o.MinCalls = GapsIssues.FloorMinCalls;
+         }
+-        return GapsIssues.Run(st, o);
++        return GapsIssues.Run(st, o, reg);
+     }
+ 
+-    /// <summary>Emits the human-facing coverage-gap and degraded-filter tables (the default `vtk gaps` output).</summary>
+-    private static int PrintGapsReport(Store st, DateTime? since)
++    /// <summary>Emits the human-facing coverage-gap and degraded-filter tables (the default `vtk gaps` output), keyed per Registry.GapFamily (#139).</summary>
++    private static int PrintGapsReport(Store st, DateTime? since, Registry reg)
+     {
+-        var gaps = st.Gaps(since);
+-        var degraded = st.Degraded(since);
++        var gaps = st.Gaps(since, reg.GapFamily);
++        var degraded = st.Degraded(since, reg.GapFamily);
+ 
+         if (gaps.Count == 0 && degraded.Count == 0)
+         {
+diff --git a/dotnet/Vtk.Cli/GapsIssues.cs b/dotnet/Vtk.Cli/GapsIssues.cs
+index e970263..092606d 100644
+--- a/dotnet/Vtk.Cli/GapsIssues.cs
++++ b/dotnet/Vtk.Cli/GapsIssues.cs
+@@ -8,6 +8,7 @@
+ using System.Diagnostics;
+ using System.Text;
+ using System.Text.Json;
++using Vtk.Core.Filter;
+ using Vtk.Core.Spool;
+ 
+ namespace Vtk.Cli;
+@@ -36,18 +37,19 @@ internal static class GapsIssues
+     internal const string FilterIssueTitlePrefix = "Filter: ";
+ 
+     /// <summary>
+-    /// Selects over-threshold gap families, drops any that already have an
+-    /// open Filter issue, and either prints the plan (dry-run) or files each
+-    /// via `gh issue create`. Returns nonzero only on a hard error (bad
+-    /// metadata, unreachable gh, or a failed create) — an empty candidate set
+-    /// is success.
++    /// Selects over-threshold gap families (keyed per <see cref="Registry.GapFamily"/>,
++    /// #139), reports families that already resolve in the registry as
++    /// dispatch gaps, drops any that already have an open Filter issue, and
++    /// either prints the plan (dry-run) or files each via `gh issue create`.
++    /// Returns nonzero only on a hard error (bad metadata, unreachable gh, or
++    /// a failed create) — an empty candidate set is success.
+     /// </summary>
+-    internal static int Run(Store st, FileIssuesOpts o)
++    internal static int Run(Store st, FileIssuesOpts o, Registry reg)
+     {
+         List<GapSummary> candidates;
+         try
+         {
+-            candidates = st.FileIssueGaps(o.MinBytes, o.MinCalls, o.Since);
++            candidates = st.FileIssueGaps(o.MinBytes, o.MinCalls, o.Since, reg.GapFamily);
+         }
+         catch (Exception ex)
+         {
+@@ -63,7 +65,7 @@ internal static class GapsIssues
+         HashSet<string> existing;
+         try
+         {
+-            existing = GhExistingFilterFamilies();
++            existing = GhExistingFilterFamilies(reg.PairKeyedCommands);
+         }
+         catch (Exception ex)
+         {
+@@ -72,14 +74,18 @@ internal static class GapsIssues
+             return 1;
+         }
+ 
+-        var (toFile, skipped) = PlanFilterIssues(candidates, existing);
++        var (toFile, skipped, dispatchGaps) = PlanFilterIssues(candidates, existing, fam => reg.TryLookup(fam.Split(' '), out _));
++        foreach (var g in dispatchGaps)
++        {
++            Console.Out.WriteLine($"dispatch gap {g.Family} — resolves in the registry but passed through unfiltered [{g.Calls} calls, {g.RawBytes} raw bytes]; not a filter gap, not filed");
++        }
+         foreach (var fam in skipped)
+         {
+             Console.Out.WriteLine($"skip {fam} — open {FilterIssueTitlePrefix}{fam} issue already exists");
+         }
+         if (toFile.Count == 0)
+         {
+-            Console.Out.WriteLine("nothing to file (all candidates already have open issues)");
++            Console.Out.WriteLine("nothing to file (all candidates already have open issues or are dispatch gaps)");
+             return 0;
+         }
+ 
+@@ -113,17 +119,26 @@ internal static class GapsIssues
+     }
+ 
+     /// <summary>
+-    /// Splits candidate families into those to file and those skipped because
+-    /// an open Filter issue already exists (dedupe → idempotent). Pure: no
+-    /// I/O, so the selection is unit-testable.
++    /// Splits candidate families three ways: dispatch gaps — families whose
++    /// key already resolves in the registry (e.g. `git diff` fed by
++    /// `git --no-pager diff` rows), a dispatch miss rather than a missing
++    /// filter, so no Filter issue is proposed (#139); skipped — an open
++    /// Filter issue already exists (dedupe → idempotent); and those to file.
++    /// Pure: no I/O, so the selection is unit-testable.
+     /// </summary>
+-    internal static (List<GapSummary> ToFile, List<string> Skipped) PlanFilterIssues(
+-        IReadOnlyList<GapSummary> candidates, IReadOnlySet<string> existing)
++    internal static (List<GapSummary> ToFile, List<string> Skipped, List<GapSummary> DispatchGaps) PlanFilterIssues(
++        IReadOnlyList<GapSummary> candidates, IReadOnlySet<string> existing, Func<string, bool> resolves)
+     {
+         var toFile = new List<GapSummary>();
+         var skipped = new List<string>();
++        var dispatchGaps = new List<GapSummary>();
+         foreach (var g in candidates)
+         {
++            if (resolves(g.Family))
++            {
++                dispatchGaps.Add(g);
++                continue;
++            }
+             if (existing.Contains(g.Family))
+             {
+                 skipped.Add(g.Family);
+@@ -131,7 +146,7 @@ internal static class GapsIssues
+             }
+             toFile.Add(g);
+         }
+-        return (toFile, skipped);
++        return (toFile, skipped, dispatchGaps);
+     }
+ 
+     /// <summary>The issue title for a gap family. The prefix is fixed so ParseExistingFilterFamilies can recover the family for dedupe.</summary>
+@@ -159,20 +174,28 @@ internal static class GapsIssues
+ 
+     /// <summary>
+     /// Extracts the gap family from each open-issue title of the form
+-    /// `Filter: &lt;family&gt; ...`, returning a set for dedupe. Pure.
++    /// `Filter: &lt;family&gt; ...`, returning a set for dedupe. Pair-aware
++    /// (#139): when the first token is in <paramref name="pairKeyed"/> and a
++    /// second token follows before any paren, the family is the pair
++    /// (`Filter: git rev-parse (auto-filed ...)` → `git rev-parse`), matching
++    /// the aggregation key; otherwise the first token as before. Pure.
+     /// </summary>
+-    internal static HashSet<string> ParseExistingFilterFamilies(IEnumerable<string> titles)
++    internal static HashSet<string> ParseExistingFilterFamilies(IEnumerable<string> titles, IReadOnlySet<string> pairKeyed)
+     {
+         var result = new HashSet<string>();
+         foreach (var t in titles)
+         {
+             if (!t.StartsWith(FilterIssueTitlePrefix, StringComparison.Ordinal)) continue;
+             var rest = t[FilterIssueTitlePrefix.Length..].Trim();
+-            // Family is the first whitespace- or paren-delimited token.
+-            var fam = rest;
+-            var i = rest.IndexOfAny(new[] { ' ', '(' });
+-            if (i >= 0) fam = rest[..i];
+-            if (fam != "") result.Add(fam);
++            // Family tokens are whitespace-delimited and end at the first paren.
++            var paren = rest.IndexOf('(');
++            if (paren >= 0) rest = rest[..paren];
++            var tokens = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
++            if (tokens.Length == 0) continue;
++            var fam = tokens.Length >= 2 && pairKeyed.Contains(tokens[0])
++                ? tokens[0] + " " + tokens[1]
++                : tokens[0];
++            result.Add(fam);
+         }
+         return result;
+     }
+@@ -182,7 +205,7 @@ internal static class GapsIssues
+     /// Filter issue. The `gh` shell-out is kept thin; the parsing is
+     /// delegated to the pure helper.
+     /// </summary>
+-    private static HashSet<string> GhExistingFilterFamilies()
++    private static HashSet<string> GhExistingFilterFamilies(IReadOnlySet<string> pairKeyed)
+     {
+         var stdout = RunGh("issue", "list", "--state", "open", "--limit", "500", "--json", "title");
+         List<GhIssueTitle>? issues;
+@@ -194,7 +217,7 @@ internal static class GapsIssues
+         {
+             throw new FormatException($"parsing gh output: {ex.Message}");
+         }
+-        return ParseExistingFilterFamilies((issues ?? new()).Select(i => i.Title));
++        return ParseExistingFilterFamilies((issues ?? new()).Select(i => i.Title), pairKeyed);
+     }
+ 
+     private sealed record GhIssueTitle
+diff --git a/dotnet/Vtk.Core/Filter/Registry.cs b/dotnet/Vtk.Core/Filter/Registry.cs
+index 0bf9293..d89db26 100644
+--- a/dotnet/Vtk.Core/Filter/Registry.cs
++++ b/dotnet/Vtk.Core/Filter/Registry.cs
+@@ -132,6 +132,45 @@ public sealed class Registry
+         return false;
+     }
+ 
++    /// <summary>
++    /// The commands that own at least one exact "cmd sub" pair key (git, gh,
++    /// npx, dbmate in the default registry). Regex/TOML entries do not count:
++    /// a pair key is what makes the second token the dispatch grain.
++    /// </summary>
++    public IReadOnlySet<string> PairKeyedCommands
++    {
++        get
++        {
++            var set = new HashSet<string>(StringComparer.Ordinal);
++            foreach (var key in _entries.Keys)
++            {
++                var i = key.IndexOf(' ');
++                if (i > 0) set.Add(key[..i]);
++            }
++            return set;
++        }
++    }
++
++    /// <summary>
++    /// The family key `vtk gaps` / `--file-issues` aggregate a logged
++    /// (redacted) command line under (#139): "argv[0] argv[1]" when argv[0]
++    /// owns any pair key here — so a multiplexer with shipped filters names
++    /// the actual missing subcommand (`git rev-parse`, `gh api`) instead of
++    /// one undifferentiated `git` — else bare argv[0]. Known git global
++    /// options are normalized first (GitOptions.Strip, #152) so
++    /// `git --no-pager diff` aggregates under `git diff`. Pure string
++    /// function over metadata; never touches output content.
++    /// </summary>
++    public string GapFamily(string cmd)
++    {
++        var argv = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
++        if (argv.Length == 0) return "";
++        if (argv[0] == "git") argv = GitOptions.Strip(argv);
++        if (argv.Length >= 2 && PairKeyedCommands.Contains(argv[0]))
++            return argv[0] + " " + argv[1];
++        return argv[0];
++    }
++
+     /// <summary>mocha exits with its failure count (min(failures, 255)), so every code in 0..255 is a report, not a failure (#138).</summary>
+     private static readonly int[] MochaExitCodes = Enumerable.Range(0, 256).ToArray();
+ 
+diff --git a/dotnet/Vtk.Core/Spool/Store.cs b/dotnet/Vtk.Core/Spool/Store.cs
+index 9f211ba..592c498 100644
+--- a/dotnet/Vtk.Core/Spool/Store.cs
++++ b/dotnet/Vtk.Core/Spool/Store.cs
+@@ -182,18 +182,19 @@ public sealed class Store
+     /// Aggregates true coverage gaps (no registry match) by command family,
+     /// sorted by total raw bytes descending. <paramref name="since"/> (UTC,
+     /// #140) restricts the read to rows logged at or after that time; null
+-    /// reads all history.
++    /// reads all history. <paramref name="family"/> (#139) maps a redacted
++    /// command line to its family key; null keeps the first token.
+     /// </summary>
+-    public List<GapSummary> Gaps(DateTime? since = null) => Aggregate(inv =>
++    public List<GapSummary> Gaps(DateTime? since = null, Func<string, string>? family = null) => Aggregate(inv =>
+     {
+         if (inv.Filtered) return false;
+         if (inv.Reason == "") return !inv.TTY; // legacy entry, pre-reason
+         return inv.Reason == ReasonNoFilter;
+-    }, since);
++    }, since, family);
+ 
+-    /// <summary>Aggregates filter-panic invocations by command family, optionally windowed (#140).</summary>
+-    public List<GapSummary> Degraded(DateTime? since = null) =>
+-        Aggregate(inv => inv.Reason == ReasonFilterPanic, since);
++    /// <summary>Aggregates filter-panic invocations by command family, optionally windowed (#140) and under a caller-supplied family key (#139).</summary>
++    public List<GapSummary> Degraded(DateTime? since = null, Func<string, string>? family = null) =>
++        Aggregate(inv => inv.Reason == ReasonFilterPanic, since, family);
+ 
+     /// <summary>
+     /// Returns coverage-gap families eligible for auto-filed intake issues
+@@ -204,9 +205,11 @@ public sealed class Store
+     /// filter issue. Sorted by raw bytes descending. Read-only over metadata
+     /// (invariant 3): byte counts and redacted command families only, never
+     /// output content. <paramref name="since"/> (UTC, #140) windows the
+-    /// measurement; null reads all history.
++    /// measurement; null reads all history. <paramref name="family"/> (#139)
++    /// maps a redacted command line to its family key; null keeps the first
++    /// token.
+     /// </summary>
+-    public List<GapSummary> FileIssueGaps(long minBytes, int minCalls, DateTime? since = null)
++    public List<GapSummary> FileIssueGaps(long minBytes, int minCalls, DateTime? since = null, Func<string, string>? family = null)
+     {
+         var all = Aggregate(inv =>
+         {
+@@ -215,7 +218,7 @@ public sealed class Store
+                 ? !inv.TTY // legacy entry, pre-reason
+                 : inv.Reason == ReasonNoFilter;
+             return isGap && !IsMachineReadable(inv.Cmd);
+-        }, since);
++        }, since, family);
+         return all.Where(g => g.RawBytes >= minBytes && g.Calls >= minCalls).ToList();
+     }
+ 
+@@ -250,20 +253,24 @@ public sealed class Store
+     /// Family rollup over the invocation log. The window (#140) is a row
+     /// predicate on <see cref="Invocation.Time"/> only — undated rows are
+     /// excluded whenever a window is set — and never touches the family key.
++    /// The family key (#139) is the caller's function over the redacted
++    /// command line, defaulting to its first token; `vtk gaps` passes the
++    /// registry's pair-aware key, `vtk gain` keeps the first token.
+     /// </summary>
+-    private List<GapSummary> Aggregate(Func<Invocation, bool> match, DateTime? since)
++    private List<GapSummary> Aggregate(Func<Invocation, bool> match, DateTime? since, Func<string, string>? family)
+     {
++        family ??= FirstToken;
+         var agg = new Dictionary<string, GapSummary>();
+         foreach (var inv in Invocations())
+         {
+             if (!SinceSpec.InWindow(inv.Time, since)) continue;
+             if (!match(inv)) continue;
+-            var family = FirstToken(inv.Cmd);
+-            if (family == "") continue;
+-            if (!agg.TryGetValue(family, out var g))
++            var fam = family(inv.Cmd);
++            if (fam == "") continue;
++            if (!agg.TryGetValue(fam, out var g))
+             {
+-                g = new GapSummary { Family = family };
+-                agg[family] = g;
++                g = new GapSummary { Family = fam };
++                agg[fam] = g;
+             }
+             g.Calls++;
+             g.RawBytes += inv.RawBytes;
+diff --git a/dotnet/Vtk.Tests/Filter/RegistryTests.cs b/dotnet/Vtk.Tests/Filter/RegistryTests.cs
+index c6a8a18..5d664b1 100644
+--- a/dotnet/Vtk.Tests/Filter/RegistryTests.cs
++++ b/dotnet/Vtk.Tests/Filter/RegistryTests.cs
+@@ -34,6 +34,56 @@ public class RegistryTests
+         Assert.False(r.TryLookup(new[] { "unknown" }, out _));
+     }
+ 
++    /// <summary>Only exact "cmd sub" keys make a command pair-keyed; bare keys and regex entries do not.</summary>
++    [Fact]
++    public void PairKeyedCommands_ListsFirstTokensOfPairKeysOnly()
++    {
++        var r = new Registry();
++        r.Register("git status", s => s);
++        r.Register("git log", s => s);
++        r.Register("ls", s => s);
++        r.RegisterRegex(new Regex(@"^cargo (build|test)\b"), s => s);
++
++        Assert.Equal(new HashSet<string> { "git" }, r.PairKeyedCommands);
++    }
++
++    [Fact]
++    public void Default_PairKeyedCommands_CoverShippedMultiplexers()
++    {
++        var pairs = Registry.Default().PairKeyedCommands;
++        Assert.Superset(new HashSet<string> { "git", "gh", "npx", "dbmate" }, new HashSet<string>(pairs));
++        Assert.DoesNotContain("ls", pairs);
++        Assert.DoesNotContain("mocha", pairs);
++    }
++
++    /// <summary>
++    /// #139: the `vtk gaps` family key is "argv[0] argv[1]" for pair-keyed
++    /// commands (after git global-option normalization) and argv[0] for
++    /// everything else, so a multiplexer names its actual missing subcommand.
++    /// </summary>
++    [Theory]
++    [InlineData("git rev-parse --show-toplevel", "git rev-parse")]
++    [InlineData("git fetch origin", "git fetch")]
++    [InlineData("git -C ../wt rev-parse HEAD", "git rev-parse")]
++    [InlineData("git --no-pager diff --stat", "git diff")]
++    [InlineData("git -c core.quotepath=off --no-pager log -1", "git log")]
++    [InlineData("git -C", "git -C")]           // option without its value: not normalized
++    [InlineData("git --bare status", "git --bare")] // unknown global option: don't guess
++    [InlineData("git", "git")]
++    [InlineData("gh api repos/o/r", "gh api")]
++    [InlineData("gh -R o/r issue list", "gh -R")]
++    [InlineData("npx tsc --noEmit", "npx tsc")]
++    [InlineData("dbmate wait", "dbmate wait")]
++    [InlineData("ls -la", "ls")]
++    [InlineData("mocha test/x.js", "mocha")]
++    [InlineData("cargo build --release", "cargo")]
++    [InlineData("  ls  -la ", "ls")]
++    [InlineData("", "")]
++    public void Default_GapFamily_PairKeysMultiplexersOnly(string cmd, string want)
++    {
++        Assert.Equal(want, Registry.Default().GapFamily(cmd));
++    }
++
+     [Fact]
+     public void Entry_FiltersOnlyAllowlistedExitCodes()
+     {
+diff --git a/dotnet/Vtk.Tests/GapsIssuesTests.cs b/dotnet/Vtk.Tests/GapsIssuesTests.cs
+index 9fd5fe2..db57df7 100644
+--- a/dotnet/Vtk.Tests/GapsIssuesTests.cs
++++ b/dotnet/Vtk.Tests/GapsIssuesTests.cs
+@@ -7,6 +7,9 @@ namespace Vtk.Tests;
+ 
+ public class GapsIssuesTests
+ {
++    private static readonly IReadOnlySet<string> PairKeyed = new HashSet<string> { "git", "gh", "npx" };
++    private static readonly IReadOnlySet<string> NoPairs = new HashSet<string>();
++
+     [Fact]
+     public void ParseExistingFilterFamilies_ExtractsFamilies()
+     {
+@@ -20,10 +23,31 @@ public class GapsIssuesTests
+             "filter: lowercase",      // prefix is case-sensitive
+             "",
+         };
+-        var got = GapsIssues.ParseExistingFilterFamilies(titles);
++        var got = GapsIssues.ParseExistingFilterFamilies(titles, NoPairs);
+         Assert.Equal(new HashSet<string> { "cargo", "docker", "kubectl" }, got);
+     }
+ 
++    /// <summary>
++    /// #139: a pair-keyed first token takes its subcommand into the family so
++    /// dedupe keys match the pair-grained aggregation; an umbrella
++    /// `Filter: git` no longer suppresses `git rev-parse`, and non-pair tools
++    /// keep the first token even when the title carries more words.
++    /// </summary>
++    [Fact]
++    public void ParseExistingFilterFamilies_IsPairAwareForPairKeyedCommands()
++    {
++        var titles = new[]
++        {
++            "Filter: git rev-parse (auto-filed from vtk gaps)",
++            "Filter: gh api",
++            "Filter: git",                         // umbrella: bare family, no second token
++            "Filter: npx (auto-filed from vtk gaps)", // paren stops the family
++            "Filter: cargo build (manual)",        // cargo is not pair-keyed
++        };
++        var got = GapsIssues.ParseExistingFilterFamilies(titles, PairKeyed);
++        Assert.Equal(new HashSet<string> { "git rev-parse", "gh api", "git", "npx", "cargo" }, got);
++    }
++
+     [Fact]
+     public void PlanFilterIssues_SplitsFileVersusSkip()
+     {
+@@ -35,10 +59,35 @@ public class GapsIssuesTests
+         };
+         var existing = new HashSet<string> { "docker" };
+ 
+-        var (toFile, skipped) = GapsIssues.PlanFilterIssues(candidates, existing);
++        var (toFile, skipped, dispatchGaps) = GapsIssues.PlanFilterIssues(candidates, existing, _ => false);
+ 
+         Assert.Equal(new[] { "cargo", "kubectl" }, toFile.Select(g => g.Family));
+         Assert.Equal(new[] { "docker" }, skipped);
++        Assert.Empty(dispatchGaps);
++    }
++
++    /// <summary>
++    /// #139: a family that already resolves in the registry is a dispatch
++    /// miss, not a missing filter — it is reported as a dispatch gap and
++    /// never proposed or deduped, even when an open Filter issue names it.
++    /// </summary>
++    [Fact]
++    public void PlanFilterIssues_ReportsResolvingFamiliesAsDispatchGaps()
++    {
++        var candidates = new List<GapSummary>
++        {
++            new() { Family = "git diff", Calls = 232, RawBytes = 900000 },
++            new() { Family = "git rev-parse", Calls = 1312, RawBytes = 120000 },
++            new() { Family = "git status", Calls = 5, RawBytes = 50000 },
++        };
++        var existing = new HashSet<string> { "git status" };
++        var registry = new HashSet<string> { "git diff", "git status" };
++
++        var (toFile, skipped, dispatchGaps) = GapsIssues.PlanFilterIssues(candidates, existing, registry.Contains);
++
++        Assert.Equal(new[] { "git rev-parse" }, toFile.Select(g => g.Family));
++        Assert.Empty(skipped);
++        Assert.Equal(new[] { "git diff", "git status" }, dispatchGaps.Select(g => g.Family));
+     }
+ 
+     /// <summary>A filed title must parse back to its family, or dedupe silently breaks.</summary>
+@@ -46,11 +95,14 @@ public class GapsIssuesTests
+     [InlineData("cargo")]
+     [InlineData("docker")]
+     [InlineData("kubectl")]
++    [InlineData("git rev-parse")]
++    [InlineData("gh api")]
++    [InlineData("npx tsc")]
+     public void FilterIssueTitle_RoundTrips(string family)
+     {
+         var title = GapsIssues.FilterIssueTitle(family);
+         Assert.StartsWith(GapsIssues.FilterIssueTitlePrefix, title);
+-        var got = GapsIssues.ParseExistingFilterFamilies(new[] { title });
++        var got = GapsIssues.ParseExistingFilterFamilies(new[] { title }, PairKeyed);
+         Assert.Contains(family, got);
+     }
+ 
+diff --git a/dotnet/Vtk.Tests/Spool/StoreTests.cs b/dotnet/Vtk.Tests/Spool/StoreTests.cs
+index fbbe681..5c2479e 100644
+--- a/dotnet/Vtk.Tests/Spool/StoreTests.cs
++++ b/dotnet/Vtk.Tests/Spool/StoreTests.cs
+@@ -95,6 +95,43 @@ public class StoreTests : IDisposable
+         Assert.Equal(150, ls.RawBytes);
+     }
+ 
++    /// <summary>
++    /// #139: the family key is the caller's function over the redacted
++    /// command line — `vtk gaps` passes a pair-aware key so git's unfiltered
++    /// subcommands aggregate apart, while the default stays the first token.
++    /// The window and the non-gap exclusions are unchanged by the key.
++    /// </summary>
++    [Fact]
++    public void Gaps_UsesCallerFamilyKey_DefaultStaysFirstToken()
++    {
++        static string PairKey(string cmd)
++        {
++            var argv = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
++            return argv[0] == "git" && argv.Length >= 2 ? argv[0] + " " + argv[1] : argv[0];
++        }
++        var now = DateTime.UtcNow;
++        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse HEAD", RawBytes = 100, Reason = Store.ReasonNoFilter });
++        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse --show-toplevel", RawBytes = 100, Reason = Store.ReasonNoFilter });
++        _store.LogInvocation(new Invocation { Time = now, Cmd = "git fetch origin", RawBytes = 50, Reason = Store.ReasonNoFilter });
++        _store.LogInvocation(new Invocation { Time = now, Cmd = "git status", RawBytes = 999, Filtered = true });
++        _store.LogInvocation(new Invocation { Time = now, Cmd = "git worktree list", RawBytes = 999, Reason = Store.ReasonNonzeroExit });
++        _store.LogInvocation(new Invocation { Time = now, Cmd = "ls -la", RawBytes = 10, Reason = Store.ReasonNoFilter });
++
++        var byPair = _store.Gaps(null, PairKey);
++        Assert.Equal(
++            new[] { ("git rev-parse", 2, 200L), ("git fetch", 1, 50L), ("ls", 1, 10L) },
++            byPair.Select(g => (g.Family, g.Calls, g.RawBytes)));
++
++        var byFirst = _store.Gaps();
++        Assert.Equal(
++            new[] { ("git", 3, 250L), ("ls", 1, 10L) },
++            byFirst.Select(g => (g.Family, g.Calls, g.RawBytes)));
++
++        // Filing thresholds apply to the pair-grained totals.
++        Assert.Equal(new[] { "git rev-parse" }, _store.FileIssueGaps(150, 2, null, PairKey).Select(g => g.Family));
++        Assert.Equal(new[] { "git" }, _store.FileIssueGaps(150, 2).Select(g => g.Family));
++    }
++
+     [Fact]
+     public void Gaps_ExcludesSpawnFailEntries()
+     {
+
+commit 6e8801d198c3d07f420d7de129c43fc4467a5efc
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 01:35:15 2026 -0400
+
+    docs(readme,arch,coverage): vtk show telemetry, gaps recovered-folds section, gain net column (#137)
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/README.md b/README.md
+index 1b7bdc8..0d4d451 100644
+--- a/README.md
++++ b/README.md
+@@ -133,6 +133,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
+   red builds and failing tests (non-zero exit) pass through raw with exit-code parity intact.
+ - **Output spool + `vtk show <id>`** — filtered output is spooled (~1h TTL, credential
+   redaction); `vtk show <id>` retrieves it, `--grep <pat>` returns matching lines only.
++  Each successful `show` is itself logged (#137) as a metadata-only row (`reason=show`, the
++  spool id, spool size, bytes emitted, and whether `--grep` was used as a boolean — the
++  pattern text is never written); output and exit codes of `show` are unchanged.
+ - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
+   reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`,
+   `spawn-fail`), and filtered
+@@ -150,6 +153,10 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
+   `--file-issues` thresholds) to invocations logged at or after the bound (UTC); opt-in —
+   without it the output is unchanged. A `window: since <utc> (<spec>)` header line is printed
+   only when the flag is given; invalid or out-of-range specs exit 2 with usage.
++  A `RECOVERED FOLDS` section (#137) follows the tables whenever the window holds any fold:
++  per filter, how many folds were pulled back with `vtk show` within 10 minutes of the fold
++  (`FOLDS`, `RECOVERED`, `RATE`, `SHOW BYTES`) — a high rate marks a filter that suppresses
++  what the agent wanted; fix it per filter, not by making folds emit more.
+ 
+ - **Cumulative savings + `vtk gain`** — aggregates the invocation log into total raw vs emitted
+   bytes, bytes saved and savings %, overall and per command family (ranked by bytes saved).
+@@ -161,7 +168,12 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
+   attributes logged invocations to session transcript time windows and renders the 10 most
+   recent sessions with calls, saved bytes/%, ~tokens, ~USD; `--sessions <dir>` overrides the
+   transcript directory). The session view reads only top-level transcript *timestamps* — never
+-  transcript content.
++  transcript content. Beside the gross figures, a `NET` column and a third summary line
++  (#137) subtract the bytes pulled back through `vtk show` within 10 minutes of a fold —
++  gross never moves; net is the honest figure. `show` rows are never counted as calls.
++  Caveat on the economics: raw bytes are counted as saved even where the agent's own
++  `| tail -N` (or similar) would have discarded them, so gross overstates savings on piped
++  runs.
+ - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
+   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm`/`winget`/`choco`/`reg` route
+   through vtk without being prefixed. Marker-delimited and idempotent, with
+@@ -224,7 +236,7 @@ Design decisions are recorded one line each in
+ vtk git status          # compact status; prints "OK <id>" when filtering clears the savings bar
+ vtk show <id>           # full captured output (provenance header first)
+ vtk show <id> --grep x  # only matching lines
+-vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters)
++vtk gaps                # uncovered-command families ranked by raw bytes (+ degraded filters, recovered folds)
+ vtk gaps --since 14d    # same report over a time window (<N>d, <N>h, or ISO-8601 date; UTC)
+ vtk gaps --file-issues  # file recurring gap families as intake issues (dry-run; --yes to create)
+ vtk gain                # cumulative savings: raw vs emitted bytes, overall and per family,
+diff --git a/docs/Architecture.md b/docs/Architecture.md
+index 21b3648..1ad7175 100644
+--- a/docs/Architecture.md
++++ b/docs/Architecture.md
+@@ -182,8 +182,11 @@ vtk show 2e3f --grep pat  →   just the matching lines
+   passthrough path copies child bytes stream-to-stream, untouched.
+ - **Spool store** — the raw-output files above, plus per-invocation metadata (argv, byte
+   counts, filtered/passthrough, reason — the engaged filter's registry name when filtered, the
+-  unfiltered cause otherwise — and timestamp). Backs `vtk show`, `vtk gain`, and `vtk gaps` —
+-  one store, three queries.
++  unfiltered cause otherwise — and timestamp). `vtk show` appends its own metadata-only row
++  (`reason=show`, spool id, byte counts, `grep` boolean). Backs `vtk show`, `vtk gain`, and
++  `vtk gaps` — one store, three queries; the fold→show join (a `show` row against the most
++  recent prior fold row with the same spool id, within 10 minutes) is computed offline by the
++  `gaps` recovered-folds section and the `gain` net column, never at show time.
+ - **Session provider** (`Vtk.Core/Session/`) — locates and reads local agent session
+   transcripts (Claude Code JSONL under `~/.claude/projects/<munged-cwd>/`), yielding command
+   events (command, error output presence, ordering, timestamp). Analysis-side only: the wrap
+diff --git a/docs/ToolCoverage.md b/docs/ToolCoverage.md
+index 6d187e4..a8cd0a5 100644
+--- a/docs/ToolCoverage.md
++++ b/docs/ToolCoverage.md
+@@ -36,7 +36,7 @@ hand-written filter always wins its command.
+ | Files/search (rest) | `read`, `tree` | 60–75% | planned — both now shipped/validated upstream (rtk-ai/rtk) |
+ | Analysis | `err`, `log`, `json`, `env`, `summary`, `diff` | 70–90% | planned — `err`/`log`/`json`/`env` now shipped/validated upstream (rtk-ai/rtk); `summary`/`diff` planned |
+ | Docker/network | `docker ps/images/logs`, `curl` | 65–85% | planned — `docker ps/images/logs` + `curl` now shipped/validated upstream (rtk-ai/rtk) |
+-| Meta | `show`, `gaps` (+ `discover`, see the rtk subsystems row), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. Dollarized rollups (#58): the summary gains an *approximate* $ line (bytes/4 token heuristic, checked-in per-model input price table updated by PR — no network), plus combinable `--daily` (per-UTC-day table with ~tokens/~USD), `--graph` (bar chart of daily saved bytes, last 30 logged days), `--history` (last 10 invocations); unknown flag → usage + exit 2 like `vtk show`. Per-session view (#46): `--session [--sessions <dir>]` attributes countable invocations to Claude Code transcript time windows (latest-start wins on overlap; unmatched invocations and zero-call sessions omitted) and renders the 10 most recent sessions with calls/saved/%/~tokens/~USD — reads only top-level transcript timestamps, never content; missing/empty transcript dir → note line, exit 0. `gaps --file-issues` shipped ([#61](https://github.com/meridun/vtk/issues/61), porting #34): turns recurring gap families into `stage:intake` `Filter: <family>` issues via `gh` — dry-run by default (`--yes` to create), thresholds `--min-bytes`/`--min-calls` (defaults 50 KiB / 3 calls, clamped to floors 4096 B / 2), dedupes against open `Filter:` issues so re-runs never refile; issue bodies are metadata-only (family + call/byte counts). Explicit user-invoked `gh` shell-out per the #34 network ruling. `gaps --since <N>d|<N>h|<ISO-8601 date>` shipped (#140): opt-in window on `Invocation.Time` (UTC; undated rows excluded under a window) applied to the gap table, the DEGRADED section, and the `--file-issues` thresholds, with a `window: since <utc> (<spec>)` header only when given — bare `gaps` output byte-identical to before; invalid or out-of-range specs → usage + exit 2 |
++| Meta | `show`, `gaps` (+ `discover`, see the rtk subsystems row), `gain` | — | shipped — `gain` (#14) rolls up the invocation log into cumulative raw→emitted savings, overall and per family (ranked by bytes saved), excluding tty-bypass/legacy 0-byte rows so counts and % stay honest; read-only reporter, exit 0/1 like `gaps`. Dollarized rollups (#58): the summary gains an *approximate* $ line (bytes/4 token heuristic, checked-in per-model input price table updated by PR — no network), plus combinable `--daily` (per-UTC-day table with ~tokens/~USD), `--graph` (bar chart of daily saved bytes, last 30 logged days), `--history` (last 10 invocations); unknown flag → usage + exit 2 like `vtk show`. Per-session view (#46): `--session [--sessions <dir>]` attributes countable invocations to Claude Code transcript time windows (latest-start wins on overlap; unmatched invocations and zero-call sessions omitted) and renders the 10 most recent sessions with calls/saved/%/~tokens/~USD — reads only top-level transcript timestamps, never content; missing/empty transcript dir → note line, exit 0. `gaps --file-issues` shipped ([#61](https://github.com/meridun/vtk/issues/61), porting #34): turns recurring gap families into `stage:intake` `Filter: <family>` issues via `gh` — dry-run by default (`--yes` to create), thresholds `--min-bytes`/`--min-calls` (defaults 50 KiB / 3 calls, clamped to floors 4096 B / 2), dedupes against open `Filter:` issues so re-runs never refile; issue bodies are metadata-only (family + call/byte counts). Explicit user-invoked `gh` shell-out per the #34 network ruling. `gaps --since <N>d|<N>h|<ISO-8601 date>` shipped (#140): opt-in window on `Invocation.Time` (UTC; undated rows excluded under a window) applied to the gap table, the DEGRADED section, and the `--file-issues` thresholds, with a `window: since <utc> (<spec>)` header only when given — bare `gaps` output byte-identical to before; invalid or out-of-range specs → usage + exit 2. Fold-recovery telemetry shipped (#137): `show` logs a metadata-only row (`reason=show`, spool id, spool size, bytes emitted, `grep` boolean — never the pattern text; exit codes and output unchanged, failed reads log nothing); `gaps` gains a `RECOVERED FOLDS` section (per filter: folds, folds shown within 10 min, rate, show bytes — windowed by `--since` on the fold row) and `gain` gains a `NET` column plus a net summary line (gross − bytes recovered via `show`; show rows never count as calls). Real-run smoke: one `git diff` fold shown twice → `RATE 100.0%`, net = gross − show bytes |
+ | Meta | `install` | — | shipped (#49) — wires the intercepted-family →vtk wrappers (git/gh/npm; + winget/choco/reg via #104, matching `Hooks.Families`) into a shell rc/profile (bash `~/.bashrc`, pwsh `$PROFILE.CurrentUserAllHosts`). Self-locating via the running executable's path, marker-delimited managed block (idempotent, byte-identical re-runs, exact `--uninstall`), `$CLAUDECODE`-guarded so it is inert outside Claude Code; `--print`/`--dry-run`/`--shell bash\|pwsh` |
+ | Meta | `hooks` | — | shipped (#45, Claude-Code MVP) — self-installs the Claude Code `PreToolUse` rewrite hook against the running binary: `init` splices one marker-identified entry into `~/.claude/settings.json` (idempotent fixed point, exact `--uninstall`, `--print`/`--dry-run`/`--settings`, never overwrites unparseable JSON), `verify` integrity-checks the install (exit 1 on missing/duplicate/wrong-matcher/missing-binary/desync), `rewrite` is the hook payload — routes a plain top-level intercepted-family Bash command (`git`/`gh`/`npm`, + `winget`/`choco`/`reg` via #104, + `grep`/`ls`/`find` via #114 — bash flavors only, hook-only families with no shell wrappers) through vtk via `hookSpecificOutput.updatedInput`, never emits `permissionDecision`, and passes through (empty output, exit 0) on pipes/redirects/chaining/substitution, non-Bash tools, already-wrapped commands, malformed input, and every internal error. GitHub Copilot CLI shipped (#83, `--copilot` on each subcommand): `init` writes a wholly-vtk-owned `vtk.json` into `~/.copilot/hooks` (`COPILOT_HOME` honored, `--hooks-dir` override) holding one version-1 `preToolUse` entry (matcher `bash\|powershell`), the file itself being the marker (idempotent installed/updated/unchanged, exact `--uninstall` deletes only that file); `verify --copilot` mirrors the Claude problems list; `rewrite --copilot` speaks the native `{toolName, toolArgs}` → `modifiedArgs` shape with the shared eligibility core plus a stricter powershell ban list (`(){}@`). Exit 0 on every path is load-bearing there — Copilot preToolUse is fail-closed, so a nonzero hook would deny the agent's tool call. Trust/permissions port deferred |
+ | Meta | `proxy` | — | planned — name reserved: invoking exits 2 with "not implemented yet" instead of exec fallthrough (#11) |
+
+commit a17d2a234f472c74c5fc52c9bf5a65eee3f7dd00
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 01:29:34 2026 -0400
+
+    test(smoke): show bad-pattern logs no row; a show joins only the latest fold of its id (#137)
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/dotnet/Vtk.Tests/Smoke/ShowTelemetrySmokeTests.cs b/dotnet/Vtk.Tests/Smoke/ShowTelemetrySmokeTests.cs
+index 794e282..e38d5e1 100644
+--- a/dotnet/Vtk.Tests/Smoke/ShowTelemetrySmokeTests.cs
++++ b/dotnet/Vtk.Tests/Smoke/ShowTelemetrySmokeTests.cs
+@@ -98,6 +98,48 @@ public class ShowTelemetrySmokeTests : IDisposable
+         Assert.DoesNotContain("RECOVERED FOLDS", future);
+     }
+ 
++    [Fact]
++    public void ShowWithBadPatternKeepsExit2AndLogsNoRow()
++    {
++        var (outp, _, code) = _h.RunFaked(_h.Repo, Code(1), "eslint", "src/");
++        Assert.Equal(1, code);
++        var id = SmokeHarness.MustOkId(outp);
++
++        var (_, err, showCode) = _h.Run(_h.Repo, "show", id, "--grep", "(");
++        Assert.Equal(2, showCode);
++        Assert.Contains("bad pattern", err);
++        Assert.Empty(ShowRows());
++        Assert.DoesNotContain("\"grep\"", _h.InvocationLog());
++    }
++
++    [Fact]
++    public void ShowJoinsOnlyTheMostRecentFoldOfItsId()
++    {
++        // Two identical folds share an id (hash of the command line); one
++        // show afterwards recovers the later fold only, so the earlier one
++        // stays unrecovered in both reports.
++        var (first, _, c1) = _h.RunFaked(_h.Repo, Code(1), "eslint", "src/");
++        Assert.Equal(1, c1);
++        var (second, _, c2) = _h.RunFaked(_h.Repo, Code(1), "eslint", "src/");
++        Assert.Equal(1, c2);
++        var id = SmokeHarness.MustOkId(first);
++        Assert.Equal(id, SmokeHarness.MustOkId(second));
++
++        var (_, _, showCode) = _h.Run(_h.Repo, "show", id);
++        Assert.Equal(0, showCode);
++        var showOut = Field(OutBytesRe, Assert.Single(ShowRows()));
++
++        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
++        Assert.Equal(0, gapsCode);
++        var line = Assert.Single(gaps.Split('\n'), l => l.StartsWith("eslint "));
++        Assert.Equal(new[] { "eslint", "2", "1", "50.0%", showOut.ToString() }, line.Split(' ', StringSplitOptions.RemoveEmptyEntries));
++
++        var (gain, _, gainCode) = _h.Run(_h.Repo, "gain");
++        Assert.Equal(0, gainCode);
++        Assert.Contains("over 2 calls", gain);
++        Assert.Contains($"after {showOut} bytes recovered via vtk show (1 folds)", gain);
++    }
++
+     [Fact]
+     public void ShowOfUnknownIdLogsNothingAndKeepsExitCode()
+     {
+
+commit 64308e66f3c7434c9c360669a2663343a5725e3f
+Author: Fixture Bot <fixtures@example.com>
+Date:   Sun Sep 6 01:21:53 2026 -0400
+
+    test(spool,smoke): fold-to-show join, recovery rate, net gain, show telemetry through the real binary (#137)
+    
+    Store unit tests cover the window edges, most-recent-fold join, per-identity
+    rates, --since on the fold row, net vs gross, and show-row exclusion from
+    gaps. Smoke covers show logging (plain and --grep), the gaps section, the
+    gain net figures, and that an unknown id logs nothing. Existing fold-then-
+    gaps assertions are scoped to the gap table via SmokeAssert.GapTable.
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs b/dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs
+index 86275d0..5a7f318 100644
+--- a/dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs
++++ b/dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs
+@@ -17,6 +17,17 @@ public static class SmokeAssert
+     public static void NoOk(string output) =>
+         Assert.False(OkRe.IsMatch(output), $"unexpected OK <id> line in output:\n{output}");
+ 
++    /// <summary>
++    /// The `vtk gaps` output above the recovered-folds section (#137), for
++    /// assertions about the gap/degraded tables only — the section
++    /// legitimately names the filter of any fold the test produced.
++    /// </summary>
++    public static string GapTable(string gapsOut)
++    {
++        var idx = gapsOut.IndexOf("RECOVERED FOLDS", StringComparison.Ordinal);
++        return idx < 0 ? gapsOut : gapsOut[..idx];
++    }
++
+     /// <summary>Every packed row (before the OK line, excluding "(+N more)" tails) fits the 96-char pack width.</summary>
+     public static void PackRowsMaxWidth(string output)
+     {
+@@ -390,7 +401,7 @@ public class NpmFoldSmokeTests : IDisposable
+         Assert.DoesNotContain("processed item", log);
+         var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+         Assert.Equal(0, gapsCode);
+-        Assert.DoesNotContain("npm", gaps);
++        Assert.DoesNotContain("npm", SmokeAssert.GapTable(gaps)); // the fold names itself only in the #137 recovered section
+     }
+ 
+     [Fact]
+@@ -442,7 +453,7 @@ public class NpmFoldSmokeTests : IDisposable
+         Assert.DoesNotContain("processed item", log);
+         var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+         Assert.Equal(0, gapsCode);
+-        Assert.DoesNotContain("npm", gaps);
++        Assert.DoesNotContain("npm", SmokeAssert.GapTable(gaps)); // the fold names itself only in the #137 recovered section
+     }
+ 
+     [Fact]
+@@ -569,7 +580,7 @@ public class PowershellFoldSmokeTests : IDisposable
+         Assert.DoesNotContain("request 0001", log);
+         var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+         Assert.Equal(0, gapsCode);
+-        Assert.DoesNotContain("powershell", gaps);
++        Assert.DoesNotContain("powershell", SmokeAssert.GapTable(gaps)); // the fold names itself only in the #137 recovered section
+     }
+ 
+     [Fact]
+diff --git a/dotnet/Vtk.Tests/Smoke/ShowTelemetrySmokeTests.cs b/dotnet/Vtk.Tests/Smoke/ShowTelemetrySmokeTests.cs
+new file mode 100644
+index 0000000..794e282
+--- /dev/null
++++ b/dotnet/Vtk.Tests/Smoke/ShowTelemetrySmokeTests.cs
+@@ -0,0 +1,109 @@
++using System.Text.RegularExpressions;
++using Xunit;
++
++namespace Vtk.Tests.Smoke;
++
++/// <summary>
++/// Real-run smoke for #137: `vtk show` logs a metadata-only row, the
++/// fold→show join surfaces as the recovered-folds section of `vtk gaps`,
++/// and `vtk gain` reports net beside gross. Through the real binary with
++/// the fake eslint (exit 1 problems report) as the fold source.
++/// </summary>
++[Collection("Smoke")]
++public class ShowTelemetrySmokeTests : IDisposable
++{
++    private readonly SmokeHarness _h = new();
++    public void Dispose() => _h.Dispose();
++
++    private static Dictionary<string, string> Code(int n) => new() { ["VTK_FAKE_ESLINT_CODE"] = n.ToString() };
++
++    private static readonly Regex OutBytesRe = new(@"""out_bytes"":(\d+)", RegexOptions.Compiled);
++    private static readonly Regex RawBytesRe = new(@"""raw_bytes"":(\d+)", RegexOptions.Compiled);
++
++    private List<string> ShowRows() =>
++        _h.InvocationLog().Split('\n').Where(l => l.Contains("\"reason\":\"show\"")).ToList();
++
++    private static long Field(Regex re, string row) => long.Parse(re.Match(row).Groups[1].Value);
++
++    [Fact]
++    public void ShowLogsMetadataRowAndJoinsToItsFold()
++    {
++        var (outp, _, code) = _h.RunFaked(_h.Repo, Code(1), "eslint", "src/");
++        Assert.Equal(1, code);
++        var id = SmokeHarness.MustOkId(outp);
++
++        // Fold row carries the spool id it emitted; no show row yet.
++        var log = _h.InvocationLog();
++        Assert.Contains($"\"spool_id\":\"{id}\"", log);
++        Assert.Empty(ShowRows());
++
++        // Plain show: same output as before (provenance header first), exit 0,
++        // one new row with reason=show, grep=false, byte counts only.
++        var (shown, showErr, showCode) = _h.Run(_h.Repo, "show", id);
++        Assert.Equal(0, showCode);
++        Assert.Equal("", showErr);
++        Assert.StartsWith("# vtk spool", shown);
++        Assert.Contains("'foo' is not defined", shown);
++        var plain = Assert.Single(ShowRows());
++        Assert.Contains($"\"cmd\":\"show {id}\"", plain);
++        Assert.Contains($"\"spool_id\":\"{id}\"", plain);
++        Assert.Contains("\"grep\":false", plain);
++        Assert.Contains("\"filtered\":false", plain);
++        var plainRaw = Field(RawBytesRe, plain);
++        var plainOut = Field(OutBytesRe, plain);
++        Assert.True(plainRaw > 0);
++        Assert.True(plainOut >= plainRaw, $"plain show emitted {plainOut} < spool size {plainRaw}");
++        Assert.DoesNotContain("is not defined", _h.InvocationLog()); // invariant 3
++
++        // Grep'd show: grep=true, pattern text never written, fewer bytes.
++        var (grepped, _, grepCode) = _h.Run(_h.Repo, "show", id, "--grep", "no-undef-zz|is not defined");
++        Assert.Equal(0, grepCode);
++        Assert.Contains("'foo' is not defined", grepped);
++        var rows = ShowRows();
++        Assert.Equal(2, rows.Count);
++        Assert.Contains("\"grep\":true", rows[1]);
++        Assert.DoesNotContain("no-undef-zz", _h.InvocationLog());
++        var grepOut = Field(OutBytesRe, rows[1]);
++        Assert.True(grepOut > 0 && grepOut < plainOut, $"grep show emitted {grepOut}, plain {plainOut}");
++        var recoveredBytes = plainOut + grepOut;
++
++        // gaps: the recovered-folds section names the eslint fold as
++        // recovered once (two shows, one fold) with both shows' bytes;
++        // show rows are not gap entries.
++        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
++        Assert.Equal(0, gapsCode);
++        Assert.Contains("RECOVERED FOLDS", gaps);
++        var line = Assert.Single(gaps.Split('\n'), l => l.StartsWith("eslint "));
++        var cols = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
++        Assert.Equal(new[] { "eslint", "1", "1", "100.0%", recoveredBytes.ToString() }, cols);
++        Assert.DoesNotContain("show", SmokeAssert.GapTable(gaps));
++        Assert.DoesNotContain("no-undef-zz", gaps);
++
++        // gain: gross unchanged by the shows; net = gross - recovered bytes;
++        // no "show" family.
++        var (gain, _, gainCode) = _h.Run(_h.Repo, "gain");
++        Assert.Equal(0, gainCode);
++        Assert.Contains("over 1 calls", gain);
++        Assert.Contains($"after {recoveredBytes} bytes recovered via vtk show (1 folds)", gain);
++        Assert.Contains("NET", gain);
++        var famLine = Assert.Single(gain.Split('\n'), l => l.StartsWith("eslint "));
++        var famCols = famLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
++        var saved = long.Parse(famCols[3]);
++        Assert.Equal((saved - recoveredBytes).ToString(), famCols[5]);
++        Assert.DoesNotContain("\nshow ", gain);
++
++        // A --since window in the future hides the fold (windowed on the fold row).
++        var (future, _, futureCode) = _h.Run(_h.Repo, "gaps", "--since", "2099-01-01");
++        Assert.Equal(0, futureCode);
++        Assert.DoesNotContain("RECOVERED FOLDS", future);
++    }
++
++    [Fact]
++    public void ShowOfUnknownIdLogsNothingAndKeepsExitCode()
++    {
++        var (_, err, code) = _h.Run(_h.Repo, "show", "dead");
++        Assert.Equal(1, code);
++        Assert.Contains("no spool entry", err);
++        Assert.False(File.Exists(Path.Combine(_h.Home, "vtk", "invocations.jsonl")));
++    }
++}
+diff --git a/dotnet/Vtk.Tests/Smoke/SmokeTests.cs b/dotnet/Vtk.Tests/Smoke/SmokeTests.cs
+index 8d51ea5..ae0d765 100644
+--- a/dotnet/Vtk.Tests/Smoke/SmokeTests.cs
++++ b/dotnet/Vtk.Tests/Smoke/SmokeTests.cs
+@@ -552,7 +552,7 @@ public class TomlGapsSmokeTests : IDisposable
+         // A filtered family is coverage, not a gap.
+         var (gapsOut, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+         Assert.Equal(0, gapsCode);
+-        Assert.DoesNotContain("cargo", gapsOut);
++        Assert.DoesNotContain("cargo", SmokeAssert.GapTable(gapsOut)); // the fold names itself only in the #137 recovered section
+     }
+ 
+     [Fact]
+diff --git a/dotnet/Vtk.Tests/Spool/StoreTests.cs b/dotnet/Vtk.Tests/Spool/StoreTests.cs
+index fbbe681..f35cba8 100644
+--- a/dotnet/Vtk.Tests/Spool/StoreTests.cs
++++ b/dotnet/Vtk.Tests/Spool/StoreTests.cs
+@@ -316,6 +316,151 @@ public class StoreTests : IDisposable
+         Assert.Single(_store.FileIssueGaps(100, 1, since), g => g.Family == "grep");
+     }
+ 
++    [Fact]
++    public void LogInvocation_SpoolIdAndGrep_OmittedWhenNull_RoundTripWhenSet()
++    {
++        // #137: the two new fields never change the shape of a row that
++        // does not carry them, and round-trip when they do.
++        _store.LogInvocation(new Invocation { Cmd = "git status", RawBytes = 100, OutBytes = 10, Filtered = true });
++        _store.LogInvocation(new Invocation { Cmd = "git diff", RawBytes = 5000, OutBytes = 200, Filtered = true, Reason = "git diff", SpoolId = "2e3f" });
++        _store.LogInvocation(new Invocation { Cmd = "show 2e3f", RawBytes = 5000, OutBytes = 5000, Reason = Store.ReasonShow, SpoolId = "2e3f", Grep = false });
++
++        var lines = File.ReadAllLines(Path.Combine(_dir, "invocations.jsonl"));
++        Assert.DoesNotContain("spool_id", lines[0]);
++        Assert.DoesNotContain("grep", lines[0]);
++        Assert.Contains("\"spool_id\":\"2e3f\"", lines[1]);
++        Assert.DoesNotContain("grep", lines[1]);
++        Assert.Contains("\"reason\":\"show\"", lines[2]);
++        Assert.Contains("\"grep\":false", lines[2]);
++
++        var rows = _store.Invocations();
++        Assert.Null(rows[0].SpoolId);
++        Assert.Null(rows[0].Grep);
++        Assert.Equal("2e3f", rows[1].SpoolId);
++        Assert.Equal("2e3f", rows[2].SpoolId);
++        Assert.False(rows[2].Grep);
++    }
++
++    public static IEnumerable<object[]> RecoveryCases()
++    {
++        // minutesAfterFold, expectRecovered
++        yield return new object[] { 0.0, true };
++        yield return new object[] { 9.9, true };
++        yield return new object[] { 10.0, true };
++        yield return new object[] { 10.1, false };
++        yield return new object[] { -1.0, false }; // show logged before its fold: not a recovery
++    }
++
++    [Theory]
++    [MemberData(nameof(RecoveryCases))]
++    public void Recovered_JoinsShowToFoldOnlyInsideWindow(double minutesAfterFold, bool expectRecovered)
++    {
++        var t0 = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
++        _store.LogInvocation(new Invocation { Time = t0, Cmd = "git diff", RawBytes = 9000, OutBytes = 300, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(minutesAfterFold), Cmd = "show ab12", RawBytes = 9000, OutBytes = 9050, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
++
++        var r = Assert.Single(_store.Recovered());
++        Assert.Equal("git diff", r.Filter);
++        Assert.Equal(1, r.Folds);
++        Assert.Equal(expectRecovered ? 1 : 0, r.Recovered);
++        Assert.Equal(expectRecovered ? 9050 : 0, r.ShowBytes);
++    }
++
++    [Fact]
++    public void Recovered_RatesPerFoldIdentity_MostRecentFoldWins_UnjoinedShowsIgnored()
++    {
++        var t0 = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
++        // Two git diff folds share an id (same command rerun); the show joins
++        // the most recent one only.
++        _store.LogInvocation(new Invocation { Time = t0, Cmd = "git diff", RawBytes = 9000, OutBytes = 300, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(1), Cmd = "git diff", RawBytes = 9500, OutBytes = 310, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(2), Cmd = "show ab12", RawBytes = 9500, OutBytes = 9550, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
++        // A grep'd second look at the same fold: counted once as recovered, bytes summed.
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(3), Cmd = "show ab12", RawBytes = 9500, OutBytes = 120, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = true });
++        // mocha fold never recovered.
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(4), Cmd = "mocha --reporter spec", RawBytes = 40000, OutBytes = 900, Filtered = true, Reason = "mocha", SpoolId = "cd34" });
++        // npm fold recovered.
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(5), Cmd = "npm run build", RawBytes = 70000, OutBytes = 500, Filtered = true, Reason = "npm-run-fold", SpoolId = "ef56" });
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(6), Cmd = "show ef56", RawBytes = 70000, OutBytes = 70000, Reason = Store.ReasonShow, SpoolId = "ef56", Grep = false });
++        // Unfiltered banner-strip spool (unrecognized inner tool): identity is the family.
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(7), Cmd = "tsc --noEmit", RawBytes = 3000, OutBytes = 2600, Reason = Store.ReasonNoFilter, SpoolId = "0a1b" });
++        // Show of an id with no fold row (expired / pre-#137 fold): ignored.
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(8), Cmd = "show 9999", RawBytes = 100, OutBytes = 100, Reason = Store.ReasonShow, SpoolId = "9999", Grep = false });
++        // Filtered rows without a spool id are not folds.
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(9), Cmd = "git status", RawBytes = 100, OutBytes = 90, Filtered = true, Reason = "git status" });
++
++        var got = _store.Recovered();
++
++        Assert.Equal(
++            new[]
++            {
++                ("git diff", 2, 1, 9670L),
++                ("npm-run-fold", 1, 1, 70000L),
++                ("mocha", 1, 0, 0L),
++                ("tsc", 1, 0, 0L),
++            },
++            got.Select(r => (r.Filter, r.Folds, r.Recovered, r.ShowBytes)));
++    }
++
++    [Fact]
++    public void Recovered_Since_WindowsOnTheFoldRow()
++    {
++        var since = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
++        _store.LogInvocation(new Invocation { Time = since.AddMinutes(-5), Cmd = "git diff", RawBytes = 9000, OutBytes = 300, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
++        _store.LogInvocation(new Invocation { Time = since.AddMinutes(1), Cmd = "show ab12", RawBytes = 9000, OutBytes = 9000, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
++        _store.LogInvocation(new Invocation { Time = since.AddMinutes(2), Cmd = "mocha", RawBytes = 40000, OutBytes = 900, Filtered = true, Reason = "mocha", SpoolId = "cd34" });
++
++        Assert.Equal(2, _store.Recovered().Count);
++        var windowed = Assert.Single(_store.Recovered(since));
++        Assert.Equal("mocha", windowed.Filter);
++    }
++
++    [Fact]
++    public void Gain_NetSubtractsRecoveredShowBytes_AndShowRowsNeverCountInGross()
++    {
++        var t0 = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
++        _store.LogInvocation(new Invocation { Time = t0, Cmd = "git diff", RawBytes = 9000, OutBytes = 300, Filtered = true, Reason = "git diff", SpoolId = "ab12" });
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(1), Cmd = "show ab12", RawBytes = 9000, OutBytes = 9050, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(2), Cmd = "mocha", RawBytes = 40000, OutBytes = 900, Filtered = true, Reason = "mocha", SpoolId = "cd34" });
++        // Late show: outside the window, so not a recovery — and still not gross.
++        _store.LogInvocation(new Invocation { Time = t0.AddMinutes(30), Cmd = "show cd34", RawBytes = 40000, OutBytes = 40000, Reason = Store.ReasonShow, SpoolId = "cd34", Grep = false });
++
++        var report = _store.Gain();
++
++        // Gross: exactly the two wrap rows, as before #137.
++        Assert.Equal(2, report.Calls);
++        Assert.Equal(49000, report.RawBytes);
++        Assert.Equal(1200, report.OutBytes);
++        Assert.Equal(47800, report.Saved);
++        // Net: gross minus the joined show's emitted bytes.
++        Assert.Equal(9050, report.Recovered);
++        Assert.Equal(1, report.Recoveries);
++        Assert.Equal(47800 - 9050, report.Net);
++        var git = Assert.Single(report.Families, f => f.Family == "git");
++        Assert.Equal(8700, git.Saved);
++        Assert.Equal(9050, git.Recovered);
++        Assert.Equal(-350, git.Net); // a recovered fold is a net loss: the round trip cost more than it saved
++        var mocha = Assert.Single(report.Families, f => f.Family == "mocha");
++        Assert.Equal(39100, mocha.Net);
++        Assert.DoesNotContain(report.Families, f => f.Family == "show");
++
++        // Daily / history share the countable gate: no show rows.
++        Assert.Equal(2, Assert.Single(_store.Daily()).Calls);
++        Assert.DoesNotContain(_store.Recent(10), inv => inv.Reason == Store.ReasonShow);
++    }
++
++    [Fact]
++    public void Gaps_ExcludeShowRows()
++    {
++        _store.LogInvocation(new Invocation { Cmd = "show ab12", RawBytes = 9000, OutBytes = 9000, Reason = Store.ReasonShow, SpoolId = "ab12", Grep = false });
++        _store.LogInvocation(new Invocation { Cmd = "ls -la", RawBytes = 100, Reason = Store.ReasonNoFilter });
++
++        var ls = Assert.Single(_store.Gaps());
++        Assert.Equal("ls", ls.Family);
++        Assert.Empty(_store.Degraded());
++        Assert.Single(_store.FileIssueGaps(1, 1));
++    }
++
+     [Fact]
+     public void Sweep_RemovesEntriesOlderThanTtl()
+     {

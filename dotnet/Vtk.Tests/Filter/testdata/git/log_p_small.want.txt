@@ -1,0 +1,5 @@
+ae71d5f Merge pull request #162 from meridun/fix/155-invocation-log-append-retry
+18ab93e test(spool): correct stale retry-budget comment on LogInvocation test (#155)
+dotnet/Vtk.Tests/Spool/StoreTests.cs | +1 -1
+077b716 test(smoke): concurrent vtk herd keeps every invocations.jsonl row (#155)
+dotnet/Vtk.Tests/Smoke/InvocationLogSmokeTests.cs | +81 -0

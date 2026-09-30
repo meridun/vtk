@@ -14,6 +14,11 @@
 // The registry therefore allowlists 0..255 (#138); fatal/config errors carry
 // no summary line and pass through unchanged below, so content — not exit
 // code — is what keeps them raw.
+//
+// mocha honors `color: true` from .mocharc.json even on a pipe, wrapping
+// the summary and detail lines in SGR sequences (#163). Lines are matched
+// and emitted ANSI-stripped so the compact view is the same whether or not
+// the run was colored; the spool keeps the raw bytes.
 // Port of internal/filter/mocha/mocha.go.
 using System.Text.RegularExpressions;
 
@@ -37,12 +42,16 @@ public static partial class Mocha
     /// Compacts mocha spec-reporter output to just the summary lines plus the
     /// per-failure detail blocks. The passing/pending/suite spec tree above
     /// the summary is folded away; everything from the summary onward is
-    /// preserved verbatim. Input that carries no mocha summary passes
-    /// through unchanged.
+    /// preserved verbatim apart from ANSI escape sequences, which are
+    /// stripped (#163). Input that carries no mocha summary passes through
+    /// unchanged.
     /// </summary>
     public static string Filter(string raw)
     {
+        // Match and emit on the ANSI-stripped lines (#163); the raw string
+        // is what passes through when no summary is found.
         var lines = raw.Split('\n');
+        for (var i = 0; i < lines.Length; i++) lines[i] = Ansi.Strip(lines[i]);
 
         // Locate the summary region: the contiguous run of summary lines.
         // mocha prints them together (passing, then failing, then pending as
