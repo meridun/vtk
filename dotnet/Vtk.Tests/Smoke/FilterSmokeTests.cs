@@ -59,10 +59,18 @@ public class EslintSmokeTests : IDisposable
         var id = SmokeHarness.MustOkId(outp);
         Assert.True(outp.Length < raw.Length, $"compact ({outp.Length}) not smaller than raw ({raw.Length}); stderr: {err}");
 
-        // Per-rule rollup, not the raw stylish lines.
-        Assert.Contains("7x error semi", outp);
-        Assert.Contains("3x error no-undef", outp);
+        // Per-file compact listing (#170), not the raw stylish lines.
+        Assert.Contains("  1:1 no-undef  2:10 semi  5:1 no-unused-vars  12:7 semi", outp);
+        Assert.Contains("rules: no-undef (error) 'foo' is not defined; semi (error) Missing semicolon", outp);
+        Assert.DoesNotContain("   1:1   error", outp);
         Assert.Contains("12 problems (10 errors, 2 warnings)", outp);
+
+        // #170 acceptance (a) through the real binary: every raw line:col
+        // location survives in the packed listing.
+        var rawLocs = Regex.Matches(raw, @"^\s+(\d+:\d+)\s+(?:error|warning)\s", RegexOptions.Multiline)
+            .Select(m => m.Groups[1].Value).ToList();
+        Assert.Equal(12, rawLocs.Count);
+        Assert.All(rawLocs, loc => Assert.Contains($" {loc} ", outp));
 
         // The raw report survives in the spool and is recoverable in full.
         var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
@@ -376,8 +384,8 @@ public class NpmDispatchSmokeTests : IDisposable
         var (outp, err, code) = _h.RunFaked(_h.Repo, env, "npm", "run", "lint");
         Assert.Equal(1, code); // parity
         var id = SmokeHarness.MustOkId(outp);
-        // The eslint per-rule rollup, not the banner or raw stylish lines.
-        Assert.Contains("semi", outp);
+        // The eslint compact listing (#170), not the banner or raw stylish lines.
+        Assert.Contains("2:10 semi", outp);
         Assert.Contains("12 problems", outp);
         Assert.DoesNotContain("demo@1.0.0", outp);
         Assert.DoesNotContain("> eslint", outp);
