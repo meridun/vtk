@@ -1,5 +1,6 @@
-3x error semi  — src/app.js:2:10 Missing semicolon
-2x error no-undef  — src/app.js:1:1 'foo' is not defined
-1x warning no-unused-vars  — src/app.js:5:1 'bar' is assigned a value but never used
-1x warning no-console  — src/util.js:8:1 Unexpected console statement
+src/app.js
+  1:1 no-undef  2:10 semi  5:1 no-unused-vars  12:7 semi
+src/util.js
+  3:5 semi  8:1 no-console  14:3 no-undef
 ✖ 7 problems (5 errors, 2 warnings)
+rules: no-undef (error) 'foo' is not defined; semi (error) Missing semicolon; no-unused-vars (warning) 'bar' is assigned a value but never used; no-console (warning) Unexpected console statement
