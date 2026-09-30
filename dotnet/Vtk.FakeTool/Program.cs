@@ -49,6 +49,7 @@ public static class Program
             "grep" => Grep(stdout, args),
             "find" => Find(stdout),
             "cat" => Cat(),
+            "crashtool" => CrashTool(stdout, stderr),
             _ => Unknown(stderr, tool),
         };
     }
@@ -68,7 +69,10 @@ public static class Program
     // ---- eslint ------------------------------------------------------------
     // VTK_FAKE_ESLINT_CODE (default 1): 0 -> clean run, no output;
     // 1 -> problems report on stdout (the case vtk compacts);
-    // 2 -> fatal/config error on stderr, no report (must stay raw).
+    // 2 -> fatal/config error on stderr, no report (must stay raw below the
+    //      fold floor). VTK_FAKE_ESLINT_BIG=1 at code 2 prefixes the fatal
+    //      with a large (>64KB) debug trace so the run clears the floor: the
+    //      outside-allowlist failure tail-fold shape (#165).
     private static int Eslint(TextWriter stdout, TextWriter stderr)
     {
         var code = EnvCode("VTK_FAKE_ESLINT_CODE", 1);
@@ -77,6 +81,11 @@ public static class Program
             case 0:
                 break; // clean run: eslint prints nothing
             case 2:
+                if (EnvCode("VTK_FAKE_ESLINT_BIG", 0) == 1)
+                {
+                    for (var i = 1; i <= 1200; i++)
+                        stderr.WriteLine($"  eslint:file-enumerator Yield: src/module-{i:0000}/index.js (ignored=false, config=eslint.config.js) +0ms");
+                }
                 stderr.WriteLine("Oops! Something went wrong! :(");
                 stderr.WriteLine("ESLint: 9.0.0");
                 stderr.WriteLine("Error: Cannot read config file: .eslintrc.json");
@@ -143,12 +152,24 @@ public static class Program
     // found" config error on stderr — no summary line — at exit 1: the
     // content gate must keep it raw. VTK_FAKE_MOCHA_COLOR=1 swaps in the
     // colored payloads (real `mocha --color`, the .mocharc.json "color": true
-    // shape, #163): green at 0, 2 failing otherwise.
+    // shape, #163): green at 0, 2 failing otherwise. VTK_FAKE_MOCHA_BIGCRASH=1
+    // emits a large (>64KB) run of spec console noise on stdout and then the
+    // module-load crash on stderr — no summary line — at exit 1: the mocha
+    // filter runs and elides nothing, and the run clears the fold floor, so
+    // the failure tail-fold (#165) must bound it with the stack trace inline.
     private static int Mocha(TextWriter stdout, TextWriter stderr, string? banner)
     {
         if (EnvCode("VTK_FAKE_MOCHA_FATAL", 0) == 1)
         {
             stderr.Write(MochaFatalRaw);
+            return 1;
+        }
+        if (EnvCode("VTK_FAKE_MOCHA_BIGCRASH", 0) == 1)
+        {
+            if (banner != null) stdout.Write(banner);
+            for (var i = 1; i <= 1200; i++)
+                stdout.Write($"[cart-service] 2026-09-29T21:14:00.000Z warming fixture {i:0000}/1200 (sqlite :memory:, 14 tables)\n");
+            stderr.Write(MochaCrashRaw);
             return 1;
         }
         var code = EnvCode("VTK_FAKE_MOCHA_CODE", 1);
@@ -460,6 +481,28 @@ public static class Program
         "\u001b[0m\n" +
         "\n" +
         "\n";
+
+    // ---- crashtool ---------------------------------------------------------
+    // An uncovered tool (no registry entry, no wrapper dispatch) whose run
+    // logs a large (>64KB) progress stream on stdout and then dies with an
+    // assertion stack on stderr — the uncovered-family failure tail-fold
+    // shape (#165, Q2 option B). Exit code forced via
+    // VTK_FAKE_CRASHTOOL_CODE (default 1); the payload is unchanged by the
+    // code, so code 0 gives the same bulk as a success (no fold: uncovered
+    // success output is untouched passthrough).
+    private static int CrashTool(TextWriter stdout, TextWriter stderr)
+    {
+        for (var i = 1; i <= 1400; i++)
+            stdout.Write($"[worker] 2026-09-29T21:14:00.000Z processed batch {i:0000}/1400 (12 rows, 3ms)\n");
+        stdout.Write("[worker] flushing 1400 batches to the sink\n");
+        stderr.Write("AssertionError [ERR_ASSERTION]: batch count drifted during flush\n" +
+                     "\n" +
+                     "1400 !== 1399\n" +
+                     "\n" +
+                     "    at Object.<anonymous> (C:\\src\\demo\\scripts\\flush-batches.js:13:8)\n" +
+                     "    at Module._compile (node:internal/modules/cjs/loader:1871:14)\n");
+        return EnvCode("VTK_FAKE_CRASHTOOL_CODE", 1);
+    }
 
     // ---- npm ---------------------------------------------------------------
     // Emulates `npm run <script>`: the two-line npm banner then the inner

@@ -186,7 +186,7 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   pattern text is never written); output and exit codes of `show` are unchanged.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
   reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`,
-  `spawn-fail`, `binary`), and filtered
+  `spawn-fail`, `binary`, `failure-fold`), and filtered
   invocations record the engaged filter's registry name (e.g. `gh run`) as theirs, so the
   invocation log names which filter handled each call; `vtk gaps`
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
@@ -230,7 +230,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   gross never moves; net is the honest figure. `show` rows are never counted as calls.
   Caveat on the economics: raw bytes are counted as saved even where the agent's own
   `| tail -N` (or similar) would have discarded them, so gross overstates savings on piped
-  runs.
+  runs; likewise the agent harness caps tool output (Claude Code keeps the head), so raw bytes
+  above that cap — the oversized failures the `failure-fold` reason bounds (#165) — were never
+  all model-visible, and the dollar line overstates the stakes on that class.
 - **Shell integration + `vtk install`** — splices a self-locating, `$CLAUDECODE`-guarded wrapper
   block into `~/.bashrc` and the pwsh profile so `git`/`gh`/`npm`/`winget`/`choco`/`reg` route
   through vtk without being prefixed. Marker-delimited and idempotent, with

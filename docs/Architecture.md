@@ -141,8 +141,10 @@ vtk <cmd> [args...]
   │      Interactive/TTY-detected invocations bypass filtering entirely. On the filtered
   │      success path, stdout and stderr are folded into one compact result on stdout;
   │      per-stream separation is preserved on all raw, passthrough, and degraded paths.
-  │      Nonzero child exits skip filtering — failures always emit raw — except codes a
-  │      filter declares in its exit-code allowlist (report-style tools; see registry #7).
+  │      Nonzero child exits skip filtering — failures emit raw — except codes a filter
+  │      declares in its exit-code allowlist (report-style tools; see registry #7). A
+  │      failure at or above the fold floor (any family, covered or not) spools the raw and
+  │      emits a bounded tail + `OK <id>` instead of raw; below the floor it is byte-identical.
   │
   └─ 3. Sweep: opportunistically delete spool entries past TTL (no daemon)
 ```

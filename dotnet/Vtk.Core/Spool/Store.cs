@@ -160,10 +160,17 @@ public sealed class Store
     }
 
     // Reason values classify why an invocation was not filtered. Only
-    // ReasonNoFilter entries are true coverage gaps.
+    // ReasonNoFilter entries — and unfiltered ReasonFailureFold entries —
+    // are true coverage gaps.
     public const string ReasonNoFilter = "no-filter";
     public const string ReasonTTYBypass = "tty-bypass";
     public const string ReasonNonzeroExit = "nonzero-exit";
+    // Nonzero exit at or above the fold floor whose raw was spooled and
+    // tail-folded behind `OK <id>` (#165). Filtered=true when the family is
+    // covered (the fold stood in for a filter that declined the exit code
+    // or elided nothing); Filtered=false when no filter exists, in which
+    // case the row is still a coverage gap — the fold is not coverage.
+    public const string ReasonFailureFold = "failure-fold";
     public const string ReasonFilterPanic = "filter-panic";
     public const string ReasonSpoolFail = "spool-fail";
     // Child never started (unresolvable command, self-flag typo, ...): the
@@ -261,8 +268,14 @@ public sealed class Store
     {
         if (inv.Filtered) return false;
         if (inv.Reason == "") return !inv.TTY; // legacy entry, pre-reason
-        return inv.Reason == ReasonNoFilter;
+        return IsGapReason(inv.Reason);
     }, since, family);
+
+    // An unfiltered row is a coverage gap when no filter exists for the
+    // family: plain passthrough, or a failure tail-fold that stood in for
+    // the missing filter (#165).
+    private static bool IsGapReason(string reason) =>
+        reason == ReasonNoFilter || reason == ReasonFailureFold;
 
     /// <summary>Aggregates filter-panic invocations by command family, optionally windowed (#140) and under a caller-supplied family key (#139).</summary>
     public List<GapSummary> Degraded(DateTime? since = null, Func<string, string>? family = null) =>
@@ -288,7 +301,7 @@ public sealed class Store
             if (inv.Filtered) return false;
             var isGap = inv.Reason == ""
                 ? !inv.TTY // legacy entry, pre-reason
-                : inv.Reason == ReasonNoFilter;
+                : IsGapReason(inv.Reason);
             return isGap && !IsMachineReadable(inv.Cmd);
         }, since, family);
         return all.Where(g => g.RawBytes >= minBytes && g.Calls >= minCalls).ToList();

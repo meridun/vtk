@@ -105,6 +105,39 @@ public class EslintSmokeTests : IDisposable
         Assert.Equal(raw, outp + err);
         Assert.Contains("\"reason\":\"nonzero-exit\"", _h.InvocationLog());
     }
+
+    /// <summary>
+    /// #165: an out-of-allowlist failure at or above the fold floor takes
+    /// the failure tail-fold — bounded tail with the fatal inline, `OK <id>`
+    /// recovers the full raw, parity intact, `failure-fold` row that is not
+    /// a coverage gap (the family is covered).
+    /// </summary>
+    [Fact]
+    public void Exit2BigFatalFoldsToTailWithParityAndRecovery()
+    {
+        var env = new Dictionary<string, string> { ["VTK_FAKE_ESLINT_CODE"] = "2", ["VTK_FAKE_ESLINT_BIG"] = "1" };
+        var (raw, rawCode) = _h.RunRawTool(env, "eslint");
+        Assert.Equal(2, rawCode);
+        Assert.True(raw.Length >= 64 * 1024, $"fixture below the fold floor: {raw.Length} bytes");
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, env, "eslint", "src/");
+        Assert.Equal(rawCode, code); // parity
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.True(outp.Length <= 8 * 1024 + 16, $"failure fold not bounded ({outp.Length} bytes); stderr: {err}");
+        Assert.Contains("Error: Cannot read config file: .eslintrc.json", outp);
+        Assert.DoesNotContain("src/module-0001/index.js", outp);
+
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("src/module-0001/index.js", shown);
+
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"failure-fold\"", log);
+        Assert.Contains("\"filtered\":true", log);
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("eslint", SmokeAssert.GapTable(gaps));
+    }
 }
 
 /// <summary>Port of test/smoke/gh_smoke_test.go: gh list families compact on success, view/JSON shapes pass through intact, parity holds on failure.</summary>
@@ -291,6 +324,62 @@ public class MochaSmokeTests : IDisposable
         Assert.Equal(1, code); // parity
         SmokeAssert.NoOk(outp);
         Assert.Contains("No test files found", outp + err);
+    }
+
+    private static readonly Dictionary<string, string> BigCrash = new() { ["VTK_FAKE_MOCHA_BIGCRASH"] = "1" };
+
+    /// <summary>
+    /// #165: the "mocha filter returned raw" class from the evidence — an
+    /// inside-allowlist exit 1 with no summary line and a body above the
+    /// fold floor. The filter elides nothing, so the failure tail-fold
+    /// bounds it with the module-load stack inline; `OK <id>` recovers the
+    /// full raw; the row is `failure-fold`, attributed as covered.
+    /// </summary>
+    [Fact]
+    public void BigCrashNoSummaryFoldsToTailWithStackInline()
+    {
+        var (raw, rawCode) = _h.RunRawTool(BigCrash, "mocha");
+        Assert.Equal(1, rawCode);
+        Assert.True(raw.Length >= 64 * 1024, $"fixture below the fold floor: {raw.Length} bytes");
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, BigCrash, "npx", "mocha");
+        Assert.Equal(rawCode, code); // parity
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.True(outp.Length <= 8 * 1024 + 16, $"failure fold not bounded ({outp.Length} bytes); stderr: {err}");
+        Assert.Contains("Error: Cannot find module './helpers/db'", outp);
+        Assert.Contains("at Object.<anonymous> (C:\\src\\demo\\test\\cart.test.js:2:12)", outp);
+        Assert.DoesNotContain("warming fixture 0001/1200", outp);
+
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("warming fixture 0001/1200", shown);
+
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"failure-fold\"", log);
+        Assert.Contains("\"filtered\":true", log);
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.DoesNotContain("mocha", SmokeAssert.GapTable(gaps));
+    }
+
+    /// <summary>The same crash through `npm run test`: banner stripped, inner filter elided nothing, failure fold attributed to mocha.</summary>
+    [Fact]
+    public void NpmRunTestBigCrashFoldsWithMochaAttribution()
+    {
+        var (outp, err, code) = _h.RunFaked(_h.Repo, BigCrash, "npm", "run", "test");
+        Assert.Equal(1, code); // parity through the dispatch layer
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.True(outp.Length <= 8 * 1024 + 16, $"failure fold not bounded ({outp.Length} bytes); stderr: {err}");
+        Assert.Contains("Error: Cannot find module './helpers/db'", outp);
+        Assert.DoesNotContain("> demo@1.0.0 test", outp); // banner-stripped body
+
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("> demo@1.0.0 test", shown); // full raw, banner included
+
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"failure-fold\"", log);
+        Assert.Contains("\"cmd\":\"mocha --reporter spec\"", log);
     }
 
     private static Dictionary<string, string> Color(int n) => new()
@@ -661,16 +750,43 @@ public class NpmFoldSmokeTests : IDisposable
     }
 
     [Fact]
-    public void BigBannerlessFailureStaysRawWithParity()
+    public void BigBannerlessFailureFoldsToTailWithParityAndStaysAGap()
     {
         var (raw, rawCode) = _h.RunRawTool(Code(3), "npm", "run", "bigraw");
         Assert.Equal(3, rawCode);
+        Assert.True(raw.Length >= 64 * 1024, $"fixture below the fold floor: {raw.Length} bytes");
 
         var (outp, err, code) = _h.RunFaked(_h.Repo, Code(3), "npm", "run", "bigraw");
         Assert.Equal(rawCode, code); // parity
+        // A failure at or above the floor takes the failure tail-fold (#165,
+        // amends #93): bounded tail + OK <id>, full raw recoverable, and the
+        // call remains a genuine npm-family gap row.
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.True(outp.Length <= 8 * 1024 + 16, $"failure fold not bounded ({outp.Length} bytes); stderr: {err}");
+        Assert.Contains("done: 1500 items in 4.2s", outp);
+        Assert.DoesNotContain("processed item 0001 of 1500", outp);
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("processed item 0001 of 1500", shown);
+
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"failure-fold\"", log);
+        Assert.Contains("\"filtered\":false", log);
+        var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
+        Assert.Equal(0, gapsCode);
+        Assert.Contains("npm", SmokeAssert.GapTable(gaps));
+    }
+
+    [Fact]
+    public void TerseBannerlessFailureStaysRawWithParity()
+    {
+        var (raw, rawCode) = _h.RunRawTool(Code(3), "npm", "run", "quiet");
+        Assert.Equal(3, rawCode);
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, Code(3), "npm", "run", "quiet");
+        Assert.Equal(rawCode, code); // parity
         SmokeAssert.NoOk(outp + err);
-        // Failures are never folded (invariant 2 / registry #93): full raw
-        // survives and the call remains a genuine npm-family gap.
+        // Below the floor a failure is byte-identical raw (#165) and a gap.
         Assert.Equal(raw, outp + err);
         Assert.Contains("\"reason\":\"no-filter\"", _h.InvocationLog());
         var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
@@ -758,21 +874,46 @@ public class PowershellFoldSmokeTests : IDisposable
     }
 
     [Fact]
-    public void BigFileFailureStaysRawWithParity()
+    public void BigFileFailureFoldsToTailWithParityAndStaysAGap()
     {
         var (raw, rawCode) = _h.RunRawTool(Code(3), "powershell", BigArgs);
         Assert.Equal(3, rawCode);
+        Assert.True(raw.Length >= 64 * 1024, $"fixture below the fold floor: {raw.Length} bytes");
 
         var (outp, err, code) = _h.RunFaked(_h.Repo, Code(3), new[] { "powershell" }.Concat(BigArgs).ToArray());
         Assert.Equal(rawCode, code); // parity
-        SmokeAssert.NoOk(outp + err);
-        // Failures are never folded (invariant 2): full raw survives and the
-        // call remains a genuine powershell-family gap.
-        Assert.Equal(raw, outp + err);
-        Assert.Contains("\"reason\":\"no-filter\"", _h.InvocationLog());
+        // A failure at or above the floor takes the failure tail-fold (#165,
+        // amends #131): bounded tail + OK <id>, full raw recoverable, and the
+        // call remains a genuine powershell-family gap row.
+        var id = SmokeHarness.MustOkId(outp);
+        Assert.True(outp.Length <= 8 * 1024 + 16, $"failure fold not bounded ({outp.Length} bytes); stderr: {err}");
+        Assert.Contains("42 passed (312.4s)", outp);
+        Assert.DoesNotContain("request 0001 handled", outp);
+        var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
+        Assert.Equal(0, showCode);
+        Assert.Contains("request 0001 handled", shown);
+
+        var log = _h.InvocationLog();
+        Assert.Contains("\"reason\":\"failure-fold\"", log);
+        Assert.Contains("\"filtered\":false", log);
         var (gaps, _, gapsCode) = _h.Run(_h.Repo, "gaps");
         Assert.Equal(0, gapsCode);
-        Assert.Contains("powershell", gaps);
+        Assert.Contains("powershell", SmokeAssert.GapTable(gaps));
+    }
+
+    [Fact]
+    public void TerseFileFailureStaysRawWithParity()
+    {
+        var quiet = new[] { "-ExecutionPolicy", "Bypass", "-File", "scripts/quiet.ps1" };
+        var (raw, rawCode) = _h.RunRawTool(Code(3), "powershell", quiet);
+        Assert.Equal(3, rawCode);
+
+        var (outp, err, code) = _h.RunFaked(_h.Repo, Code(3), new[] { "powershell" }.Concat(quiet).ToArray());
+        Assert.Equal(rawCode, code); // parity
+        SmokeAssert.NoOk(outp + err);
+        // Below the floor a failure is byte-identical raw (#165) and a gap.
+        Assert.Equal(raw, outp + err);
+        Assert.Contains("\"reason\":\"no-filter\"", _h.InvocationLog());
     }
 
     [Fact]
