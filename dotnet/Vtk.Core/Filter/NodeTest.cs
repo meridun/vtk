@@ -10,13 +10,15 @@
 // duration_ms) and, on failure, a "✖ failing tests:" region with one detail
 // block per failure (location, assertion, diff, stack). The filter folds
 // the passing/suite/skipped tree lines, keeps the summary block verbatim,
-// and keeps the failing-tests region verbatim.
+// and keeps everything after it (the failing-tests region, the
+// --experimental-test-coverage report, anything else node appends)
+// verbatim.
 //
 // Only recognized tree lines fold. Everything else above the summary — tree
 // "✖" lines (which suite failed), "ℹ" diagnostics, stdout/stderr forwarded
 // from test files — stays inline: a module-load crash prints its stack
-// *before* the summary, and folding it would hide the cause. When in doubt,
-// pass through.
+// *before* the summary, and folding it would hide the cause. Nothing below
+// the summary is ever dropped. When in doubt, pass through.
 //
 // node exits 1 when any test fails; that output is exactly what to compact,
 // so the registry allowlists {0, 1}. Fatal errors (bad option, exit 9) and
@@ -50,16 +52,12 @@ public static partial class NodeTest
     [GeneratedRegex(@"^\s*[▶✔﹣]\s")]
     private static partial Regex FoldRe();
 
-    // The failing-tests region header printed after the summary.
-    [GeneratedRegex(@"^\s*✖\s+failing tests:\s*$")]
-    private static partial Regex FailHeaderRe();
-
     /// <summary>
     /// Compacts node --test spec-reporter output: folds passing/suite/skipped
     /// tree lines, keeps every other line above the summary, keeps the
-    /// "ℹ" summary block verbatim, and keeps the "✖ failing tests:" region
-    /// verbatim. Input that carries no summary block passes through
-    /// unchanged.
+    /// "ℹ" summary block verbatim, and keeps every line after it (the
+    /// "✖ failing tests:" region, a coverage report, ...) verbatim. Input
+    /// that carries no summary block passes through unchanged.
     /// </summary>
     public static string Filter(string raw)
     {
@@ -108,28 +106,16 @@ public static partial class NodeTest
         for (var i = firstSummary; i <= lastSummary; i++)
             outLines.Add(lines[i]);
 
-        // The failing-tests region verbatim: from its header after the
-        // summary to the last non-blank line. Interior blank lines separate
-        // blocks and belong to assertion diffs; only the trailing padding
-        // is trimmed.
-        var detailStart = -1;
-        for (var i = lastSummary + 1; i < lines.Length; i++)
-        {
-            if (FailHeaderRe().IsMatch(plain[i]))
-            {
-                detailStart = i;
-                break;
-            }
-        }
-        if (detailStart != -1)
-        {
-            var detailEnd = lines.Length - 1;
-            while (detailEnd >= detailStart && lines[detailEnd].Trim() == "")
-                detailEnd--;
-            outLines.Add(""); // blank line between summary and the region
-            for (var i = detailStart; i <= detailEnd; i++)
-                outLines.Add(lines[i]);
-        }
+        // Everything after the summary verbatim: the "✖ failing tests:"
+        // region (location, assertion, diff, stack), the coverage report
+        // under --experimental-test-coverage, anything else node appends.
+        // Interior blank lines separate blocks and belong to assertion
+        // diffs; only the trailing blank padding is trimmed.
+        var tailEnd = lines.Length - 1;
+        while (tailEnd > lastSummary && lines[tailEnd].Trim() == "")
+            tailEnd--;
+        for (var i = lastSummary + 1; i <= tailEnd; i++)
+            outLines.Add(lines[i]);
 
         return string.Join("\n", outLines);
     }

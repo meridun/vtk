@@ -20,6 +20,8 @@ public class NodeTestTests
     [InlineData("pass", 0.80)]         // green run, 34 tests: only the summary block survives
     [InlineData("fail", 0.20)]         // 3 failures (exit 1): tree folds, detail blocks kept verbatim
     [InlineData("crash_module", 0.00)] // module-load crash before the summary: stack kept, nothing to fold (0%)
+    [InlineData("pass_coverage", 0.50)] // green run with --experimental-test-coverage: summary + coverage table kept
+    [InlineData("fail_coverage", 0.30)] // failing run with coverage: coverage sits between summary and detail
     public void MatchesGoldenOutput(string name, double minSavings)
     {
         var raw = Raw(name);
@@ -81,6 +83,59 @@ public class NodeTestTests
         Assert.Contains(@"✖ crash\broken.test.js (45.7186ms)", got);
         Assert.Contains("ℹ fail 1\n", got);
         Assert.EndsWith("  'test failed'", got);
+    }
+
+    /// <summary>
+    /// --experimental-test-coverage appends an "ℹ start of coverage report"
+    /// … "ℹ end of coverage report" table after the summary block. Nothing
+    /// below the summary is ever dropped: the table the user asked for
+    /// survives verbatim on a green run.
+    /// </summary>
+    [Fact]
+    public void CoverageRun_KeepsCoverageReportAfterSummary()
+    {
+        var got = NodeTest.Filter(Raw("pass_coverage"));
+        Assert.DoesNotContain("✔", got);
+        Assert.DoesNotContain("▶", got);
+        Assert.StartsWith("ℹ tests 26\n", got);
+        Assert.Contains("ℹ duration_ms 93.0553\nℹ start of coverage report\n", got);
+        Assert.Contains("ℹ file      | line % | branch % | funcs % | uncovered lines\n", got);
+        Assert.Contains("ℹ  cart.js  |  75.00 |   100.00 |   75.00 | 3\n", got);
+        Assert.EndsWith("ℹ end of coverage report", got);
+    }
+
+    /// <summary>
+    /// With coverage on a failing run, the coverage table sits between the
+    /// summary block and the "✖ failing tests:" region; both are kept in
+    /// their original order.
+    /// </summary>
+    [Fact]
+    public void FailingCoverageRun_KeepsCoverageBetweenSummaryAndDetail()
+    {
+        var got = NodeTest.Filter(Raw("fail_coverage"));
+        Assert.Contains("  ✖ computes the total (1.0033ms)\n", got);
+        Assert.DoesNotContain("creates order", got);
+        var summary = got.IndexOf("ℹ duration_ms 93.7211", StringComparison.Ordinal);
+        var coverageStart = got.IndexOf("ℹ start of coverage report", StringComparison.Ordinal);
+        var coverageEnd = got.IndexOf("ℹ end of coverage report", StringComparison.Ordinal);
+        var detail = got.IndexOf("✖ failing tests:", StringComparison.Ordinal);
+        Assert.True(summary >= 0 && coverageStart > summary && coverageEnd > coverageStart && detail > coverageEnd,
+            $"order summary={summary} coverageStart={coverageStart} coverageEnd={coverageEnd} detail={detail}");
+        Assert.Contains("12 !== 11", got);
+        Assert.Contains(@"at TestContext.<anonymous> (C:\proj\shop\test\orders.test.js:5:41)", got);
+        Assert.EndsWith("  }", got);
+    }
+
+    /// <summary>
+    /// Any unrecognized line after the summary (not a coverage table, not a
+    /// failing-tests region) is kept verbatim too; only trailing blank
+    /// padding is trimmed.
+    /// </summary>
+    [Fact]
+    public void UnrecognizedLinesAfterSummary_AreKept()
+    {
+        const string raw = "▶ s\n  ✔ a (1ms)\n✔ s (2ms)\nℹ tests 1\nℹ pass 1\nℹ fail 0\nℹ duration_ms 3\nsome trailer node printed\n\n\n";
+        Assert.Equal("ℹ tests 1\nℹ pass 1\nℹ fail 0\nℹ duration_ms 3\nsome trailer node printed", NodeTest.Filter(raw));
     }
 
     /// <summary>
