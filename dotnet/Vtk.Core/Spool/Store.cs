@@ -170,6 +170,11 @@ public sealed class Store
     // invocation is still logged — fallback always logs — but it is not a
     // coverage gap, so it must not rank a family in `vtk gaps` (#118).
     public const string ReasonSpawnFail = "spawn-fail";
+    // Binary-producing command (`git archive`, `git bundle create`, #171):
+    // passed through byte-for-byte because there is no text to compact.
+    // Logged — fallback always logs — but not a coverage gap, so it never
+    // ranks a family in `vtk gaps`.
+    public const string ReasonBinary = "binary";
     // A `vtk show <id>` read-back (#137): not a wrap invocation, so it is
     // neither a coverage gap nor countable savings — it is the recovery
     // signal the fold→show join reads.
