@@ -161,7 +161,7 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   pattern text is never written); output and exit codes of `show` are unchanged.
 - **Gap logging + `vtk gaps`** — every unfiltered passthrough is logged (metadata only) with a
   reason (`no-filter`, `tty-bypass`, `nonzero-exit`, `filter-panic`, `spool-fail`,
-  `spawn-fail`), and filtered
+  `spawn-fail`, `binary`), and filtered
   invocations record the engaged filter's registry name (e.g. `gh run`) as theirs, so the
   invocation log names which filter handled each call; `vtk gaps`
   reports only true coverage gaps (`no-filter`), aggregated by command family and sorted by raw
@@ -172,7 +172,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   (`git rev-parse`, `gh api`) rather than one umbrella `git` (#139); `vtk gain` keeps the
   `argv[0]` grain.
   A child that never started (unresolvable command, self-flag typo) still exits 127 and is
-  still logged, but under `spawn-fail` — it never ranks a gap family.
+  still logged, but under `spawn-fail` — it never ranks a gap family. Binary-producing
+  commands (`git archive`, `git bundle create`) pass through byte-for-byte and are logged under
+  `binary` (#171) — never filtered, never ranked as a gap.
   `vtk gaps --file-issues` (#61) turns recurring gap families into `stage:intake` filter issues
   via `gh`: dry-run by default (`--yes` to create), `--min-bytes`/`--min-calls` thresholds
   (defaults 50 KiB / 3 calls, floors 4096 B / 2), and dedupe against open `Filter:` issues so
