@@ -1,0 +1,51 @@
+ae71d5f Merge pull request #162 from meridun/fix/155-invocation-log-append-retry
+18ab93e test(spool): correct stale retry-budget comment on LogInvocation test (#155)
+dotnet/Vtk.Tests/Spool/StoreTests.cs | +1 -1
+077b716 test(smoke): concurrent vtk herd keeps every invocations.jsonl row (#155)
+dotnet/Vtk.Tests/Smoke/InvocationLogSmokeTests.cs | +81 -0
+23eab67 fix(spool): retry invocations.jsonl append past concurrent-writer sharing violation (#155)
+dotnet/Vtk.Core/Spool/Store.cs | +32 -1
+dotnet/Vtk.Tests/Spool/StoreTests.cs | +70 -0
+2 files, +102 -1
+55e9502 Merge pull request #159 from meridun/feat/137-show-recovery-telemetry
+f847b0d Merge origin/dev into feat/137-show-recovery-telemetry (#137)
+52f89d8 Merge pull request #161 from meridun/fix/153-npm-inner-filter-attribution
+cae6ff1 Merge pull request #160 from meridun/fix/139-gaps-pair-families
+f9a5f3d Merge pull request #158 from meridun/fix/136-spool-id-cwd
+85e2653 Merge pull request #157 from meridun/fix/135-git-hunk-fold-floor
+0c2b842 docs(readme,coverage): npm inner-filter rows that elided nothing are attributed to the filter (#153)
+README.md | +4 -1
+docs/ToolCoverage.md | +1 -1
+2 files, +5 -2
+4a38761 fix(npm): attribute "inner filter ran, elided nothing" rows to the filter (#153)
+dotnet/Vtk.Cli/App.cs | +23 -13
+dotnet/Vtk.FakeTool/Program.cs | +19 -0
+dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs | +33 -0
+3 files, +75 -13
+13b251d docs(readme): vtk gaps pair-keyed families and dispatch-gap line (#139)
+README.md | +8 -1
+647e2f5 test(smoke): gaps keys unfiltered git subcommands by pair after global-option normalization (#139)
+dotnet/Vtk.Tests/Smoke/SmokeTests.cs | +26 -0
+381933f fix(gaps): key gap families by argv[0] argv[1] for pair-keyed commands; report dispatch gaps (#139)
+docs/ToolCoverage.md | +7 -1
+dotnet/Vtk.Cli/App.cs | +7 -6
+dotnet/Vtk.Cli/GapsIssues.cs | +48 -25
+dotnet/Vtk.Core/Filter/Registry.cs | +39 -0
+dotnet/Vtk.Core/Spool/Store.cs | +22 -15
+dotnet/Vtk.Tests/Filter/RegistryTests.cs | +50 -0
+dotnet/Vtk.Tests/GapsIssuesTests.cs | +55 -3
+dotnet/Vtk.Tests/Spool/StoreTests.cs | +37 -0
+8 files, +265 -50
+6e8801d docs(readme,arch,coverage): vtk show telemetry, gaps recovered-folds section, gain net column (#137)
+README.md | +14 -2
+docs/Architecture.md | +5 -2
+docs/ToolCoverage.md | +1 -1
+3 files, +20 -5
+a17d2a2 test(smoke): show bad-pattern logs no row; a show joins only the latest fold of its id (#137)
+dotnet/Vtk.Tests/Smoke/ShowTelemetrySmokeTests.cs | +42 -0
+64308e6 test(spool,smoke): fold-to-show join, recovery rate, net gain, show telemetry through the real binary (#137)
+dotnet/Vtk.Tests/Smoke/FilterSmokeTests.cs | +14 -3
+dotnet/Vtk.Tests/Smoke/ShowTelemetrySmokeTests.cs | +109 -0
+dotnet/Vtk.Tests/Smoke/SmokeTests.cs | +1 -1
+dotnet/Vtk.Tests/Spool/StoreTests.cs | +145 -0
+4 files, +269 -4
