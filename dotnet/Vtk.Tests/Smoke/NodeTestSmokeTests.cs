@@ -26,11 +26,19 @@ public class NodeTestSmokeTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_proj, "test"));
         File.WriteAllText(Path.Combine(_proj, "package.json"),
             "{\"name\":\"scratch\",\"version\":\"1.0.0\",\"scripts\":{\"test\":\"node --test\"}}\n");
+        // A source module under test so --experimental-test-coverage has a
+        // file to report (node excludes test files from the table); `unused`
+        // leaves a line uncovered so the table carries a non-trivial row.
+        File.WriteAllText(Path.Combine(_proj, "cart.js"),
+            "function add(a, b) { return a + b; }\n" +
+            "function unused() { return 0; }\n" +
+            "module.exports = { add, unused };\n");
         File.WriteAllText(Path.Combine(_proj, "test", "cart.test.js"),
             "const { describe, it } = require('node:test');\n" +
             "const assert = require('node:assert');\n" +
+            "const { add } = require('../cart.js');\n" +
             "describe('cart', () => {\n" +
-            "  for (let i = 0; i < 12; i++) it('adds item ' + i, () => assert.strictEqual(i + 1, i + 1));\n" +
+            "  for (let i = 0; i < 12; i++) it('adds item ' + i, () => assert.strictEqual(add(i, 1), i + 1));\n" +
             "  it('skips shipping', { skip: 'no shipping yet' }, () => {});\n" +
             "  it('todo tax', { todo: true }, () => {});\n" +
             "});\n");
@@ -183,6 +191,57 @@ public class NodeTestSmokeTests : IDisposable
         Assert.True(outp.Length < raw.Length, $"compact ({outp.Length}) not smaller than raw ({raw.Length})");
 
         Assert.DoesNotContain("ERR_ASSERTION", _h.InvocationLog());
+    }
+
+    /// <summary>
+    /// --experimental-test-coverage appends an "ℹ start of coverage report" …
+    /// "ℹ end of coverage report" table after the summary block. Nothing
+    /// below the summary is ever dropped: on a green run the table follows
+    /// the summary verbatim; on a failing run it sits between the summary
+    /// and the "✖ failing tests:" region, in the original order.
+    /// </summary>
+    [Fact]
+    public void CoverageRunKeepsCoverageTableAfterSummaryWithParity()
+    {
+        var (raw, rawCode) = Raw(null, "node", "--test", "--experimental-test-coverage");
+        Assert.Equal(0, rawCode);
+        Assert.Contains("ℹ start of coverage report", raw);
+
+        var (outp, err, code) = Vtk(null, "node", "--test", "--experimental-test-coverage");
+        Assert.Equal(rawCode, code); // parity
+        Assert.True(err == "", $"unexpected stderr: {err}");
+        SmokeHarness.MustOkId(outp);
+        Assert.StartsWith("ℹ tests 25\n", outp);
+        Assert.DoesNotContain("✔", outp);
+        Assert.DoesNotContain("▶", outp);
+        // The whole coverage table, as node printed it, follows the summary.
+        const string tableStart = "ℹ start of coverage report";
+        const string tableEnd = "ℹ end of coverage report";
+        var rawTable = raw[raw.IndexOf(tableStart, StringComparison.Ordinal)..];
+        rawTable = rawTable[..(rawTable.IndexOf(tableEnd, StringComparison.Ordinal) + tableEnd.Length)];
+        Assert.Contains("ℹ cart.js", rawTable);
+        Assert.Contains(rawTable, outp);
+        var summary = outp.IndexOf("ℹ duration_ms", StringComparison.Ordinal);
+        var table = outp.IndexOf(tableStart, StringComparison.Ordinal);
+        Assert.True(summary >= 0 && table > summary, $"order summary={summary} table={table}");
+        Assert.True(outp.Length < raw.Length, $"compact ({outp.Length}) not smaller than raw ({raw.Length})");
+
+        // Failing run: summary, then the table, then the detail region.
+        var (_, rawFailCode) = Raw(Break(), "node", "--test", "--experimental-test-coverage");
+        Assert.Equal(1, rawFailCode);
+        var (failOut, _, failCode) = Vtk(Break(), "node", "--test", "--experimental-test-coverage");
+        Assert.Equal(rawFailCode, failCode); // parity
+        Assert.Contains("✖ computes the total", failOut);
+        Assert.DoesNotContain("creates order", failOut);
+        var fSummary = failOut.IndexOf("ℹ duration_ms", StringComparison.Ordinal);
+        var fTableStart = failOut.IndexOf(tableStart, StringComparison.Ordinal);
+        var fTableEnd = failOut.IndexOf(tableEnd, StringComparison.Ordinal);
+        var fDetail = failOut.IndexOf("✖ failing tests:", StringComparison.Ordinal);
+        Assert.True(fSummary >= 0 && fTableStart > fSummary && fTableEnd > fTableStart && fDetail > fTableEnd,
+            $"order summary={fSummary} tableStart={fTableStart} tableEnd={fTableEnd} detail={fDetail}");
+        Assert.Contains("12 !== 11", failOut);
+
+        Assert.DoesNotContain("coverage report", _h.InvocationLog());
     }
 
     /// <summary>A bad option exits 9 outside the {0, 1} allowlist: raw passthrough, no spool, parity.</summary>
