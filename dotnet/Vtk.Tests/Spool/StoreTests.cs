@@ -268,6 +268,29 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public void Gaps_ExcludesBinaryEntries()
+    {
+        // Binary-producing commands (#171): passed through and logged, but
+        // there is no text to compact, so they never rank as a gap family.
+        _store.LogInvocation(new Invocation { Cmd = "git archive HEAD", RawBytes = 24_248_320, OutBytes = 24_248_320, Reason = Store.ReasonBinary });
+        _store.LogInvocation(new Invocation { Cmd = "git bundle create - HEAD", RawBytes = 5000, OutBytes = 5000, Reason = Store.ReasonBinary });
+        _store.LogInvocation(new Invocation { Cmd = "ls -la", RawBytes = 100, Reason = Store.ReasonNoFilter });
+
+        var gaps = _store.Gaps();
+        var ls = Assert.Single(gaps);
+        Assert.Equal("ls", ls.Family);
+    }
+
+    [Fact]
+    public void FileIssueGaps_ExcludesBinaryEntries()
+    {
+        for (var i = 0; i < 5; i++)
+            _store.LogInvocation(new Invocation { Cmd = "git archive HEAD", RawBytes = 99999, OutBytes = 99999, Reason = Store.ReasonBinary });
+
+        Assert.Empty(_store.FileIssueGaps(1, 1));
+    }
+
+    [Fact]
     public void Gain_ComputesSavedBytesPerFamily()
     {
         _store.LogInvocation(new Invocation { Cmd = "git status", RawBytes = 1000, OutBytes = 100, Filtered = true });
