@@ -71,8 +71,9 @@ public class PrefixUnwrapSmokeTests : IDisposable
         Assert.Equal(rawCode, code); // parity
         SmokeHarness.MustOkId(outp);
         Assert.True(outp.Length < raw.Length, $"compact ({outp.Length}) not smaller than raw ({raw.Length}); stderr: {err}");
-        // Per-rule rollup, not raw stylish lines: the eslint filter engaged.
-        Assert.Contains("7x error semi", outp);
+        // Per-file compact listing (#170), not raw stylish lines: the eslint filter engaged.
+        Assert.Contains("2:10 semi", outp);
+        Assert.Contains("rules: no-undef (error)", outp);
         Assert.Contains("12 problems (10 errors, 2 warnings)", outp);
         // Attribution is the unwrapped inner argv.
         Assert.Contains("\"cmd\":\"eslint .\"", _h.InvocationLog());

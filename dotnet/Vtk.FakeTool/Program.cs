@@ -87,8 +87,8 @@ public static class Program
         return code;
     }
 
-    // Stylish-format problems report. Rollup: 7x error semi, 3x error
-    // no-undef, 1x warning no-unused-vars, 1x warning no-console.
+    // Stylish-format problems report: 7 semi, 3 no-undef, 1 no-unused-vars,
+    // 1 no-console across two files (12 locations for the #170 listing).
     private const string EslintReport =
         "\nsrc/app.js\n" +
         "   1:1   error    'foo' is not defined                  no-undef\n" +
