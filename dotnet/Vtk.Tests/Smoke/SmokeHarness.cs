@@ -132,7 +132,7 @@ public sealed class SmokeHarness : IDisposable
     private string? _fakeBin;
 
     /// <summary>
-    /// A scratch bin dir of fake external tools (eslint, gh, mocha, cross-env,
+    /// A scratch bin dir of fake external tools (eslint, gh, mocha, playwright, cross-env,
     /// npx, npm, dbmate, ls, grep, find, powershell, pwsh), lazily materialized as .cmd shims around the
     /// vtk-faketool binary the test project references. Prepended to the
     /// child PATH by <see cref="RunFaked"/>, this is the C# analog of the Go
@@ -149,7 +149,7 @@ public sealed class SmokeHarness : IDisposable
             if (!File.Exists(dll))
                 throw new FileNotFoundException($"vtk-faketool.dll not found beside the tests: {dll}");
             var dir = MakeTempDir();
-            foreach (var name in new[] { "eslint", "gh", "mocha", "cross-env", "npx", "npm", "dbmate", "ls", "grep", "find", "powershell", "pwsh", "cat" })
+            foreach (var name in new[] { "eslint", "gh", "mocha", "cross-env", "npx", "npm", "dbmate", "ls", "grep", "find", "powershell", "pwsh", "cat", "playwright" })
             {
                 File.WriteAllText(Path.Combine(dir, name + ".cmd"),
                     $"@dotnet \"{dll}\" --as {name} %*\r\n");

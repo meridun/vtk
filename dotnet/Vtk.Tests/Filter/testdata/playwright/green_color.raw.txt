@@ -1,0 +1,13 @@
+
+[2mRunning [22m7[2m tests using [22m2[2m workers[22m
+
+  [32mok[39m [2m1 [22m[chromium] › tests\cart.spec.js:3:3 › cart › adds an item[2m (4ms)[22m
+  [32mok[39m [2m2 [22m[chromium] › tests\inventory.spec.js:2:1 › lists items[2m (4ms)[22m
+  [32mok[39m [2m3 [22m[chromium] › tests\cart.spec.js:4:3 › cart › removes an item[2m (2ms)[22m
+  [32mok[39m [2m4 [22m[chromium] › tests\inventory.spec.js:3:1 › finds an item by name[2m (2ms)[22m
+  [32mok[39m [2m6 [22m[chromium] › tests\inventory.spec.js:4:1 › rejects an unknown item[2m (2ms)[22m
+  [32mok[39m [2m5 [22m[chromium] › tests\cart.spec.js:5:3 › cart › computes the total[2m (1ms)[22m
+  [32m-[39m  [2m7 [22m[36m[chromium] › tests\cart.spec.js:6:8 › cart › applies a coupon[39m
+
+[33m  1 skipped[39m
+[32m  6 passed[39m[2m (604ms)[22m

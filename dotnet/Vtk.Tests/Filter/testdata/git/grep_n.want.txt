@@ -1,0 +1,16 @@
+dotnet/Vtk.Cli/App.cs:106:            var reason = found ? Store.ReasonTTYBypass : Store.ReasonNoFilter;
+dotnet/Vtk.Cli/App.cs:132:            return Passthrough(st, args, false, Store.ReasonNoFilter, match);
+dotnet/Vtk.Cli/App.cs:217:            return EmitRawAttr(match, Store.ReasonNoFilter);
+dotnet/Vtk.Cli/App.cs:295:        var reason = filterName ?? Store.ReasonNoFilter;
+dotnet/Vtk.Cli/App.cs:385:            return EmitRaw(Store.ReasonNoFilter);
+dotnet/Vtk.Core/Spool/Store.cs:163:    // ReasonNoFilter entries are true coverage gaps.
+dotnet/Vtk.Core/Spool/Store.cs:164:    public const string ReasonNoFilter = "no-filter";
+dotnet/Vtk.Core/Spool/Store.cs:259:        return inv.Reason == ReasonNoFilter;
+dotnet/Vtk.Core/Spool/Store.cs:268:    /// (`vtk gaps --file-issues`, #34): true gaps (ReasonNoFilter) that meet
+dotnet/Vtk.Core/Spool/Store.cs:286:                : inv.Reason == ReasonNoFilter;
+dotnet/Vtk.Tests/Spool/StoreTests.cs:199:        _store.LogInvocation(new Invocation { Cmd = "ls -la", RawBytes = 100, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:200:        _store.LogInvocation(new Invocation { Cmd = "ls -R", RawBytes = 50, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:225:        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse HEAD", RawBytes = 100, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:226:        _store.LogInvocation(new Invocation { Time = now, Cmd = "git rev-parse --show-toplevel", RawBytes = 100, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs:227:        _store.LogInvocation(new Invocation { Time = now, Cmd = "git fetch origin", RawBytes = 50, Reason = Store.ReasonNoFilter });
+dotnet/Vtk.Tests/Spool/StoreTests.cs: (+20 more)

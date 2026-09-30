@@ -174,6 +174,14 @@ public sealed class Registry
     /// <summary>mocha exits with its failure count (min(failures, 255)), so every code in 0..255 is a report, not a failure (#138).</summary>
     private static readonly int[] MochaExitCodes = Enumerable.Range(0, 256).ToArray();
 
+    /// <summary>
+    /// `node --test` with `--test` in any position after `node` (#168):
+    /// flags and their values may precede it (`node --import tsx --test`,
+    /// `node --test-reporter=spec --test test/`). The token must be exactly
+    /// `--test`, so `--test-only` and other `--test-*` flags alone miss.
+    /// </summary>
+    private static readonly Regex NodeTestRe = new(@"^node(?:\.exe)?\s(?:\S+\s)*--test(?:\s|$)", RegexOptions.Compiled);
+
     /// <summary>The registry with all shipped filter families wired in. Empty until filters are ported (task #2+).</summary>
     public static Registry Default()
     {
@@ -187,6 +195,12 @@ public sealed class Registry
         r.Register("git push", Git.Push);
         r.Register("git pull", Git.Pull);
         r.Register("git branch", Git.Branch);
+        // Registry reuse (#167): `git merge` prints the same transfer/diffstat
+        // shape as `git pull` (conflict output exits 1 and stays raw under the
+        // exit-0 allowlist); `git grep -n` prints `path:line:content` like
+        // plain grep (no-match exit 1 stays raw, matching `grep`).
+        r.Register("git merge", Git.Pull);
+        r.Register("git grep", Files.Grep);
         // eslint reports "problems found" via exit 1; that output is the whole
         // point to compact. Exit 2+ is a fatal/config error and stays raw.
         r.RegisterCodes("eslint", Eslint.Filter, 0, 1);
@@ -199,10 +213,28 @@ public sealed class Registry
         // content — not exit code — is the gate for the raw path.
         r.RegisterCodes("mocha", Mocha.Filter, MochaExitCodes);
         r.RegisterCodes("npx mocha", Mocha.Filter, MochaExitCodes);
+        // playwright test (#169): the list reporter's per-test lines fold;
+        // exit 1 means "some tests failed" and is a report (decision #7
+        // precedent), so {0, 1} filters. One pair key covers `npx playwright
+        // test` too — the #97 launcher unwrap runs before lookup. Fatal
+        // errors ("No tests found") and the json/line/dot reporters carry
+        // no list lines to fold and pass through by content.
+        r.RegisterCodes("playwright test", Playwright.Filter, 0, 1);
+        // node --test (#168): the built-in runner's spec-reporter tree folds;
+        // exit 1 means "some tests failed" and is a report (decision #7
+        // precedent), so {0, 1} filters. A regex entry rather than a pair
+        // key, so `node` gains no pair key and `vtk gaps` keeps aggregating
+        // other `node <script>` rows under bare `node` (#139); the pattern
+        // also tolerates flags ahead of `--test`. Fatal errors and the TAP
+        // reporter carry no "ℹ tests N" block and pass through by content.
+        r.RegisterRegexNamed("node --test", NodeTestRe, NodeTest.Filter, 0, 1);
         // gh list families: TSV human output on success (exit 0). `gh --json`
         // forms hit the same keys but pass through structurally intact.
         r.Register("gh issue", Gh.IssueList);
-        r.Register("gh pr", Gh.PrList);
+        // `gh pr` dispatches by content shape (#167): `gh pr diff` output
+        // carries unified-diff headers and routes to Git.Diff (with its #135
+        // floor); list tables go to PrList; view/checks shapes pass through.
+        r.Register("gh pr", Gh.Pr);
         // `gh run` dispatches by content shape: run-list tables and CI job
         // logs (`run view --log` / `--log-failed`, #96). Exit 1 is in the
         // allowlist for the report-style `--exit-status` forms, which

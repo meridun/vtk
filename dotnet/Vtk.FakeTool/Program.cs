@@ -40,6 +40,7 @@ public static class Program
             "mocha" => Mocha(stdout, stderr, banner: null),
             "cross-env" => CrossEnv(stdout, stderr, args),
             "npx" => Npx(stdout, stderr, args),
+            "playwright" => Playwright(stdout, stderr, args),
             "npm" => Npm(stdout, stderr, args),
             "gh" => Gh(stdout, stderr, args),
             "powershell" or "pwsh" => Powershell(stdout, stderr, args),
@@ -87,8 +88,8 @@ public static class Program
         return code;
     }
 
-    // Stylish-format problems report. Rollup: 7x error semi, 3x error
-    // no-undef, 1x warning no-unused-vars, 1x warning no-console.
+    // Stylish-format problems report: 7 semi, 3 no-undef, 1 no-unused-vars,
+    // 1 no-console across two files (12 locations for the #170 listing).
     private const string EslintReport =
         "\nsrc/app.js\n" +
         "   1:1   error    'foo' is not defined                  no-undef\n" +
@@ -177,8 +178,8 @@ public static class Program
 
     // `npx <tool>`: the Go suite copied the fake mocha to npx(.exe) so that
     // `npx mocha` resolved to it. Emulate the same, tolerating the
-    // transparent flags real npx traffic carries (#97): mocha and eslint are
-    // wired; anything else (including non-transparent flags like -p) is the
+    // transparent flags real npx traffic carries (#97): mocha, eslint and
+    // playwright are wired; anything else (including non-transparent flags like -p) is the
     // unknown-inner error path.
     private static int Npx(TextWriter stdout, TextWriter stderr, string[] args)
     {
@@ -188,9 +189,106 @@ public static class Program
             return Mocha(stdout, stderr, banner: null);
         if (i < args.Length && args[i] == "eslint")
             return Eslint(stdout, stderr);
+        if (i < args.Length && args[i] == "playwright")
+            return Playwright(stdout, stderr, args[(i + 1)..]);
         stderr.WriteLine("vtk-faketool npx: unknown inner tool");
         return 1;
     }
+
+
+    // ---- playwright --------------------------------------------------------
+    // VTK_FAKE_PLAYWRIGHT_CODE (default 1) selects the exit code AND the
+    // payload: 0 -> green list-reporter run; 1 -> two failures at exit 1
+    // (playwright exits 1 when any test fails; the report is what vtk
+    // compacts, #169). VTK_FAKE_PLAYWRIGHT_FATAL=1 instead emits the real
+    // "No tests found" error at exit 1 — no summary block, so the content
+    // gate must keep it raw. Payloads are the #169 fixture captures
+    // (@playwright/test 1.55.1, pipe capture, win32 markers); the failing
+    // one carries expect's SGR diff coloring like the real thing.
+    private static int Playwright(TextWriter stdout, TextWriter stderr, string[] args)
+    {
+        if (args.Length == 0 || args[0] != "test")
+        {
+            stderr.WriteLine("vtk-faketool playwright: only `test` is faked");
+            return 64;
+        }
+        if (EnvCode("VTK_FAKE_PLAYWRIGHT_FATAL", 0) == 1)
+        {
+            stdout.Write(PlaywrightFatalRaw);
+            return 1;
+        }
+        var code = EnvCode("VTK_FAKE_PLAYWRIGHT_CODE", 1);
+        stdout.Write(code == 0 ? PlaywrightPassRaw : PlaywrightFailRaw);
+        return code;
+    }
+
+    private const string PlaywrightFatalRaw = "Error: No tests found\n\n";
+
+    private const string PlaywrightPassRaw =
+        "\n" +
+        "Running 7 tests using 2 workers\n" +
+        "\n" +
+        "  ok 2 [chromium] › tests\\cart.spec.js:3:3 › cart › adds an item (4ms)\n" +
+        "  ok 1 [chromium] › tests\\inventory.spec.js:2:1 › lists items (4ms)\n" +
+        "  ok 3 [chromium] › tests\\cart.spec.js:4:3 › cart › removes an item (1ms)\n" +
+        "  ok 4 [chromium] › tests\\inventory.spec.js:3:1 › finds an item by name (1ms)\n" +
+        "  ok 5 [chromium] › tests\\cart.spec.js:5:3 › cart › computes the total (1ms)\n" +
+        "  -  7 [chromium] › tests\\cart.spec.js:6:8 › cart › applies a coupon\n" +
+        "  ok 6 [chromium] › tests\\inventory.spec.js:4:1 › rejects an unknown item (2ms)\n" +
+        "\n" +
+        "  1 skipped\n" +
+        "  6 passed (686ms)\n";
+
+    private const string PlaywrightFailRaw =
+        "\n" +
+        "Running 10 tests using 2 workers\n" +
+        "\n" +
+        "  ok  1 [chromium] › tests\\cart.spec.js:3:3 › cart › adds an item (4ms)\n" +
+        "  x   2 [chromium] › tests\\checkout.spec.js:3:3 › checkout › charges the card (6ms)\n" +
+        "  ok  3 [chromium] › tests\\cart.spec.js:4:3 › cart › removes an item (1ms)\n" +
+        "  ok  4 [chromium] › tests\\cart.spec.js:5:3 › cart › computes the total (1ms)\n" +
+        "  -   5 [chromium] › tests\\cart.spec.js:6:8 › cart › applies a coupon\n" +
+        "  ok  6 [chromium] › tests\\inventory.spec.js:2:1 › lists items (1ms)\n" +
+        "  ok  7 [chromium] › tests\\inventory.spec.js:3:1 › finds an item by name (1ms)\n" +
+        "  ok  8 [chromium] › tests\\inventory.spec.js:4:1 › rejects an unknown item (4ms)\n" +
+        "  x   9 [chromium] › tests\\checkout.spec.js:4:3 › checkout › sends a receipt (2ms)\n" +
+        "  ok 10 [chromium] › tests\\checkout.spec.js:5:3 › checkout › empties the cart (4ms)\n" +
+        "\n" +
+        "\n" +
+        "  1) [chromium] › tests\\checkout.spec.js:3:3 › checkout › charges the card ─────────────────────────\n" +
+        "\n" +
+        "    Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n" +
+        "\n" +
+        "    Expected: \u001b[32m11\u001b[39m\n" +
+        "    Received: \u001b[31m12\u001b[39m\n" +
+        "\n" +
+        "      1 | const { test, expect } = require('@playwright/test');\n" +
+        "      2 | test.describe('checkout', () => {\n" +
+        "    > 3 |   test('charges the card', async () => { expect(12).toBe(11); });\n" +
+        "        |                                                     ^\n" +
+        "      4 |   test('sends a receipt', async () => { throw new Error('gateway timeout'); });\n" +
+        "      5 |   test('empties the cart', async () => { expect([]).toHaveLength(0); });\n" +
+        "      6 | });\n" +
+        "        at C:\\work\\shop\\tests\\checkout.spec.js:3:53\n" +
+        "\n" +
+        "  2) [chromium] › tests\\checkout.spec.js:4:3 › checkout › sends a receipt ──────────────────────────\n" +
+        "\n" +
+        "    Error: gateway timeout\n" +
+        "\n" +
+        "      2 | test.describe('checkout', () => {\n" +
+        "      3 |   test('charges the card', async () => { expect(12).toBe(11); });\n" +
+        "    > 4 |   test('sends a receipt', async () => { throw new Error('gateway timeout'); });\n" +
+        "        |                                               ^\n" +
+        "      5 |   test('empties the cart', async () => { expect([]).toHaveLength(0); });\n" +
+        "      6 | });\n" +
+        "      7 |\n" +
+        "        at C:\\work\\shop\\tests\\checkout.spec.js:4:47\n" +
+        "\n" +
+        "  2 failed\n" +
+        "    [chromium] › tests\\checkout.spec.js:3:3 › checkout › charges the card ──────────────────────────\n" +
+        "    [chromium] › tests\\checkout.spec.js:4:3 › checkout › sends a receipt ───────────────────────────\n" +
+        "  1 skipped\n" +
+        "  7 passed (1.6s)\n";
 
     private const string MochaFailRaw =
         "\n\n" +
@@ -494,6 +592,31 @@ public static class Program
                 {
                     var state = i % 3 == 0 ? "MERGED" : "OPEN";
                     stdout.Write($"{i}\tWire up coverage for the number {i} filter family\tfeat/{i}-some-longish-branch-name-for-padding\t{state}\t2026-07-05T09:00:00Z\n");
+                }
+                return code;
+            case ("pr", "diff"):
+                // Unified diff on the `gh pr` key (#167): the PR argument
+                // selects the size — "big" clears the #135 fold floor
+                // (64 KiB, folds to per-file stats), anything else is a
+                // few-line diff that must return byte-identical.
+                stdout.Write("diff --git a/README.md b/README.md\n" +
+                             "index 6546403..eb7bc39 100644\n" +
+                             "--- a/README.md\n" +
+                             "+++ b/README.md\n" +
+                             "@@ -1,2 +1,3 @@\n" +
+                             " # vtk\n" +
+                             "+pr-diff-marker-167 small line\n" +
+                             " intro\n");
+                if (args.Length >= 3 && args[2] == "big")
+                {
+                    stdout.Write("diff --git a/internal/big.go b/internal/big.go\n" +
+                                 "index 0000000..1111111 100644\n" +
+                                 "--- a/internal/big.go\n" +
+                                 "+++ b/internal/big.go\n" +
+                                 "@@ -1,1 +1,1201 @@\n" +
+                                 " package big\n");
+                    for (var i = 0; i < 1200; i++)
+                        stdout.Write($"+// pr-diff-marker-167 padding line {i}: extra content to grow the raw diff past the fold floor\n");
                 }
                 return code;
             case ("run", "list"):

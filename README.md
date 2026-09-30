@@ -21,7 +21,8 @@ with two headline additions:
 Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
 
 - **git filter family** — `status`, `log`, `diff`, `show`, `add`, `commit`, `push`, `pull`,
-  `branch` (other subcommands pass through). Measured savings 47–89% on typical fixtures.
+  `branch`, `merge`, `grep` (other subcommands pass through). Measured savings 47–89% on
+  typical fixtures.
   Global options ahead of the subcommand (`-C <dir>`, `-c <k=v>`, `--no-pager`/`-P`,
   `-p`/`--paginate`, `--git-dir[=<path>]`, `--work-tree[=<path>]`) still engage the filter for
   `status`, `branch`, `add`, `commit`, `push`, `pull`; `diff`, `show`, `log` behind a global
@@ -34,9 +35,15 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   unchanged. `git branch` listings print one entry per line with the `*` / `+`
   markers kept, the `remotes/` prefix stripped, and a local branch that is also listed as
   `origin/<same>` collapsed to one `<name> (tracked)` entry (#166); `--show-current`, `-vv`,
-  `--format`, and other non-listing shapes pass through byte-identical.
-- **eslint filter** — `eslint`, `npx eslint` (direct invocations): problems rolled up by rule id,
-  top example per rule, `✖ N problems` summary preserved. Measured 41–99% on fixtures. Report-style
+  `--format`, and other non-listing shapes pass through byte-identical. `git merge` shares the
+  `pull` filter (diffstat and transfer noise dropped, the merge summary kept; a conflicting merge
+  exits 1 and stays raw) and `git grep -n` shares the files/search `grep` filter (5 matches per
+  file, no-match exit 1 stays raw) (#167).
+- **eslint filter** — `eslint`, `npx eslint` (direct invocations): a per-file compact listing —
+  file header, every `line:col rule` location packed to a 100-column cap, the `✖ N problems`
+  summary verbatim, then one `rules:` trailer giving each rule's severity and first-seen message
+  (a rule that mixes severities marks each location inline). Every raw `file:line:col` survives.
+  Measured 32–75% on fixtures. Report-style
   exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
   found" is a report, not a failure); exit `2`+ (fatal/config) stays raw. The child's exit code is
   always returned unchanged. The `npm run lint` wrapped form is covered via the npm run
@@ -50,7 +57,8 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   line — including the no-banner shape modern npm emits under pipe capture, where the inner
   tool can't be detected at all. The tail also pins up to 3 runner summary lines that fit
   (mocha `N passing`/`failing`/`pending`, jest `Tests: … passed`/`failed`, eslint
-  `N problems`) from above the last lines, nearest first, inside the same 512-byte cap
+  `N problems`, node --test `ℹ tests`/`pass`/`fail N`) from above the last lines, nearest
+  first, inside the same 512-byte cap
   (#134) — so a `1200 passing` line followed by leftover console noise survives the fold
   instead of needing a `vtk show` round trip; the pin scan sees through ANSI color codes
   (#163), and a pinned colored line is emitted verbatim. Below the floor, output passes through byte-identical (so
@@ -93,6 +101,27 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   fatal/config errors (no `N passing`/`failing`/`pending` summary line) pass through raw on
   content, with the child's exit code always returned unchanged. The `npm run test` wrapped form
   is covered via the npm run dispatch layer; full raw is recoverable via `vtk show`.
+- **playwright filter** — `playwright test`, `npx playwright test` (default `list` reporter, #169):
+  folds the per-test pass and skip lines away and keeps the `Running N tests` header, every
+  failing line (retry attempts included), the numbered failure-detail blocks (error, expect diff,
+  snippet, stack — ANSI stripped), forwarded test console output, and the trailing summary block
+  (`N failed`/`N flaky` listings, `N skipped`, `N passed (…)`) verbatim. Measured 29–92% on real
+  captures (green runs 86–92%, a 2-failure run 29%). Filtered on exit `{0,1}` — exit 1 means
+  failures, which is a report, not a crash; runs with no summary block (`Error: No tests found`,
+  config crashes, `--reporter=json`) or nothing to fold (`--reporter=line`/`dot`) pass through
+  byte-identical, with the child's exit code always returned unchanged. Full raw (every `ok N`
+  line) is recoverable via `vtk show`.
+- **node --test filter** — `node --test` (Node's built-in runner, default spec reporter; `--test`
+  in any position after `node`, #168): folds the passing/suite/skipped tree lines away and keeps
+  the `ℹ tests N` … `ℹ duration_ms N` summary block plus everything after it — the
+  `✖ failing tests:` region (location, assertion, diff, stack), the `--experimental-test-coverage`
+  table, anything else node appends — verbatim. Failing `✖` tree lines, `ℹ` diagnostics, and
+  output your tests print above the summary stay inline. Measured 0–95% on fixtures (green run
+  95%, failing runs 36–43%, a module-load crash 0% since there is nothing to fold). Filtered on
+  exit `{0, 1}` (node exits 1 when any test fails — a report, not a crash); fatal exits and the
+  TAP reporter carry no summary block and pass through raw, exit code unchanged. `npm test`
+  scripts that expand to `node --test` engage the filter via the npm run dispatch layer; full
+  raw is recoverable via `vtk show`.
 - **gh filter family** — `gh issue list`, `gh pr list`, `gh run list`: table output compacts to
   one line per row (`#<n> <state> <title> (<age>)`; runs show `<conclusion> <title> · <workflow>`),
   labels/branch/runID noise dropped. Measured savings 33–48% on fixtures.
@@ -103,7 +132,9 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   full raw always recoverable via `vtk show`. `gh run` filters exit `{0,1}` — a failed run's log
   is a report, not a crash, and non-log error output passes through raw via shape guards; other
   gh commands filter exit `0` only. `view` summary shapes and any `--json` output pass through
-  structurally intact.
+  structurally intact. `gh pr diff` output routes to the `git diff` filter by content (#167):
+  below 64 KiB it passes through byte-identical, at or above the floor it folds to per-file
+  stats plus `OK <id>`.
 - **files/search filter family** — `ls`, `grep`, `find`: list output column-packed and capped at
   40 entries with a `(+N more)` tail; `grep` match lines capped at 5 per file with per-file
   `(+N more)` tails. The full listing is always recoverable via `vtk show <id>`. Measured savings

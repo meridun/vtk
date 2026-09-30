@@ -1,0 +1,43 @@
+  ✖ computes the total (1.0033ms)
+✖ orders (4.1087ms)
+ℹ tests 26
+ℹ suites 2
+ℹ pass 23
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 1
+ℹ duration_ms 93.7211
+ℹ start of coverage report
+ℹ ----------------------------------------------------------
+ℹ file      | line % | branch % | funcs % | uncovered lines
+ℹ ----------------------------------------------------------
+ℹ src       |        |          |         | 
+ℹ  cart.js  |  75.00 |   100.00 |   75.00 | 3
+ℹ ----------------------------------------------------------
+ℹ all files |  75.00 |   100.00 |   75.00 | 
+ℹ ----------------------------------------------------------
+ℹ end of coverage report
+
+✖ failing tests:
+
+test at test\orders.test.js:5:3
+✖ computes the total (1.0033ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  12 !== 11
+  
+      at TestContext.<anonymous> (C:\proj\shop\test\orders.test.js:5:41)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 12,
+    expected: 11,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
