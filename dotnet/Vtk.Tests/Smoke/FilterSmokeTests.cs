@@ -65,6 +65,13 @@ public class EslintSmokeTests : IDisposable
         Assert.DoesNotContain("   1:1   error", outp);
         Assert.Contains("12 problems (10 errors, 2 warnings)", outp);
 
+        // #170 acceptance (a) through the real binary: every raw line:col
+        // location survives in the packed listing.
+        var rawLocs = Regex.Matches(raw, @"^\s+(\d+:\d+)\s+(?:error|warning)\s", RegexOptions.Multiline)
+            .Select(m => m.Groups[1].Value).ToList();
+        Assert.Equal(12, rawLocs.Count);
+        Assert.All(rawLocs, loc => Assert.Contains($" {loc} ", outp));
+
         // The raw report survives in the spool and is recoverable in full.
         var (shown, _, showCode) = _h.Run(_h.Repo, "show", id);
         Assert.Equal(0, showCode);
