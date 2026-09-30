@@ -30,8 +30,11 @@ Early implementation, written in C# (.NET 9) under `dotnet/`. Shipped so far:
   folding them only cost a `vtk show` round trip; at or above the floor the per-file stats shape
   plus an `OK <id>` recovery line still applies (#135). `--stat` / `--numstat` and `show -s`
   shapes are unchanged.
-- **eslint filter** — `eslint`, `npx eslint` (direct invocations): problems rolled up by rule id,
-  top example per rule, `✖ N problems` summary preserved. Measured 41–99% on fixtures. Report-style
+- **eslint filter** — `eslint`, `npx eslint` (direct invocations): a per-file compact listing —
+  file header, every `line:col rule` location packed to a 100-column cap, the `✖ N problems`
+  summary verbatim, then one `rules:` trailer giving each rule's severity and first-seen message
+  (a rule that mixes severities marks each location inline). Every raw `file:line:col` survives.
+  Measured 32–75% on fixtures. Report-style
   exits are filtered via a per-filter exit-code allowlist — eslint filters exit `{0, 1}` ("problems
   found" is a report, not a failure); exit `2`+ (fatal/config) stays raw. The child's exit code is
   always returned unchanged. The `npm run lint` wrapped form is covered via the npm run
